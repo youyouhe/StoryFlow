@@ -1,0 +1,23 @@
+/* Font Face Declarations - Using CDN for now, can be replaced with local files */
+@font-face {
+  font-family: 'Courier Prime';
+  font-style: normal;
+  font-weight: 400;
+  src: url('https://fonts.gstatic.com/s/courierprime/v14/u-4n0qWlg6lnYnsgGg-WF-l_WwMq.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  src: url('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA-Ek-_EeA.woff2') format('woff2');
+}
+
+/* Fallback to system fonts if CDN unavailable */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+font-mono, .font-mono, textarea, code, pre {
+  font-family: 'Courier Prime', 'Courier New', monospace;
+}

@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Courier Prime", "Courier", monospace;
+
+  --color-paper: #ffffff;
+  --color-paper-dark: #18181b;
+  --color-desk: #e5e5e5;
+  --color-desk-dark: #09090b;
+}
