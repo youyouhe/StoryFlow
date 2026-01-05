@@ -88,11 +88,13 @@ function App() {
         const saved = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
         if (saved) {
             const parsed = JSON.parse(saved);
-            return { 
-                ...DEFAULT_APP_SETTINGS, 
-                ...parsed, 
+            return {
+                ...DEFAULT_APP_SETTINGS,
+                ...parsed,
                 colorSettings: { ...DEFAULT_APP_SETTINGS.colorSettings, ...(parsed.colorSettings || {}) },
-                shortcuts: { ...DEFAULT_APP_SETTINGS.shortcuts, ...(parsed.shortcuts || {}) }
+                shortcuts: { ...DEFAULT_APP_SETTINGS.shortcuts, ...(parsed.shortcuts || {}) },
+                // Ensure autoAcceptAI has a value (for backward compatibility)
+                autoAcceptAI: parsed.autoAcceptAI ?? DEFAULT_APP_SETTINGS.autoAcceptAI
             };
         }
     } catch (e) {
@@ -522,27 +524,28 @@ function App() {
     setAIState({ isLoading: false, suggestion: null, error: null });
   };
 
-  const acceptAISuggestion = () => {
+  const acceptAISuggestion = useCallback(() => {
       if (!aiState.suggestion) return;
 
       if (aiMode === 'REWRITE') {
            const content = aiState.suggestion.replace(/^\[.*?\]\s*/, '');
            handleBlockChange(selectedBlockId, content);
            setShowAIModal(false);
+           setAIState({ isLoading: false, suggestion: null, error: null }); // Clear suggestion to prevent re-insertion
            return;
       }
-      
+
       const lines = aiState.suggestion.split('\n').filter(l => l.trim().length > 0);
       const newBlocks: ScriptBlock[] = lines.map(line => {
           let type: BlockType = 'ACTION';
           let content = line.trim();
 
           const tagMatch = content.match(/^\[(SCENE|ACTION|CHARACTER|DIALOGUE|PARENTHETICAL|TRANSITION)\]\s?(.*)/i);
-          
+
           if (tagMatch) {
               const tagName = tagMatch[1].toUpperCase();
               content = tagMatch[2];
-              
+
               if (tagName === 'SCENE') type = 'SCENE_HEADING';
               else if (tagName === 'ACTION') type = 'ACTION';
               else if (tagName === 'CHARACTER') type = 'CHARACTER';
@@ -566,9 +569,17 @@ function App() {
           updatedBlocks.splice(idx + 1, 0, ...newBlocks);
           return { ...prev, blocks: updatedBlocks };
       });
-      
+
       setShowAIModal(false);
-  };
+      setAIState({ isLoading: false, suggestion: null, error: null }); // Clear suggestion to prevent re-insertion
+  }, [aiState.suggestion, aiMode, selectedBlockId, handleBlockChange]);
+
+  // Auto-accept AI suggestions when enabled
+  useEffect(() => {
+      if (appSettings.autoAcceptAI && aiState.suggestion && !aiState.isLoading) {
+          acceptAISuggestion();
+      }
+  }, [aiState.suggestion, aiState.isLoading, appSettings.autoAcceptAI, acceptAISuggestion]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-desk dark:bg-desk-dark text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">
@@ -688,7 +699,7 @@ function App() {
           }}
         >
           {pages.map((pageBlocks, pageIndex) => (
-             <div 
+             <div
                 key={pageIndex}
                 className="w-full max-w-3xl min-h-[1056px] bg-paper dark:bg-paper-dark shadow-2xl shadow-gray-300/50 dark:shadow-black/60 rounded-sm p-8 sm:p-16 transition-all duration-300 relative border border-transparent dark:border-zinc-800"
              >
@@ -698,7 +709,7 @@ function App() {
                  <div className="space-y-1">
                     {pageBlocks.map(block => (
                         <div id={`block-${block.id}`} key={block.id}>
-                            <EditorBlock 
+                            <EditorBlock
                                 block={block}
                                 isSelected={selectedBlockId === block.id}
                                 onChange={handleBlockChange}
