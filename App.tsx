@@ -7,6 +7,7 @@ import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { generateContinuation, suggestIdeas, rewriteBlock } from './services/geminiService';
 import { paginateBlocks } from './utils/pagination';
+import { exportToPDF } from './utils/pdfExport';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -328,6 +329,20 @@ function App() {
       setShowSettingsModal(false);
   };
 
+  const handleExportPDF = useCallback(async () => {
+      try {
+          const filename = `${screenplay.metadata.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+          await exportToPDF(screenplay.metadata, screenplay.blocks, {
+              filename,
+              titlePage: true
+          });
+      } catch (error) {
+          console.error('PDF export failed:', error);
+          // Restore page on error
+          window.location.reload();
+      }
+  }, [screenplay.metadata, screenplay.blocks]);
+
   const getNextType = (currentType: BlockType): BlockType => {
     switch (currentType) {
       case 'SCENE_HEADING': return 'ACTION';
@@ -609,6 +624,7 @@ function App() {
             onDeleteScript={handleDeleteScript}
             onRenameScript={handleRenameScript}
             currentScriptId={screenplay.id}
+            onExportPDF={handleExportPDF}
         />
       </div>
 

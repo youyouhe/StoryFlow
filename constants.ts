@@ -439,7 +439,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       aiIdeas: 'Alt+I',
       aiRewrite: 'Alt+R'
   },
-  autoAcceptAI: false
+  autoAcceptAI: false,
+  aiContextBlocks: 50,
+  aiOutputBlocks: 10
 };
 
 export const BLOCK_SHORTCUTS_HINT: Record<string, string> = {
@@ -481,6 +483,10 @@ export const TRANSLATIONS = {
     providerLabel: "AI Provider",
     apiKeyLabel: "API Key",
     modelLabel: "Model",
+    aiContextBlocksLabel: "Context Blocks",
+    aiContextBlocksDesc: "Number of recent blocks sent as context for AI continuation (20-300)",
+    aiOutputBlocksLabel: "Output Blocks",
+    aiOutputBlocksDesc: "Number of blocks to generate in one continuation (1-50)",
     saving: "Saving...",
     saved: "Saved",
     aiAssistant: "AI Assistant",
@@ -598,6 +604,10 @@ export const TRANSLATIONS = {
     providerLabel: "AI 提供商",
     apiKeyLabel: "API 密钥",
     modelLabel: "模型",
+    aiContextBlocksLabel: "上下文块数",
+    aiContextBlocksDesc: "AI续写时发送的最近块数 (20-300)",
+    aiOutputBlocksLabel: "输出块数",
+    aiOutputBlocksDesc: "每次续写生成的块数 (1-50)",
     saving: "保存中...",
     saved: "已保存",
     aiAssistant: "AI 助手",

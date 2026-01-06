@@ -254,6 +254,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
 
                  <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        {t.aiContextBlocksLabel}
+                    </label>
+                    <input
+                        type="number"
+                        min="20"
+                        max="300"
+                        step="10"
+                        value={appSettingsForm.aiContextBlocks}
+                        onChange={e => {
+                            const val = parseInt(e.target.value) || 50;
+                            const clamped = Math.max(20, Math.min(300, val));
+                            setAppSettingsForm({...appSettingsForm, aiContextBlocks: clamped});
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                    />
+                    <p className="mt-1 text-[10px] text-gray-400">{t.aiContextBlocksDesc}</p>
+                 </div>
+
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        {t.aiOutputBlocksLabel}
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        step="1"
+                        value={appSettingsForm.aiOutputBlocks}
+                        onChange={e => {
+                            const val = parseInt(e.target.value) || 10;
+                            const clamped = Math.max(1, Math.min(50, val));
+                            setAppSettingsForm({...appSettingsForm, aiOutputBlocks: clamped});
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                    />
+                    <p className="mt-1 text-[10px] text-gray-400">{t.aiOutputBlocksDesc}</p>
+                 </div>
+
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         {t.providerLabel}
                     </label>
                     <select

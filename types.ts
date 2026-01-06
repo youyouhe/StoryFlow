@@ -60,10 +60,17 @@ export interface AppSettings {
   colorSettings: ColorSettings;
   shortcuts: KeyboardShortcuts;
   autoAcceptAI: boolean;
+  aiContextBlocks: number;
+  aiOutputBlocks: number;
 }
 
 export interface AIState {
   isLoading: boolean;
   suggestion: string | null;
   error: string | null;
+}
+
+export interface PDFOptions {
+  titlePage?: boolean;
+  filename?: string;
 }

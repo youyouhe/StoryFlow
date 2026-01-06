@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { ScriptBlock, ScriptLanguage, AppSettings } from "../types";
 
 // Helper to get plain text context from blocks
-const getScriptContext = (blocks: ScriptBlock[], count = 20): string => {
+const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
   return blocks.slice(-count).map(b => {
     let prefix = '';
     if (b.type === 'SCENE_HEADING') prefix = '\n';
@@ -91,26 +91,32 @@ const callAIProvider = async (
 
 
 export const generateContinuation = async (
-  blocks: ScriptBlock[], 
-  systemInstruction: string, 
+  blocks: ScriptBlock[],
+  systemInstruction: string,
   scriptLanguage: ScriptLanguage,
   settings: AppSettings
 ): Promise<string> => {
-  const context = getScriptContext(blocks, 150); 
+  const context = getScriptContext(blocks, settings.aiContextBlocks);
   const langInstruction = getLanguageInstruction(scriptLanguage);
-  
+
   const systemPrompt = `${systemInstruction}\n${langInstruction}`;
-  
+
   const userPrompt = `
   Analyze the provided screenplay excerpt.
-  
+
+  Configuration:
+  - Context Blocks Used: ${settings.aiContextBlocks}
+  - Output Blocks to Generate: ${settings.aiOutputBlocks}
+
   Screenplay Context:
   ---
   ${context}
   ---
-  
-  Task: Write the immediate continuation of this script (next 3-5 blocks).
-  
+
+  Task: Write the immediate continuation of this script.
+
+  Generate exactly ${settings.aiOutputBlocks} blocks.
+
   Requirements:
   1. Consistency: Strictly adhere to the established genre, tone, and format provided in your instructions.
   2. Plot: Advance the current scene logically.
@@ -121,7 +127,7 @@ export const generateContinuation = async (
      [DIALOGUE] Dialogue content...
      [PARENTHETICAL] (instruction)
      [TRANSITION] CUT TO:
-     
+
      Do not use markdown (no **bold**). Do not provide explanations. Just the labeled script blocks.`;
 
   return callAIProvider(settings, { system: systemPrompt, user: userPrompt });
@@ -150,12 +156,12 @@ export const rewriteBlock = async (
 };
 
 export const suggestIdeas = async (
-  blocks: ScriptBlock[], 
-  systemInstruction: string, 
+  blocks: ScriptBlock[],
+  systemInstruction: string,
   scriptLanguage: ScriptLanguage,
   settings: AppSettings
 ): Promise<string[]> => {
-  const context = getScriptContext(blocks, 100); 
+  const context = getScriptContext(blocks, Math.max(20, Math.floor(settings.aiContextBlocks * 0.5)));
   const langInstruction = getLanguageInstruction(scriptLanguage);
 
   const systemPrompt = `${systemInstruction}\n${langInstruction}`;
