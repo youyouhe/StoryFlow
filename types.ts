@@ -73,4 +73,5 @@ export interface AIState {
 export interface PDFOptions {
   titlePage?: boolean;
   filename?: string;
+  colors?: ColorSettings;
 }

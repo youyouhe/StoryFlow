@@ -334,14 +334,15 @@ function App() {
           const filename = `${screenplay.metadata.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
           await exportToPDF(screenplay.metadata, screenplay.blocks, {
               filename,
-              titlePage: true
+              titlePage: true,
+              colors: appSettings.colorSettings
           });
       } catch (error) {
           console.error('PDF export failed:', error);
           // Restore page on error
           window.location.reload();
       }
-  }, [screenplay.metadata, screenplay.blocks]);
+  }, [screenplay.metadata, screenplay.blocks, appSettings.colorSettings]);
 
   const getNextType = (currentType: BlockType): BlockType => {
     switch (currentType) {
