@@ -438,7 +438,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       aiContinue: 'Alt+C',
       aiIdeas: 'Alt+I',
       aiRewrite: 'Alt+R'
-  }
+  },
+  autoAcceptAI: false
 };
 
 export const BLOCK_SHORTCUTS_HINT: Record<string, string> = {
@@ -466,6 +467,7 @@ export const TRANSLATIONS = {
     settingsTitle: "Configuration",
     scriptMeta: "Script Metadata",
     aiConfig: "AI Configuration",
+    aiAutoAccept: "Auto-accept AI suggestions (skip confirmation)",
     appearanceConfig: "Appearance",
     shortcutsConfig: "Shortcuts",
     viewMode: "View Mode",
@@ -582,6 +584,7 @@ export const TRANSLATIONS = {
     settingsTitle: "配置",
     scriptMeta: "剧本信息",
     aiConfig: "AI 配置",
+    aiAutoAccept: "自动接受 AI 建议（跳过确认）",
     appearanceConfig: "外观配置",
     shortcutsConfig: "快捷键",
     viewMode: "阅读模式",

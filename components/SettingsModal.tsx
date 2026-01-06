@@ -239,6 +239,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
             {activeTab === 'ai' && (
               <div className="space-y-4">
                  <div>
+                    <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg cursor-pointer hover:border-gray-300 dark:hover:border-zinc-600 transition-all">
+                        <input
+                            type="checkbox"
+                            checked={appSettingsForm.autoAcceptAI}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, autoAcceptAI: e.target.checked})}
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {t.aiAutoAccept}
+                        </span>
+                    </label>
+                 </div>
+
+                 <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         {t.providerLabel}
                     </label>

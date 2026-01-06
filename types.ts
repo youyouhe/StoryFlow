@@ -59,6 +59,7 @@ export interface AppSettings {
   geminiApiKey: string;
   colorSettings: ColorSettings;
   shortcuts: KeyboardShortcuts;
+  autoAcceptAI: boolean;
 }
 
 export interface AIState {
