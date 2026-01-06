@@ -1,11 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", sans-serif;
-  --font-mono: "Courier Prime", "Courier", monospace;
-
-  --color-paper: #ffffff;
-  --color-paper-dark: #18181b;
   --color-desk: #e5e5e5;
   --color-desk-dark: #09090b;
+  --color-paper: #ffffff;
+  --color-paper-dark: #18181b;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Courier Prime", "Courier", monospace;
+}
+
+/* Class-based dark mode overrides */
+.dark {
+  --color-desk: var(--color-desk-dark);
+  --color-paper: var(--color-paper-dark);
 }

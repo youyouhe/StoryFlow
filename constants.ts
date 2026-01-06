@@ -66,7 +66,27 @@ const PROMPTS = {
   2. IMITATE: Create a new story with different characters/settings that mirrors the successful structure of the reference.
   3. EXPAND: Develop Character Bios and a detailed Episode/Scene Outline.
   4. WRITE: Generate full script content based on the outline.
-  Maintain high conflict and pacing.`
+  Maintain high conflict and pacing.`,
+
+  LYRICS: `[ROLE]
+You are a Platinum-Selling Songwriter and Ghostwriter (versatile in Pop, Rap, Rock, and Ballad).
+
+[PROCESS: Chain of Thought]
+1. BLUEPRINT: Define the Genre, BPM (Tempo), and specific Emotional Vibe (e.g., "Sad 3AM ballad" or "High-energy summer hit").
+2. STRUCTURE: Establish the Song Map (e.g., Intro -> Verse 1 -> Pre-Chorus -> Chorus -> Verse 2 -> Bridge -> Chorus -> Outro).
+3. RHYTHM CHECK: Ensure syllable counts and stress patterns are consistent between matching sections (e.g., Verse 1 must match Verse 2's flow).
+
+[GUIDELINES]
+- Formatting: Clearly label sections in brackets (e.g., [VERSE 1], [CHORUS], [BRIDGE]).
+- The "Hook": The Chorus must be catchy, repetitive (in a good way), and summarize the core theme.
+- Imagery: Use concrete nouns and specific scenarios instead of abstract emotions. (Don't say "I'm sad", say "The coffee's cold and the rain won't stop").
+- Rhyme Scheme: Use "Slant Rhymes" (Near rhymes) for a modern feel. Don't force perfect rhymes if they sound unnatural.
+
+[OUTPUT FORMAT]
+Use these labels for your response:
+[SCENE] for section headers (e.g., "[VERSE 1]", "[CHORUS]")
+[ACTION] for the actual lyrics content
+[CHARACTER] for notes about production/mood/tempo changes`
 };
 
 export const TEMPLATES: ScriptTemplate[] = [
@@ -391,6 +411,30 @@ export const TEMPLATES: ScriptTemplate[] = [
       { id: '4', type: 'DIALOGUE', content: '生活很乱。但打扫不该乱。' },
       { id: '5', type: 'TRANSITION', content: '切至产品特写：' }
     ]
+  },
+  {
+    id: 'lyrics',
+    nameKey: 'tpl_lyrics_name',
+    descKey: 'tpl_lyrics_desc',
+    systemPrompt: PROMPTS.LYRICS,
+    initialBlocks: [
+      { id: '1', type: 'SCENE_HEADING', content: '[SONG INFO]' },
+      { id: '2', type: 'ACTION', content: 'Genre: Pop/Rock/Ballad/Rap' },
+      { id: '3', type: 'ACTION', content: 'BPM: 120' },
+      { id: '4', type: 'ACTION', content: 'Mood: [e.g., Melancholic, Energetic, Romantic]' },
+      { id: '5', type: 'CHARACTER', content: 'Theme: [Describe the song\'s core message]' },
+      { id: '6', type: 'SCENE_HEADING', content: '[VERSE 1]' },
+      { id: '7', type: 'ACTION', content: 'Start writing your lyrics here...' }
+    ],
+    initialBlocksZh: [
+      { id: '1', type: 'SCENE_HEADING', content: '[歌曲信息]' },
+      { id: '2', type: 'ACTION', content: '风格：流行/摇滚/抒情/说唱' },
+      { id: '3', type: 'ACTION', content: '速度（BPM）：120' },
+      { id: '4', type: 'ACTION', content: '氛围：[例如：忧郁、充满活力、浪漫]' },
+      { id: '5', type: 'CHARACTER', content: '主题：[描述歌曲的核心信息]' },
+      { id: '6', type: 'SCENE_HEADING', content: '[主歌 1 / VERSE 1]' },
+      { id: '7', type: 'ACTION', content: '在这里开始写歌词...' }
+    ]
   }
 ];
 
@@ -563,7 +607,9 @@ export const TRANSLATIONS = {
       tpl_stage_name: "Stage Play",
       tpl_stage_desc: "Theatrical format. Focus on sets and dialogue.",
       tpl_ad_name: "Commercial",
-      tpl_ad_desc: "Short form. Focus on visuals and voiceovers."
+      tpl_ad_desc: "Short form. Focus on visuals and voiceovers.",
+      tpl_lyrics_name: "Song Lyrics",
+      tpl_lyrics_desc: "Professional songwriting template with structure, rhyme schemes, and production notes."
     },
     languages: {
       en: "English",
@@ -684,7 +730,9 @@ export const TRANSLATIONS = {
       tpl_stage_name: "舞台剧",
       tpl_stage_desc: "戏剧格式，专注于舞台调度与长对话。",
       tpl_ad_name: "商业广告",
-      tpl_ad_desc: "短片格式，专注于视觉冲击与旁白。"
+      tpl_ad_desc: "短片格式，专注于视觉冲击与旁白。",
+      tpl_lyrics_name: "歌曲创作",
+      tpl_lyrics_desc: "专业歌词创作模板，包含歌曲结构、押韵方案和制作备注。"
     },
     languages: {
       en: "英语",
