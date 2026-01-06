@@ -28,6 +28,14 @@ An intelligent screenplay editor supporting multiple script formats with AI assi
   - Smart block type detection
   - Standard screenplay margins and spacing
 
+## Screenshots
+
+### English Interface
+<img src="public/demo-en.png" alt="English Interface" width="800"/>
+
+### Chinese Interface
+<img src="public/demo-zh.png" alt="Chinese Interface" width="800"/>
+
 ## Prerequisites
 
 - Node.js 18+
