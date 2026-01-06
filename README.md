@@ -3,6 +3,8 @@
   <p>AI-Powered Screenplay & Script Editor</p>
 </div>
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 An intelligent screenplay editor supporting multiple script formats with AI assistance via Gemini or DeepSeek APIs.
 
 ## Features
