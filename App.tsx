@@ -410,14 +410,14 @@ function App() {
     try {
       let result = '';
       if (effectiveMode === 'CONTINUE') {
-        result = await generateContinuation(screenplay.blocks, systemInstruction, scriptLanguage, appSettings);
+        result = await generateContinuation(screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId);
       } else if (effectiveMode === 'IDEAS') {
-        const ideas = await suggestIdeas(screenplay.blocks, systemInstruction, scriptLanguage, appSettings);
+        const ideas = await suggestIdeas(screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId);
         result = ideas.join('\n\n');
       } else if (effectiveMode === 'REWRITE') {
         const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
         if (currentBlock) {
-          result = await rewriteBlock(currentBlock.content, "dramatic", systemInstruction, scriptLanguage, appSettings);
+          result = await rewriteBlock(currentBlock.content, "dramatic", systemInstruction, scriptLanguage, appSettings, currentTemplateId, screenplay.blocks);
         } else {
             result = "Please select a block to rewrite.";
         }

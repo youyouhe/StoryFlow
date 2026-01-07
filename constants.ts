@@ -419,21 +419,29 @@ export const TEMPLATES: ScriptTemplate[] = [
     systemPrompt: PROMPTS.LYRICS,
     initialBlocks: [
       { id: '1', type: 'SCENE_HEADING', content: '[SONG INFO]' },
-      { id: '2', type: 'ACTION', content: 'Genre: Pop/Rock/Ballad/Rap' },
-      { id: '3', type: 'ACTION', content: 'BPM: 120' },
-      { id: '4', type: 'ACTION', content: 'Mood: [e.g., Melancholic, Energetic, Romantic]' },
-      { id: '5', type: 'CHARACTER', content: 'Theme: [Describe the song\'s core message]' },
-      { id: '6', type: 'SCENE_HEADING', content: '[VERSE 1]' },
-      { id: '7', type: 'ACTION', content: 'Start writing your lyrics here...' }
+      { id: '2', type: 'ACTION', content: 'Style: Pop / Rock / Hip-hop / Electronic / R&B / Jazz / Classical / Folk / Blues / Country / Reggae / World / Experimental' },
+      { id: '3', type: 'ACTION', content: 'Sub-Style: [e.g., K-Pop, Trap, House, Soul, Bebop, Orchestral, Indie Folk, Delta Blues, Bluegrass, Dub, Latin, Avant-garde...]' },
+      { id: '4', type: 'ACTION', content: 'Mood: Relaxed / Happy / Energetic / Romantic / Sad / Angry / Melancholic / Dark / Eerie / Sentimental / Uplifting / Chill / Groovy / Epic / Dreamy / Nostalgic / Aggressive' },
+      { id: '5', type: 'ACTION', content: 'Scenario: Coffee shop / Solitary walk / Travel / Sunset by the sea / Late-night bar / Cyberpunk City / Space Voyage / Forest Rain / Gym Workout / Summer Festival' },
+      { id: '6', type: 'ACTION', content: 'Instruments: Piano / Acoustic Guitar / Electric Guitar / Violin / Synthesizer / Drums / 808 Bass / Orchestra / Traditional Chinese (Guzheng, Erhu, Pipa)' },
+      { id: '7', type: 'ACTION', content: 'Vocals: Male / Female / Duet / Choir / Auto-tune / Whisper / Operatic / Instrumental' },
+      { id: '8', type: 'ACTION', content: 'Tempo: Slow (60-80 BPM) / Mid-tempo (90-110 BPM) / Upbeat (120-140 BPM) / Fast (150+ BPM)' },
+      { id: '9', type: 'CHARACTER', content: 'Theme: [Describe the song\'s core message]' },
+      { id: '10', type: 'SCENE_HEADING', content: '[VERSE 1]' },
+      { id: '11', type: 'ACTION', content: 'Start writing your lyrics here...' }
     ],
     initialBlocksZh: [
       { id: '1', type: 'SCENE_HEADING', content: '[歌曲信息]' },
-      { id: '2', type: 'ACTION', content: '风格：流行/摇滚/抒情/说唱' },
-      { id: '3', type: 'ACTION', content: '速度（BPM）：120' },
-      { id: '4', type: 'ACTION', content: '氛围：[例如：忧郁、充满活力、浪漫]' },
-      { id: '5', type: 'CHARACTER', content: '主题：[描述歌曲的核心信息]' },
-      { id: '6', type: 'SCENE_HEADING', content: '[主歌 1 / VERSE 1]' },
-      { id: '7', type: 'ACTION', content: '在这里开始写歌词...' }
+      { id: '2', type: 'ACTION', content: '主风格：流行 / 摇滚 / 说唱 / 电子 / 节奏布鲁 / 爵士 / 古典 / 民谣 / 布鲁斯 / 乡村 / 雷鬼 / 世界音乐 / 实验音乐' },
+      { id: '3', type: 'ACTION', content: '子风格：[例如：K-Pop、Trap、House、Soul、Bebop、管弦乐、独立民谣、三角洲布鲁斯、蓝草、Dub、拉丁、前卫...]' },
+      { id: '4', type: 'ACTION', content: '情绪：放松 / 快乐 / 充满活力 / 浪漫 / 悲伤 / 愤怒 / 忧郁 / 黑暗 / 怪诞 / 感伤 / 振奋 / 放松 / 律动 / 史诗 / 梦幻 / 怀旧 / 激进' },
+      { id: '5', type: 'ACTION', content: '场景：咖啡店 / 独自漫步 / 旅行 / 海边日落 / 深夜酒吧 / 赛博朋克城市 / 太空之旅 / 森林雨 / 健身房 / 夏日音乐节' },
+      { id: '6', type: 'ACTION', content: '乐器：钢琴 / 原声吉他 / 电吉他 / 小提琴 / 合成器 / 鼓 / 808贝斯 / 管弦乐 / 中国传统乐器（古筝、二胡、琵琶）' },
+      { id: '7', type: 'ACTION', content: '人声：男声 / 女声 / 对唱 / 合唱 / 自动调音 / 低语 / 美声 / 纯音乐' },
+      { id: '8', type: 'ACTION', content: '速度：慢速 (60-80 BPM) / 中速 (90-110 BPM) / 快节奏 (120-140 BPM) / 高速 (150+ BPM)' },
+      { id: '9', type: 'CHARACTER', content: '主题：[描述歌曲的核心信息]' },
+      { id: '10', type: 'SCENE_HEADING', content: '[主歌 1 / VERSE 1]' },
+      { id: '11', type: 'ACTION', content: '在这里开始写歌词...' }
     ]
   }
 ];

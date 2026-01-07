@@ -94,14 +94,50 @@ export const generateContinuation = async (
   blocks: ScriptBlock[],
   systemInstruction: string,
   scriptLanguage: ScriptLanguage,
-  settings: AppSettings
+  settings: AppSettings,
+  templateId?: string
 ): Promise<string> => {
   const context = getScriptContext(blocks, settings.aiContextBlocks);
   const langInstruction = getLanguageInstruction(scriptLanguage);
 
   const systemPrompt = `${systemInstruction}\n${langInstruction}`;
 
-  const userPrompt = `
+  // Special handling for lyrics template
+  const isLyrics = templateId === 'lyrics';
+  const songInfoContext = isLyrics ? extractSongInfo(blocks) : '';
+
+  const userPrompt = isLyrics ? `
+  Analyze the provided song lyrics excerpt.
+
+  Configuration:
+  - Context Blocks Used: ${settings.aiContextBlocks}
+  - Output Blocks to Generate: ${settings.aiOutputBlocks}
+
+  ${songInfoContext}
+
+  Current Lyrics Context:
+  ---
+  ${context}
+  ---
+
+  Task: Write the immediate continuation of these lyrics.
+
+  Generate exactly ${settings.aiOutputBlocks} blocks.
+
+  Requirements:
+  1. Style Consistency: Match the established Style, Sub-Style, and Mood from [SONG INFO]
+  2. Structure Awareness: Follow standard song structure (VERSE, CHORUS, BRIDGE patterns)
+  3. Rhyme & Rhythm: Maintain consistent syllable counts and stress patterns between matching sections
+  4. Format: Use the following labeled format:
+     [SCENE] [SECTION NAME] (e.g., [VERSE 2], [CHORUS], [BRIDGE])
+     [ACTION] Lyrics content here...
+     [CHARACTER] Production/mood notes (optional)
+
+  5. Imagery: Use concrete nouns and specific scenarios (show, don't tell)
+  6. Hook: If writing a CHORUS, make it catchy and thematically central
+
+  Do not use markdown. Just the labeled blocks.
+  ` : `
   Analyze the provided screenplay excerpt.
 
   Configuration:
@@ -128,60 +164,142 @@ export const generateContinuation = async (
      [PARENTHETICAL] (instruction)
      [TRANSITION] CUT TO:
 
-     Do not use markdown (no **bold**). Do not provide explanations. Just the labeled script blocks.`;
+     Do not use markdown (no **bold**). Do not provide explanations. Just the labeled script blocks.
+  `;
 
   return callAIProvider(settings, { system: systemPrompt, user: userPrompt });
 };
 
+// Helper to extract song info from lyrics blocks
+const extractSongInfo = (blocks: ScriptBlock[]): string => {
+  const infoBlocks = blocks.filter(b => b.content.includes('Style:') || b.content.includes('Mood:') ||
+                                    b.content.includes('Instruments:') || b.content.includes('Tempo:') ||
+                                    b.content.includes('Vocals:') || b.content.includes('主风格') ||
+                                    b.content.includes('情绪') || b.content.includes('乐器'));
+
+  if (infoBlocks.length === 0) return '';
+
+  return `Song Configuration:
+---
+${infoBlocks.map(b => b.content).join('\n')}
+---`;
+};
+
 export const rewriteBlock = async (
-  text: string, 
-  tone: string, 
-  systemInstruction: string, 
+  text: string,
+  tone: string,
+  systemInstruction: string,
   scriptLanguage: ScriptLanguage,
-  settings: AppSettings
+  settings: AppSettings,
+  templateId?: string,
+  allBlocks?: ScriptBlock[]
 ): Promise<string> => {
   const langInstruction = getLanguageInstruction(scriptLanguage);
-  
+
   const systemPrompt = `${systemInstruction}\n${langInstruction}`;
-  
-  const userPrompt = `
+
+  // Special handling for lyrics template
+  const isLyrics = templateId === 'lyrics';
+  const songInfoContext = isLyrics && allBlocks ? extractSongInfo(allBlocks) : '';
+
+  const userPrompt = isLyrics ? `
+  Task: Rewrite the following lyrics line/section to be more "${tone}".
+  ${songInfoContext}
+
+  Original Text: "${text}"
+
+  Guidelines for lyrics rewriting:
+  - Maintain the original meaning and emotional core
+  - Enhance based on the Style, Mood, and Scenario from [SONG INFO]
+  - For "${tone}": ${getLyricsToneGuidance(tone)}
+  - Preserve syllable count and rhythm patterns where applicable
+  - Keep the imagery concrete and specific (show, don't tell)
+
+  Return only the rewritten text, no quotes or markdown. Do not include [TYPE] labels.
+  ` : `
   Task: Rewrite the following screenplay action or dialogue line to be more "${tone}".
   Maintain the original meaning but enhance the style according to your expertise.
-  
+
   Original Text: "${text}"
-  
-  Return only the rewritten text, no quotes or markdown. Do not include [TYPE] labels.`;
+
+  Return only the rewritten text, no quotes or markdown. Do not include [TYPE] labels.
+  `;
 
   return callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+};
+
+// Helper for lyrics-specific tone guidance
+const getLyricsToneGuidance = (tone: string): string => {
+  const toneMap: Record<string, string> = {
+    dramatic: 'Make it more intense and emotionally charged. Use stronger verbs and vivid imagery.',
+    poetic: 'Add more metaphorical language, sensory details, and artistic expression.',
+    catchy: 'Make it more memorable with rhythmic patterns, repetition, and hook-like phrases.',
+    melancholic: 'Emphasize sadness and longing through somber imagery and softer language.',
+    energetic: 'Use dynamic verbs, shorter phrases, and build momentum with rhythm.',
+    romantic: 'Add intimate, emotional language with warmth and affection.',
+    dark: 'Use darker imagery, minor key themes, and explore shadow emotions.',
+    dreamy: 'Add ethereal, surreal imagery with softer, flowing language.',
+    nostalgic: 'Include references to time, memory, and past experiences with sentimental language.',
+    aggressive: 'Use powerful, confrontational language with harder consonant sounds.',
+    minimal: 'Strip down to essentials - fewer words, more impact through simplicity.'
+  };
+  return toneMap[tone] || 'Enhance the expression while maintaining the original intent.';
 };
 
 export const suggestIdeas = async (
   blocks: ScriptBlock[],
   systemInstruction: string,
   scriptLanguage: ScriptLanguage,
-  settings: AppSettings
+  settings: AppSettings,
+  templateId?: string
 ): Promise<string[]> => {
   const context = getScriptContext(blocks, Math.max(20, Math.floor(settings.aiContextBlocks * 0.5)));
   const langInstruction = getLanguageInstruction(scriptLanguage);
 
   const systemPrompt = `${systemInstruction}\n${langInstruction}`;
-  
-  const userPrompt = `
+
+  // Special handling for lyrics template
+  const isLyrics = templateId === 'lyrics';
+  const songInfoContext = isLyrics ? extractSongInfo(blocks) : '';
+
+  const userPrompt = isLyrics ? `
+  Act as a master songwriter and creative consultant. Based on the following song excerpt and configuration, suggest 3 creative directions.
+
+  ${songInfoContext}
+
+  Current Lyrics Context:
+  ---
+  ${context}
+  ---
+
+  Suggestions should explore:
+  - Different structural approaches (e.g., add a pre-chorus, change bridge timing, add rap verse)
+  - Lyrical themes and imagery that complement the established Mood and Scenario
+  - Stylistic elements (e.g., harmonies, tempo changes, instrumental breaks)
+  - Unexpected genre fusions or style twists that fit the Sub-Style
+
+  Each suggestion should be:
+  - Concise (1-2 sentences).
+  - Musically and lyrically specific.
+  - Distinct from each other.
+  - Returned as a simple bulleted list (start lines with - or *).
+  ` : `
   Act as a master consultant for this specific format. Based on the following segment, suggest 3 creative directions or plot twists.
-  
+
   Screenplay Context:
   ---
   ${context}
   ---
-  
+
   Suggestions should be:
   - Concise (1-2 sentences each).
   - Genre-appropriate.
   - Distinct from each other.
-  - Returned as a simple bulleted list (start lines with - or *).`;
+  - Returned as a simple bulleted list (start lines with - or *).
+  `;
 
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
-  
+
   return responseText.split('\n')
     .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
     .map(l => l.replace(/^[-*]\s+/, ''));
