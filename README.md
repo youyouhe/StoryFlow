@@ -1,3 +1,5 @@
+
+
 <div align="center">
   <h1>StoryFlow</h1>
   <p>AI-Powered Screenplay & Script Editor</p>
@@ -59,7 +61,7 @@ Create a `.env.local` file in the project root:
 
 ```bash
 # Gemini API (default)
-GEMINI_API_KEY=your_gemini_api_key_here
+API_KEY=your_gemini_api_key_here
 
 # Or use DeepSeek
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
