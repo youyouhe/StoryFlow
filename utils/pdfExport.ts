@@ -8,18 +8,9 @@ export const exportToPDF = async (
   blocks: ScriptBlock[],
   options: PDFOptions = {}
 ): Promise<void> => {
-  console.log('[PDF Export] Starting export...');
-  console.log('[PDF Export] Metadata:', metadata);
-  console.log('[PDF Export] Blocks count:', blocks.length);
-  console.log('[PDF Export] Colors:', options.colors);
-
   const monoFont = getMonoFont(metadata.scriptLanguage);
-  console.log('[PDF Export] Font:', monoFont);
-
   // Generate print HTML
   const printHTML = generatePrintHTML(metadata, blocks, monoFont, options.titlePage !== false, options.colors);
-  console.log('[PDF Export] Generated print HTML, length:', printHTML.length);
-
   // Create iframe for printing
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
@@ -33,11 +24,7 @@ export const exportToPDF = async (
   const originalTitle = document.title;
   const printFilename = options.filename || `${metadata.title.replace(/\.pdf$/, '')}`;
   document.title = printFilename.replace(/\.pdf$/, '');
-  console.log('[PDF Export] Document title set to:', document.title);
-
   document.body.appendChild(iframe);
-  console.log('[PDF Export] Iframe added to DOM');
-
   // Write content to iframe
   const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
   if (!iframeDoc) {
@@ -48,23 +35,15 @@ export const exportToPDF = async (
   iframeDoc.open();
   iframeDoc.write(printHTML);
   iframeDoc.close();
-  console.log('[PDF Export] Content written to iframe');
-
   // Wait for content to load
   await new Promise(resolve => setTimeout(resolve, 500));
-  console.log('[PDF Export] Content loaded, triggering print...');
-
   // Trigger print from iframe
   iframe.contentWindow?.focus();
   iframe.contentWindow?.print();
-
-  console.log('[PDF Export] Print triggered');
-
   // Clean up after print
   setTimeout(() => {
     document.body.removeChild(iframe);
     document.title = originalTitle;
-    console.log('[PDF Export] Cleanup complete');
   }, 3000);
 };
 

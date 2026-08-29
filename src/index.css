@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: Tailwind v4 defaults `dark:` to the prefers-color-scheme
+   media query. This app toggles a `.dark` class on <html> manually, so override
+   the variant to key off that class instead. Must come before @theme/@utility use. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-desk: #e5e5e5;
   --color-desk-dark: #09090b;

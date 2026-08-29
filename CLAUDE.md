@@ -4,102 +4,85 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**StoryFlow** is an AI-powered screenplay/script editor built with React + TypeScript + Vite. It supports multiple script formats (standard Hollywood, sitcom, stage play, commercial, short video, and various Chinese genres like danmei, xuanhuan, wuxia, etc.) with AI assistance via Gemini or DeepSeek APIs.
+**StoryFlow** is an AI-powered screenplay/script editor built with React 19 + TypeScript + Vite. It runs both as a web app and as a Tauri 2 desktop app. It supports multiple script formats (standard Hollywood, sitcom, stage play, commercial, short video, and Chinese genres like danmei, xuanhuan, wuxia) with AI assistance via Gemini or DeepSeek APIs.
 
 ## Development Commands
 
 ```bash
-# Install dependencies
-npm install
+npm install          # install dependencies
+npm run dev          # web dev server → http://localhost:3000 (strictPort)
+npm run build        # production build (outputs to dist/)
+npm run preview      # preview the production build
 
-# Run dev server (http://localhost:5173)
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+# Tauri desktop app (wraps the Vite dev/build pipeline)
+npm run tauri:dev          # desktop dev (launches npm run dev, then Tauri window)
+npm run tauri:build        # release desktop build
+npm run tauri:build-debug  # debug desktop build
 ```
 
-**API Key Required**: Set `GEMINI_API_KEY` in `.env.local` or configure via app settings.
+There is no lint or test script configured — type checking is done implicitly via `vite build` (tsconfig has `noEmit: true`).
+
+**API keys**: Set `GEMINI_API_KEY` (and optionally `DEEPSEEK_API_KEY`) in `.env.local`. `vite.config.ts` injects these into `process.env.API_KEY` and `process.env.GEMINI_API_KEY` at build time. Keys can also be entered at runtime via the Settings UI (stored in localStorage and take precedence over the env fallback).
 
 ## Architecture
 
-### File Structure
+This is a flat-layout React app (no `src/` for app code; entry is root `index.tsx` → `App.tsx`). Styling is Tailwind CSS v4 (`@tailwindcss/postcss`).
 
 ```
-StoryFlow/
-├── App.tsx                  # Main application, all state & logic
-├── index.tsx                # React entry point
-├── index.html               # HTML template
-├── types.ts                 # TypeScript definitions
-├── constants.ts             # Templates, translations, prompts, defaults
-├── components/
-│   ├── EditorBlock.tsx      # Individual script block editor
-│   ├── Sidebar.tsx          # Script list, navigation, settings
-│   ├── Toolbar.tsx          # Block type selector + AI button
-│   └── SettingsModal.tsx    # App/metadata settings UI
-├── services/
-│   └── geminiService.ts     # AI calls (Gemini/DeepSeek providers)
-└── utils/
-    └── pagination.ts        # Page break calculation (1 page ~55-60 blocks)
+App.tsx                  # All state & logic (~950 lines). The single source of truth.
+types.ts                 # TypeScript domain types
+constants.ts             # TEMPLATES, TRANSLATIONS (en/zh), PROMPTS, DEFAULT_APP_SETTINGS
+components/
+  EditorBlock.tsx        # One editable script block; keyboard handling per block
+  Sidebar.tsx            # Script list, navigation, settings entry
+  Toolbar.tsx            # Block type selector + AI mode trigger
+  SettingsModal.tsx      # Provider/keys/colors/shortcuts/AI params UI
+services/geminiService.ts # AI calls — both Gemini and DeepSeek providers
+utils/pagination.ts      # Page-break calc for print view (~55 blocks/page)
+utils/pdfExport.ts       # PDF export via html2pdf.js
+src-tauri/               # Tauri 2 Rust desktop shell (tauri.conf.json)
 ```
 
-### Core Data Model
+### Core Data Model (`types.ts`)
 
-- **Screenplay**: `{ id, metadata: {title, author, draft, templateId, scriptLanguage}, blocks: ScriptBlock[], lastModified }`
+- **Screenplay**: `{ id, metadata: ScriptMetadata, blocks: ScriptBlock[], lastModified }`
+- **ScriptMetadata**: `{ title, author, draft, templateId?, scriptLanguage }`
 - **ScriptBlock**: `{ id, type: BlockType, content }`
 - **BlockType**: `SCENE_HEADING | ACTION | CHARACTER | DIALOGUE | PARENTHETICAL | TRANSITION`
-- **ScriptLanguage**: `en | zh | dual`
+- **ScriptLanguage** (script content): `en | zh | dual`
+- **Language** (UI): `en | zh` — separate from script language
+- **Theme**: `light | dark | sepia`
+- **AppSettings**: `{ provider, deepseekApiKey, deepseekModel, geminiApiKey, colorSettings, shortcuts, autoAcceptAI, aiContextBlocks, aiOutputBlocks }`
 
-### Key Concepts
+### State Management
 
-1. **Storage**: Uses localStorage with two-tier system:
-   - `script_index`: Array of `{id, title, lastModified}` summaries
-   - `script_{id}`: Full screenplay JSON per script
-   - Legacy migration from old `screenplay_autosave` key handled in App.tsx:142-154
+All state lives in `App.tsx` — there is no external store. Key pieces: `screenplay` (current script + blocks), `appSettings` (provider, keys, colors, shortcuts, AI params), `savedScripts` (multi-script index), `aiState` (`{isLoading, suggestion, error}`).
 
-2. **Templates**: Defined in `constants.ts`. Each has:
-   - `systemPrompt`: The "AI persona" (Hollywood Master, Sitcom Showrunner, etc.)
-   - `initialBlocks`: English starting blocks
-   - `initialBlocksZh`: Chinese starting blocks (optional)
+**Storage** is localStorage with a two-tier per-script system plus settings:
+- `script_index`: array of `{id, title, lastModified}` summaries
+- `script_{id}`: full screenplay JSON per script
+- `screenplay_app_settings`: persisted `appSettings`
+- Legacy migration from the old single-script `screenplay_autosave` key runs on load (App.tsx ~150).
 
-3. **AI Service** (`services/geminiService.ts`):
-   - Two providers: `gemini` (default) or `deepseek`
-   - Three modes: `generateContinuation`, `suggestIdeas`, `rewriteBlock`
-   - Expects `[TYPE]` prefixed labels in AI responses for parsing (App.tsx:540-551)
+Autosave debounces 1s (`setTimeout` in App.tsx:159-182), persisting both the current script and the index.
 
-4. **Pagination**: `utils/pagination.ts` splits blocks into pages (~55 blocks/page) for print-like rendering
+### AI Integration (`services/geminiService.ts`)
 
-### State Management Flow
-
-All state lives in `App.tsx`:
-- `screenplay`: Current script + blocks
-- `appSettings`: Provider (gemini/deepseek), API keys, colors, keyboard shortcuts
-- `savedScripts`: Index for multi-script management
-- `aiState`: `{isLoading, suggestion, error}` for AI modal
-
-Autosave debounces 1s (App.tsx:156-182), saves both content and index.
+- **Two providers** selected by `appSettings.provider`: `gemini` (default, via `@google/genai`) or `deepseek` (raw `fetch` to `https://api.deepseek.com/chat/completions`). Both are served from one service module.
+- **Three modes**: `generateContinuation`, `suggestIdeas`, `rewriteBlock`. The mode is injected as `systemInstruction` built from the template's `systemPrompt` + `scriptLanguage`.
+- **Context window is configurable**, not fixed: `appSettings.aiContextBlocks` (default in `constants.ts`) controls how many trailing blocks are sent; `aiOutputBlocks` controls how many blocks the model is asked to generate.
+- **Response parsing**: AI text is expected to contain `[TYPE]`-prefixed lines (e.g. `[SCENE]`, `[ACTION]`). Parsed in `App.tsx` ~554-572 via regex against the `BlockType` union; bare lines are classified by heuristics (e.g. `INT./EXT./内./外.` → `SCENE_HEADING`). When `autoAcceptAI` is on, suggestions are inserted automatically.
 
 ### Keyboard Shortcuts
 
-Defined in `appSettings.shortcuts` (defaults in `constants.ts`):
-- `Tab` / `Shift+Tab`: Cycle block types
-- `Enter`: Create new block (smart type inference)
-- `Backspace` at start: Merge with previous block
-- Arrow keys with Ctrl/Meta: Navigate between blocks
-- AI shortcuts (configurable): Trigger continue/ideas/rewrite
+Defined in `appSettings.shortcuts` (defaults in `constants.ts`). Editing keys (Tab cycle, Enter new block with smart type inference, Backspace-at-start merge, Ctrl/Meta+Arrow navigation) are hardcoded in `App.tsx`/`EditorBlock.tsx`; the three AI shortcuts (`aiContinue`, `aiIdeas`, `aiRewrite`) are user-configurable and parsed from `key+modifier` strings (App.tsx ~360).
+
+### Tauri Notes
+
+`src-tauri/tauri.conf.json` runs `npm run dev` (port 3000) in dev and `npm run build` for the desktop bundle. The CSP allows `connect-src` only to `self`, `api.deepseek.com`, and `generativelanguage.googleapis.com` — adding a new AI provider host requires updating this CSP.
 
 ## Adding a New Template
 
-1. Add prompt to `PROMPTS` in `constants.ts`
-2. Add entry to `TEMPLATES[]` with `nameKey`, `descKey`, `systemPrompt`, `initialBlocks`
-3. Add translations to `TRANSLATIONS.en.templates` and `TRANSLATIONS.zh.templates`
-
-## AI Integration Notes
-
-- AI responses must include `[TYPE]` prefixes (e.g., `[SCENE]`, `[ACTION]`) for proper parsing
-- Language instruction injected based on `scriptLanguage` setting
-- Last 20-150 blocks sent as context (varies by mode)
-- Temperature set to 0.9 for creative output
+1. Add the prompt text to `PROMPTS` in `constants.ts`.
+2. Add a `ScriptTemplate` entry to `TEMPLATES[]` with `nameKey`, `descKey`, `systemPrompt`, `initialBlocks` (English), and optionally `initialBlocksZh`.
+3. Add matching translations under `TRANSLATIONS.en.templates` and `TRANSLATIONS.zh.templates`.

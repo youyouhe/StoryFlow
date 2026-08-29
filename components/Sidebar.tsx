@@ -48,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [editTitle, setEditTitle] = useState('');
 
   const scenes = blocks.filter(b => b.type === 'SCENE_HEADING');
+  const sortedScripts = [...savedScripts].sort((a, b) => b.lastModified - a.lastModified);
 
   if (!isOpen) return null;
 
@@ -150,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {t.noScripts}
                     </div>
                 )}
-                {savedScripts.sort((a,b) => b.lastModified - a.lastModified).map((script) => (
+                {sortedScripts.map((script) => (
                     <div 
                         key={script.id}
                         className={clsx(

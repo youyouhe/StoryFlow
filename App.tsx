@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate } from './types';
+import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS } from './constants';
 import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
-import { generateContinuation, suggestIdeas, rewriteBlock } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt } from './services/geminiService';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye } from 'lucide-react';
 import { clsx } from 'clsx';
 
 // Helper to generate IDs
-const generateId = () => Math.random().toString(36).substr(2, 9);
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
 // Storage Constants
 const STORAGE_KEYS = {
@@ -95,7 +95,17 @@ function App() {
                 colorSettings: { ...DEFAULT_APP_SETTINGS.colorSettings, ...(parsed.colorSettings || {}) },
                 shortcuts: { ...DEFAULT_APP_SETTINGS.shortcuts, ...(parsed.shortcuts || {}) },
                 // Ensure autoAcceptAI has a value (for backward compatibility)
-                autoAcceptAI: parsed.autoAcceptAI ?? DEFAULT_APP_SETTINGS.autoAcceptAI
+                autoAcceptAI: parsed.autoAcceptAI ?? DEFAULT_APP_SETTINGS.autoAcceptAI,
+                // Migrate deprecated Gemini model names to the current default (3.7 Flash)
+                geminiModel: ['gemini-2.0-flash', 'gemini-2.5-flash'].includes(parsed.geminiModel)
+                    ? DEFAULT_APP_SETTINGS.geminiModel
+                    : (parsed.geminiModel || DEFAULT_APP_SETTINGS.geminiModel),
+                // Ensure geminiThinkingLevel has a value (added when thinking controls shipped)
+                geminiThinkingLevel: parsed.geminiThinkingLevel || DEFAULT_APP_SETTINGS.geminiThinkingLevel,
+                // Migrate deprecated DeepSeek model names to the current default (V4 Flash)
+                deepseekModel: ['deepseek-chat', 'deepseek-reasoner'].includes(parsed.deepseekModel)
+                    ? DEFAULT_APP_SETTINGS.deepseekModel
+                    : (parsed.deepseekModel || DEFAULT_APP_SETTINGS.deepseekModel)
             };
         }
     } catch (e) {
@@ -116,7 +126,7 @@ function App() {
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [aiMode, setAIMode] = useState<'CONTINUE' | 'IDEAS' | 'REWRITE'>('CONTINUE');
+  const [aiMode, setAIMode] = useState<AIMode>('CONTINUE');
   const [isReadOnly, setIsReadOnly] = useState(false);
   
   // States for title editing
@@ -339,10 +349,11 @@ function App() {
           });
       } catch (error) {
           console.error('PDF export failed:', error);
-          // Restore page on error
-          window.location.reload();
+          // Surface the error without reloading the page \u2014 autosave may not have
+          // captured the very latest edits, and a reload would discard them.
+          window.alert(t.pdfExportError);
       }
-  }, [screenplay.metadata, screenplay.blocks, appSettings.colorSettings]);
+  }, [screenplay.metadata, screenplay.blocks, appSettings.colorSettings, t]);
 
   const getNextType = (currentType: BlockType): BlockType => {
     switch (currentType) {
@@ -388,20 +399,20 @@ function App() {
       return meta === hasMeta && ctrl === hasCtrl && alt === hasAlt && shift === hasShift;
   };
 
-  const executeAI = useCallback(async (modeOverride?: 'CONTINUE' | 'IDEAS' | 'REWRITE') => {
+  const executeAI = useCallback(async (modeOverride?: AIMode) => {
     const effectiveMode = modeOverride || aiMode;
 
     if (appSettings.provider === 'gemini' && !appSettings.geminiApiKey && !process.env.API_KEY) {
-        setAIState(prev => ({ ...prev, error: "Gemini API Key is missing. Please configure it in settings." }));
+        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing }));
         return;
     }
     if (appSettings.provider === 'deepseek' && !appSettings.deepseekApiKey) {
-        setAIState(prev => ({ ...prev, error: "DeepSeek API Key is missing. Please configure it in settings." }));
+        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing }));
         return;
     }
 
     setAIState({ isLoading: true, suggestion: null, error: null });
-    
+
     const currentTemplateId = screenplay.metadata.templateId || 'standard';
     const activeTemplate = TEMPLATES.find(t => t.id === currentTemplateId) || TEMPLATES[0];
     const systemInstruction = activeTemplate.systemPrompt;
@@ -419,14 +430,35 @@ function App() {
         if (currentBlock) {
           result = await rewriteBlock(currentBlock.content, "dramatic", systemInstruction, scriptLanguage, appSettings, currentTemplateId, screenplay.blocks);
         } else {
-            result = "Please select a block to rewrite.";
+            result = t.aiErrorGeneric;
         }
+      } else if (effectiveMode === 'STORYBOARD') {
+        const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
+        if (!currentBlock || currentBlock.type !== 'ACTION') {
+            setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock });
+            return;
+        }
+        // Slice the current scene: from the nearest preceding SCENE_HEADING
+        // through the target action (inclusive), so the prompt inherits the
+        // scene's environment/time/mood.
+        const targetIdx = screenplay.blocks.findIndex(b => b.id === selectedBlockId);
+        let sceneStart = 0;
+        for (let i = targetIdx; i >= 0; i--) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
+        }
+        const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
+        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings);
       }
       setAIState({ isLoading: false, suggestion: result, error: null });
     } catch (err: any) {
-      setAIState({ isLoading: false, suggestion: null, error: err.message || "Failed to generate content. Please try again." });
+      const msg = err?.message || '';
+      // Map known sentinel errors from the service layer to localized messages
+      const friendly = msg === 'GEMINI_KEY_MISSING' || msg === 'DEEPSEEK_KEY_MISSING'
+        ? t.aiErrorKeyMissing
+        : (err?.message || t.aiErrorGeneric);
+      setAIState({ isLoading: false, suggestion: null, error: friendly });
     }
-  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId]);
+  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent, id: string, selectionStart: number) => {
     if (isReadOnly) return;
@@ -453,6 +485,17 @@ function App() {
             setShowAIModal(true);
             executeAI('REWRITE');
             return;
+        }
+        if (checkShortcut(e, appSettings.shortcuts.aiStoryboard)) {
+            // Only trigger on ACTION blocks — storyboard prompts are for actions.
+            const currentBlock = screenplay.blocks.find(b => b.id === id);
+            if (currentBlock?.type === 'ACTION') {
+                e.preventDefault();
+                setAIMode('STORYBOARD');
+                setShowAIModal(true);
+                executeAI('STORYBOARD');
+                return;
+            }
         }
     }
     
@@ -543,6 +586,16 @@ function App() {
   const acceptAISuggestion = useCallback(() => {
       if (!aiState.suggestion) return;
 
+      // IDEAS mode returns creative directions for reference, not script content.
+      // Copy to clipboard instead of inserting into the script body.
+      if (aiMode === 'IDEAS') {
+          navigator.clipboard?.writeText(aiState.suggestion).catch(() => {});
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null });
+          return;
+      }
+
+      // REWRITE replaces the selected block in place.
       if (aiMode === 'REWRITE') {
            const content = aiState.suggestion.replace(/^\[.*?\]\s*/, '');
            handleBlockChange(selectedBlockId, content);
@@ -551,6 +604,22 @@ function App() {
            return;
       }
 
+      // STORYBOARD: save the generated image prompt onto the selected ACTION block.
+      // Does not touch the script body — the prompt lives in block.imagePrompt.
+      if (aiMode === 'STORYBOARD') {
+          const prompt = aiState.suggestion;
+          setScreenplay(prev => ({
+              ...prev,
+              blocks: prev.blocks.map(b => b.id === selectedBlockId ? { ...b, imagePrompt: prompt } : b),
+              lastModified: Date.now()
+          }));
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null });
+          return;
+      }
+
+      // CONTINUE: append generated blocks to the end of the script (not after the
+      // currently selected block, which may sit mid-document).
       const lines = aiState.suggestion.split('\n').filter(l => l.trim().length > 0);
       const newBlocks: ScriptBlock[] = lines.map(line => {
           let type: BlockType = 'ACTION';
@@ -580,11 +649,14 @@ function App() {
       });
 
       setScreenplay(prev => {
-          const idx = prev.blocks.findIndex(b => b.id === selectedBlockId);
-          const updatedBlocks = [...prev.blocks];
-          updatedBlocks.splice(idx + 1, 0, ...newBlocks);
+          const updatedBlocks = [...prev.blocks, ...newBlocks];
           return { ...prev, blocks: updatedBlocks };
       });
+
+      // Focus the first newly appended block
+      if (newBlocks.length > 0) {
+          setSelectedBlockId(newBlocks[0].id);
+      }
 
       setShowAIModal(false);
       setAIState({ isLoading: false, suggestion: null, error: null }); // Clear suggestion to prevent re-insertion
@@ -736,6 +808,9 @@ function App() {
                                 placeholders={t.placeholders}
                                 readOnly={isReadOnly}
                                 customColor={appSettings.colorSettings[block.type]}
+                                theme={theme}
+                                imagePromptLabel={t.storyboardPromptLabel}
+                                imagePromptCopyLabel={t.aiCopyPrompt}
                             />
                         </div>
                     ))}
@@ -771,20 +846,21 @@ function App() {
                     
                     <div className="p-6 space-y-6">
                         <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
-                            {(['CONTINUE', 'IDEAS', 'REWRITE'] as const).map(m => (
-                                <button 
+                            {(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD'] as const).map(m => (
+                                <button
                                     key={m}
                                     onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null})}}
                                     className={clsx(
                                         "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
-                                        aiMode === m 
-                                            ? "bg-white dark:bg-[#27272a] text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                        aiMode === m
+                                            ? "bg-white dark:bg-[#27272a] text-indigo-600 dark:text-indigo-400 shadow-sm"
                                             : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                                     )}
                                 >
                                     {m === 'CONTINUE' && t.modes.continue}
                                     {m === 'IDEAS' && t.modes.ideas}
                                     {m === 'REWRITE' && t.modes.rewrite}
+                                    {m === 'STORYBOARD' && t.modes.storyboard}
                                 </button>
                             ))}
                         </div>
@@ -798,8 +874,9 @@ function App() {
                                     {aiMode === 'CONTINUE' && t.prompts.continue}
                                     {aiMode === 'IDEAS' && t.prompts.ideas}
                                     {aiMode === 'REWRITE' && t.prompts.rewrite}
+                                    {aiMode === 'STORYBOARD' && t.prompts.storyboard}
                                 </p>
-                                <button 
+                                <button
                                     onClick={() => executeAI()}
                                     disabled={aiState.isLoading}
                                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -818,21 +895,36 @@ function App() {
 
                         {aiState.suggestion && (
                             <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                                {aiMode === 'IDEAS' && (
+                                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.aiIdeasHint}</p>
+                                )}
+                                {aiMode === 'STORYBOARD' && (
+                                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.storyboardHint}</p>
+                                )}
                                 <div className="p-4 bg-gray-50 dark:bg-zinc-900/50 rounded-xl border border-gray-100 dark:border-zinc-800 text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto text-gray-800 dark:text-gray-300 shadow-inner">
                                     {aiState.suggestion}
                                 </div>
                                 <div className="flex gap-3">
-                                    <button 
+                                    <button
                                         onClick={() => setAIState({isLoading:false, suggestion: null, error: null})}
                                         className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                                     >
                                         {t.aiDiscard}
                                     </button>
-                                    <button 
+                                    {aiMode === 'STORYBOARD' && (
+                                        <button
+                                            onClick={() => navigator.clipboard?.writeText(aiState.suggestion || '').catch(() => {})}
+                                            className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            <Cloud className="w-3.5 h-3.5" />
+                                            {t.aiCopyPrompt}
+                                        </button>
+                                    )}
+                                    <button
                                         onClick={acceptAISuggestion}
                                         className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all"
                                     >
-                                        {t.aiInsert}
+                                        {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : t.aiInsert}
                                     </button>
                                 </div>
                             </div>
