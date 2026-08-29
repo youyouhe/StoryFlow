@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts } from '../types';
+import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts, GeminiThinkingLevel } from '../types';
 import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
 import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard } from 'lucide-react';
 
@@ -201,7 +201,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
 
                     <div className="border-t border-gray-100 dark:border-zinc-800 pt-4">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                            Select custom text colors for your script elements. Clear the color to revert to the theme default.
+                            {t.appearanceColorsDesc}
                         </p>
                         <div className="grid grid-cols-1 gap-3">
                             {(Object.keys(t.blockLabels) as BlockType[]).map((type) => (
@@ -329,8 +329,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                 onChange={e => setAppSettingsForm({...appSettingsForm, deepseekModel: e.target.value})}
                                 className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                             >
-                                <option value="deepseek-chat">deepseek-chat (V3)</option>
-                                <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
+                                <option value="deepseek-v4-flash">deepseek-v4-flash (Fast)</option>
+                                <option value="deepseek-v4-pro">deepseek-v4-pro (Pro)</option>
+                                <option value="deepseek-v4-flash-vision-exp">deepseek-v4-flash-vision-exp (Vision)</option>
                             </select>
                         </div>
                     </div>
@@ -342,14 +343,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                                 {t.apiKeyLabel} (Gemini - Optional)
                             </label>
-                            <input 
-                                type="password" 
-                                value={appSettingsForm.geminiApiKey} 
+                            <input
+                                type="password"
+                                value={appSettingsForm.geminiApiKey}
                                 onChange={e => setAppSettingsForm({...appSettingsForm, geminiApiKey: e.target.value})}
                                 placeholder="Overwrite env variable..."
                                 className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                             />
                             <p className="mt-1 text-[10px] text-gray-400">Leave empty to use the system default key.</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                {t.modelLabel}
+                            </label>
+                             <select
+                                value={appSettingsForm.geminiModel}
+                                onChange={e => setAppSettingsForm({...appSettingsForm, geminiModel: e.target.value})}
+                                className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                            >
+                                <option value="gemini-3.7-flash">gemini-3.7-flash (Latest · Fast)</option>
+                                <option value="gemini-3.6-flash">gemini-3.6-flash (Cost-efficient)</option>
+                                <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Fastest)</option>
+                                <option value="gemini-2.5-pro">gemini-2.5-pro (Pro)</option>
+                                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                {t.geminiThinkingLabel}
+                            </label>
+                            <select
+                                value={appSettingsForm.geminiThinkingLevel}
+                                onChange={e => setAppSettingsForm({...appSettingsForm, geminiThinkingLevel: e.target.value as GeminiThinkingLevel})}
+                                className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                            >
+                                <option value="none">{t.geminiThinkingNone}</option>
+                                <option value="low">{t.geminiThinkingLow}</option>
+                                <option value="medium">{t.geminiThinkingMedium}</option>
+                                <option value="high">{t.geminiThinkingHigh}</option>
+                            </select>
+                            <p className="mt-1 text-[10px] text-gray-400">{t.geminiThinkingDesc}</p>
                         </div>
                     </div>
                  )}
@@ -366,7 +399,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         {([
                             { key: 'aiContinue', label: t.modes.continue },
                             { key: 'aiIdeas', label: t.modes.ideas },
-                            { key: 'aiRewrite', label: t.modes.rewrite }
+                            { key: 'aiRewrite', label: t.modes.rewrite },
+                            { key: 'aiStoryboard', label: t.modes.storyboard }
                         ] as const).map(({key, label}) => (
                             <div key={key} className="flex flex-col gap-1.5">
                                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">

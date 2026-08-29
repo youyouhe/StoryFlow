@@ -483,13 +483,16 @@ export const COLOR_PRESETS = {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   provider: 'gemini',
   deepseekApiKey: '',
-  deepseekModel: 'deepseek-chat',
+  deepseekModel: 'deepseek-v4-flash',
   geminiApiKey: '',
+  geminiModel: 'gemini-3.7-flash',
+  geminiThinkingLevel: 'low',
   colorSettings: COLOR_PRESETS.MODERN_FOCUS,
   shortcuts: {
       aiContinue: 'Alt+C',
       aiIdeas: 'Alt+I',
-      aiRewrite: 'Alt+R'
+      aiRewrite: 'Alt+R',
+      aiStoryboard: 'Alt+S'
   },
   autoAcceptAI: false,
   aiContextBlocks: 50,
@@ -548,6 +551,31 @@ export const TRANSLATIONS = {
     aiGenerating: "Generating...",
     aiDiscard: "Discard",
     aiInsert: "Insert",
+    aiCopyIdeas: "Copy",
+    aiIdeasHint: "These are creative directions — copy any you like, or discard.",
+    aiSavePrompt: "Save to Storyboard",
+    aiCopyPrompt: "Copy Prompt",
+    storyboardHint: "Contains only the six visual elements (subject, environment, composition, lighting, material, mood). Add aspect ratio and quality boosters yourself in your image tool.",
+    storyboardWrongBlock: "Select an ACTION block to generate a storyboard prompt.",
+    storyboardPromptLabel: "Image Prompt",
+    storyboardElements: {
+      subject: "Subject",
+      environment: "Environment",
+      composition: "Composition",
+      lighting: "Lighting",
+      material: "Material",
+      mood: "Mood"
+    },
+    aiErrorKeyMissing: "API key is missing. Please configure it in Settings.",
+    aiErrorGeneric: "Failed to generate content. Please try again.",
+    pdfExportError: "PDF export failed. Your edits are preserved.",
+    appearanceColorsDesc: "Select custom text colors for your script elements. Clear the color to revert to the theme default.",
+    geminiThinkingLabel: "Reasoning Effort",
+    geminiThinkingNone: "None (Fastest)",
+    geminiThinkingLow: "Low",
+    geminiThinkingMedium: "Medium",
+    geminiThinkingHigh: "High (Deepest)",
+    geminiThinkingDesc: "Controls how much the model 'thinks' before responding. Higher = deeper reasoning but slower. Only applies to Gemini 3.x Flash/Pro.",
     viewPrompt: "View Prompt",
     systemPrompt: "System Prompt",
     close: "Close",
@@ -562,12 +590,14 @@ export const TRANSLATIONS = {
     modes: {
       continue: "Continue",
       ideas: "Brainstorm",
-      rewrite: "Rewrite"
+      rewrite: "Rewrite",
+      storyboard: "Storyboard"
     },
     prompts: {
       continue: "Analyze context and generate the next few lines.",
       ideas: "Generate plot twists or creative directions.",
-      rewrite: "Polish the selected block."
+      rewrite: "Polish the selected block.",
+      storyboard: "Generate a text-to-image prompt for this action (six visual elements)."
     },
     placeholders: {
       SCENE_HEADING: 'INT./EXT. LOCATION - TIME',
@@ -671,6 +701,31 @@ export const TRANSLATIONS = {
     aiGenerating: "生成中...",
     aiDiscard: "放弃",
     aiInsert: "插入",
+    aiCopyIdeas: "复制",
+    aiIdeasHint: "这些是创意方向——可复制需要的部分，或直接放弃。",
+    aiSavePrompt: "保存到分镜",
+    aiCopyPrompt: "复制提示词",
+    storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
+    storyboardWrongBlock: "请选中一个动作块再生成分镜提示词。",
+    storyboardPromptLabel: "文生图提示词",
+    storyboardElements: {
+      subject: "主体",
+      environment: "环境",
+      composition: "构图",
+      lighting: "光影",
+      material: "材质",
+      mood: "氛围"
+    },
+    aiErrorKeyMissing: "缺少 API 密钥，请在设置中配置。",
+    aiErrorGeneric: "生成内容失败，请重试。",
+    pdfExportError: "导出 PDF 失败，你的编辑内容已保留。",
+    appearanceColorsDesc: "为剧本元素选择自定义文字颜色。清除颜色可恢复主题默认。",
+    geminiThinkingLabel: "推理深度",
+    geminiThinkingNone: "关闭 (最快)",
+    geminiThinkingLow: "低",
+    geminiThinkingMedium: "中",
+    geminiThinkingHigh: "高 (最深入)",
+    geminiThinkingDesc: "控制模型在响应前的思考程度。越高推理越深但越慢。仅对 Gemini 3.x Flash/Pro 生效。",
     viewPrompt: "查看提示词",
     systemPrompt: "系统提示词",
     close: "关闭",
@@ -685,12 +740,14 @@ export const TRANSLATIONS = {
     modes: {
       continue: "续写",
       ideas: "灵感",
-      rewrite: "润色"
+      rewrite: "润色",
+      storyboard: "分镜"
     },
     prompts: {
       continue: "分析上下文并生成后续内容。",
       ideas: "为下一场戏生成情节转折或创意方向。",
-      rewrite: "润色选定的段落。"
+      rewrite: "润色选定的段落。",
+      storyboard: "为该动作生成文生图提示词（六大视觉要素）。"
     },
     placeholders: {
       SCENE_HEADING: '内/外 场景 - 时间',

@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
-import { ScriptBlock, BlockType } from '../types';
+import React, { useRef, useEffect, useState } from 'react';
+import { ScriptBlock, BlockType, Theme } from '../types';
 import { clsx } from 'clsx';
-import { MoreHorizontal } from 'lucide-react';
+import { Image as ImageIcon, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { adaptColorForTheme } from '../utils/color';
 
 interface EditorBlockProps {
   block: ScriptBlock;
@@ -14,6 +15,9 @@ interface EditorBlockProps {
   placeholders: Record<BlockType, string>;
   readOnly?: boolean;
   customColor?: string;
+  theme?: Theme;
+  imagePromptLabel?: string;
+  imagePromptCopyLabel?: string;
 }
 
 // Map styles for screenplay formatting with distinct light/dark themes
@@ -46,9 +50,14 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
   showControls,
   placeholders,
   readOnly = false,
-  customColor
-}) => {
+  customColor,
+  theme = 'light',
+  imagePromptLabel = 'Image Prompt',
+  imagePromptCopyLabel = 'Copy'
+}: EditorBlockProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [promptExpanded, setPromptExpanded] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -77,9 +86,12 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
     onKeyDown(e, block.id, e.currentTarget.selectionStart);
   };
 
-  // Build style object for custom colors
-  // If customColor is set, it overrides the text color from Tailwind classes
-  const styles = customColor ? { color: customColor } : {};
+  // Build style object for custom colors.
+  // The user picks colors tuned for light mode; in dark mode we auto-derive a
+  // legible variant (hue preserved, lightness/saturation adjusted) so a single
+  // palette works across both themes. Empty values fall back to Tailwind theme classes.
+  const resolvedColor = adaptColorForTheme(customColor, theme);
+  const styles = resolvedColor ? { color: resolvedColor } : {};
 
   return (
     <div className="relative group block-container rounded px-2 -mx-2">
@@ -110,6 +122,42 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
         rows={1}
         spellCheck={false}
       />
+
+      {/* Storyboard image prompt (ACTION blocks only, when a prompt is saved) */}
+      {block.type === 'ACTION' && block.imagePrompt && block.imagePrompt.trim() && (
+        <div className="mt-2 ml-2 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-900/10 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPromptExpanded(v => !v)}
+            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/20 transition-colors"
+          >
+            <ImageIcon className="w-3 h-3" />
+            <span>{imagePromptLabel}</span>
+            {promptExpanded
+              ? <ChevronDown className="w-3 h-3 ml-auto" />
+              : <ChevronRight className="w-3 h-3 ml-auto" />}
+          </button>
+          {promptExpanded && (
+            <div className="px-3 pb-2.5 pt-0.5">
+              <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-indigo-900/80 dark:text-indigo-200/70 select-text">
+                {block.imagePrompt}
+              </pre>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(block.imagePrompt || '').catch(() => {});
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+              >
+                <Copy className="w-3 h-3" />
+                {copied ? '✓' : imagePromptCopyLabel}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

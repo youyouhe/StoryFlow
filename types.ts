@@ -10,6 +10,8 @@ export interface ScriptBlock {
   id: string;
   type: BlockType;
   content: string;
+  /** Optional text-to-image prompt attached to ACTION blocks (storyboard). */
+  imagePrompt?: string;
 }
 
 export type ScriptLanguage = 'en' | 'zh' | 'dual';
@@ -38,11 +40,14 @@ export interface ScriptTemplate {
   initialBlocksZh?: ScriptBlock[];
 }
 
-export type Theme = 'light' | 'dark' | 'sepia';
+export type Theme = 'light' | 'dark';
 
 export type Language = 'en' | 'zh';
 
 export type LLMProvider = 'gemini' | 'deepseek';
+
+/** Gemini reasoning effort (maps to @google/genai thinkingLevel). 'none' disables thinking. */
+export type GeminiThinkingLevel = 'none' | 'low' | 'medium' | 'high';
 
 export type ColorSettings = Record<BlockType, string>;
 
@@ -50,13 +55,19 @@ export interface KeyboardShortcuts {
   aiContinue: string;
   aiIdeas: string;
   aiRewrite: string;
+  aiStoryboard: string;
 }
+
+/** AI assistant operating modes. STORYBOARD generates a text-to-image prompt. */
+export type AIMode = 'CONTINUE' | 'IDEAS' | 'REWRITE' | 'STORYBOARD';
 
 export interface AppSettings {
   provider: LLMProvider;
   deepseekApiKey: string;
   deepseekModel: string;
   geminiApiKey: string;
+  geminiModel: string;
+  geminiThinkingLevel: GeminiThinkingLevel;
   colorSettings: ColorSettings;
   shortcuts: KeyboardShortcuts;
   autoAcceptAI: boolean;

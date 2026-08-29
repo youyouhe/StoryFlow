@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { ScriptBlock, ScriptLanguage, AppSettings } from "../types";
 
 // Helper to get plain text context from blocks
@@ -31,7 +31,7 @@ const callAIProvider = async (
   
   // 1. DeepSeek Provider
   if (settings.provider === 'deepseek') {
-    if (!settings.deepseekApiKey) throw new Error("DeepSeek API Key is missing. Please configure it in Settings.");
+    if (!settings.deepseekApiKey) throw new Error("DEEPSEEK_KEY_MISSING");
     
     try {
       const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -41,7 +41,7 @@ const callAIProvider = async (
           'Authorization': `Bearer ${settings.deepseekApiKey}`
         },
         body: JSON.stringify({
-          model: settings.deepseekModel || 'deepseek-chat',
+          model: settings.deepseekModel || 'deepseek-v4-flash',
           messages: [
             { role: "system", content: messages.system },
             { role: "user", content: messages.user }
@@ -66,19 +66,32 @@ const callAIProvider = async (
   // 2. Google Gemini Provider (Default)
   else {
     const key = settings.geminiApiKey || process.env.API_KEY;
-    if (!key) throw new Error("Gemini API Key is missing. Please set it in Settings or environment variables.");
-    
+    if (!key) throw new Error("GEMINI_KEY_MISSING");
+
     const ai = new GoogleGenAI({ apiKey: key });
-    
+
     // Combine system and user prompt for Gemini's simple interface or use config
     const combinedPrompt = `${messages.system}\n\n${messages.user}`;
 
+    // Map the user-facing thinking level to the SDK's thinkingLevel enum.
+    // 'none' disables thinking entirely (budget 0); others map to the enum members.
+    const userLevel = settings.geminiThinkingLevel;
+    const levelMap: Record<'low' | 'medium' | 'high', ThinkingLevel> = {
+      low: ThinkingLevel.LOW,
+      medium: ThinkingLevel.MEDIUM,
+      high: ThinkingLevel.HIGH,
+    };
+    const thinkingConfig = userLevel === 'none'
+      ? { thinkingBudget: 0 }
+      : { thinkingLevel: levelMap[userLevel] };
+
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: settings.geminiModel || 'gemini-3.7-flash',
         contents: combinedPrompt,
         config: {
           temperature: 0.9,
+          thinkingConfig,
         }
       });
       return response.text || '';
@@ -304,3 +317,86 @@ export const suggestIdeas = async (
     .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
     .map(l => l.replace(/^[-*]\s+/, ''));
 }
+
+/**
+ * Generate a structured text-to-image prompt for an ACTION block (storyboard).
+ *
+ * The prompt covers only the six core visual elements (subject, environment,
+ * composition, lighting, material, mood) and is ALWAYS in English regardless of
+ * the script's language — image models understand English best. Aspect-ratio
+ * and quality-booster "technical" terms are intentionally omitted; the user adds
+ * those in their external image tool.
+ *
+ * `sceneBlocks` is the current-scene context (most recent SCENE_HEADING through
+ * the target action, inclusive), pre-sliced by the caller.
+ */
+export const generateImagePrompt = async (
+  sceneBlocks: ScriptBlock[],
+  targetBlockId: string,
+  systemInstruction: string,
+  settings: AppSettings,
+): Promise<string> => {
+  // Image prompts are always English, independent of scriptLanguage.
+  const langInstruction = 'Respond in English only.';
+
+  const systemPrompt = `You are a Storyboard Artist and expert Text-to-Image Prompt Engineer.
+Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.
+
+${systemInstruction}
+
+${langInstruction}
+
+A high-quality image prompt must cover these SIX core visual elements and NOTHING else:
+1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.
+2. Environment — location, time of day, weather, background detail.
+3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.
+4. Lighting — light source, direction, quality (hard/soft), color of light, shadows.
+5. Material — textures, fabrics, surfaces, finishes that sell realism or style.
+6. Mood — emotional tone, atmosphere, color palette leaning.
+
+STRICT RULES:
+- Output EXACTLY six lines, one per element, in this exact format:
+  Subject: ...
+  Environment: ...
+  Composition: ...
+  Lighting: ...
+  Material: ...
+  Mood: ...
+- Do NOT include aspect ratio, resolution, or quality-booster terms (no 8k, no "high detail", no "professional photography"). The user adds those separately.
+- Do NOT use markdown, headings, bullet points, code blocks, or any preamble/explanation.
+- Each line must be a single concrete phrase. Be specific and visual (show, don't tell).
+- Translate any non-English source content into English for the prompt.`;
+
+  // Render the scene context, highlighting the target action.
+  const context = sceneBlocks.map(b => {
+    const isTarget = b.id === targetBlockId;
+    const tag = isTarget ? ' [TARGET ACTION TO ILLUSTRATE]' : '';
+    return `${b.type}:${tag} ${b.content}`;
+  }).join('\n');
+
+  const userPrompt = `Scene context (the marked action is the one to turn into an image prompt):
+---
+${context}
+---
+
+Generate the six-line image prompt for the TARGET ACTION. Remember: exactly six labeled lines, English, no technical terms, no markdown.`;
+
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+
+  // Normalize: keep only the six labeled lines, trim each, drop any stray markdown.
+  const allowed = ['Subject', 'Environment', 'Composition', 'Lighting', 'Material', 'Mood'];
+  const lines = responseText
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => allowed.some(a => l.toLowerCase().startsWith(a.toLowerCase() + ':')))
+    .map(l => {
+      const colonIdx = l.indexOf(':');
+      const label = l.slice(0, colonIdx);
+      const rest = l.slice(colonIdx + 1).trim();
+      // Re-capitalize the canonical label for consistency.
+      const canon = allowed.find(a => a.toLowerCase() === label.toLowerCase()) || label;
+      return `${canon}: ${rest}`;
+    });
+
+  return lines.join('\n');
+};
