@@ -434,12 +434,12 @@ function App() {
         }
       } else if (effectiveMode === 'STORYBOARD') {
         const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
-        if (!currentBlock || currentBlock.type !== 'ACTION') {
+        if (!currentBlock || (currentBlock.type !== 'ACTION' && currentBlock.type !== 'CHARACTER')) {
             setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock });
             return;
         }
         // Slice the current scene: from the nearest preceding SCENE_HEADING
-        // through the target action (inclusive), so the prompt inherits the
+        // through the target block (inclusive), so the prompt inherits the
         // scene's environment/time/mood.
         const targetIdx = screenplay.blocks.findIndex(b => b.id === selectedBlockId);
         let sceneStart = 0;
@@ -447,7 +447,8 @@ function App() {
             if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
         }
         const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
-        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings);
+        const kind = currentBlock.type === 'CHARACTER' ? 'character' : 'action';
+        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind);
       }
       setAIState({ isLoading: false, suggestion: result, error: null });
     } catch (err: any) {
@@ -487,9 +488,9 @@ function App() {
             return;
         }
         if (checkShortcut(e, appSettings.shortcuts.aiStoryboard)) {
-            // Only trigger on ACTION blocks — storyboard prompts are for actions.
+            // Trigger on ACTION (scene illustration) or CHARACTER (design sheet) blocks.
             const currentBlock = screenplay.blocks.find(b => b.id === id);
-            if (currentBlock?.type === 'ACTION') {
+            if (currentBlock?.type === 'ACTION' || currentBlock?.type === 'CHARACTER') {
                 e.preventDefault();
                 setAIMode('STORYBOARD');
                 setShowAIModal(true);
@@ -604,13 +605,27 @@ function App() {
            return;
       }
 
-      // STORYBOARD: save the generated image prompt onto the selected ACTION block.
+      // STORYBOARD: save the generated image prompt onto the selected block.
       // Does not touch the script body — the prompt lives in block.imagePrompt.
+      // For CHARACTER blocks, the same character (matched by name/content) may
+      // appear in multiple blocks: keep ONE prompt per character by writing it
+      // to every CHARACTER block with the same name, so re-running on any
+      // occurrence updates the single shared design sheet.
       if (aiMode === 'STORYBOARD') {
           const prompt = aiState.suggestion;
+          const targetBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
+          const isCharacter = targetBlock?.type === 'CHARACTER';
+          const charName = isCharacter ? targetBlock!.content.trim() : '';
           setScreenplay(prev => ({
               ...prev,
-              blocks: prev.blocks.map(b => b.id === selectedBlockId ? { ...b, imagePrompt: prompt } : b),
+              blocks: prev.blocks.map(b => {
+                  if (b.id === selectedBlockId) return { ...b, imagePrompt: prompt };
+                  // Propagate to same-name CHARACTER blocks so there's one prompt per character.
+                  if (isCharacter && b.type === 'CHARACTER' && b.content.trim() === charName) {
+                      return { ...b, imagePrompt: prompt };
+                  }
+                  return b;
+              }),
               lastModified: Date.now()
           }));
           setShowAIModal(false);

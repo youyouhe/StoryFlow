@@ -123,8 +123,8 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
         spellCheck={false}
       />
 
-      {/* Storyboard image prompt (ACTION blocks only, when a prompt is saved) */}
-      {block.type === 'ACTION' && block.imagePrompt && block.imagePrompt.trim() && (
+      {/* Storyboard image prompt (ACTION / CHARACTER blocks, when a prompt is saved) */}
+      {block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER') && (
         <div className="mt-2 ml-2 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-900/10 overflow-hidden">
           <button
             type="button"

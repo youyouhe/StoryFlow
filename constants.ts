@@ -556,7 +556,7 @@ export const TRANSLATIONS = {
     aiSavePrompt: "Save to Storyboard",
     aiCopyPrompt: "Copy Prompt",
     storyboardHint: "Contains only the six visual elements (subject, environment, composition, lighting, material, mood). Add aspect ratio and quality boosters yourself in your image tool.",
-    storyboardWrongBlock: "Select an ACTION block to generate a storyboard prompt.",
+    storyboardWrongBlock: "Select an ACTION or CHARACTER block to generate a storyboard prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
       subject: "Subject",
@@ -597,7 +597,7 @@ export const TRANSLATIONS = {
       continue: "Analyze context and generate the next few lines.",
       ideas: "Generate plot twists or creative directions.",
       rewrite: "Polish the selected block.",
-      storyboard: "Generate a text-to-image prompt for this action (six visual elements)."
+      storyboard: "Generate a text-to-image prompt for this action or character (six visual elements)."
     },
     placeholders: {
       SCENE_HEADING: 'INT./EXT. LOCATION - TIME',
@@ -706,7 +706,7 @@ export const TRANSLATIONS = {
     aiSavePrompt: "保存到分镜",
     aiCopyPrompt: "复制提示词",
     storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
-    storyboardWrongBlock: "请选中一个动作块再生成分镜提示词。",
+    storyboardWrongBlock: "请选中一个动作块或角色块再生成分镜提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {
       subject: "主体",
@@ -747,7 +747,7 @@ export const TRANSLATIONS = {
       continue: "分析上下文并生成后续内容。",
       ideas: "为下一场戏生成情节转折或创意方向。",
       rewrite: "润色选定的段落。",
-      storyboard: "为该动作生成文生图提示词（六大视觉要素）。"
+      storyboard: "为该动作或角色生成文生图提示词（六大视觉要素）。"
     },
     placeholders: {
       SCENE_HEADING: '内/外 场景 - 时间',

@@ -319,7 +319,8 @@ export const suggestIdeas = async (
 }
 
 /**
- * Generate a structured text-to-image prompt for an ACTION block (storyboard).
+ * Generate a structured text-to-image prompt for an ACTION or CHARACTER block
+ * (storyboard).
  *
  * The prompt covers only the six core visual elements (subject, environment,
  * composition, lighting, material, mood) and is ALWAYS in English regardless of
@@ -328,30 +329,56 @@ export const suggestIdeas = async (
  * those in their external image tool.
  *
  * `sceneBlocks` is the current-scene context (most recent SCENE_HEADING through
- * the target action, inclusive), pre-sliced by the caller.
+ * the target block, inclusive), pre-sliced by the caller. `kind` selects the
+ * focus: 'action' (scene illustration) or 'character' (character design sheet).
  */
 export const generateImagePrompt = async (
   sceneBlocks: ScriptBlock[],
   targetBlockId: string,
   systemInstruction: string,
   settings: AppSettings,
+  kind: 'action' | 'character' = 'action',
 ): Promise<string> => {
   // Image prompts are always English, independent of scriptLanguage.
   const langInstruction = 'Respond in English only.';
 
+  const isCharacter = kind === 'character';
+
+  const roleLine = isCharacter
+    ? 'Your job: turn a screenplay CHARACTER into a single character-design image prompt.'
+    : 'Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.';
+
+  const subjectGuidance = isCharacter
+    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description.'
+    : '1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.';
+
+  const envGuidance = isCharacter
+    ? '2. Environment — a neutral or simple backdrop suitable for a character design sheet (e.g. plain studio background). Keep it minimal so the character stands out.'
+    : '2. Environment — location, time of day, weather, background detail.';
+
+  const compGuidance = isCharacter
+    ? '3. Composition — full-body standing pose, centered, character turnaround reference (front view preferred).'
+    : '3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.';
+
+  const matGuidance = isCharacter
+    ? '5. Material — clothing fabric, accessories, armor/prop materials, surface textures of garments.'
+    : '5. Material — textures, fabrics, surfaces, finishes that sell realism or style.';
+
+  const targetTag = isCharacter ? ' [TARGET CHARACTER TO DESIGN]' : ' [TARGET ACTION TO ILLUSTRATE]';
+
   const systemPrompt = `You are a Storyboard Artist and expert Text-to-Image Prompt Engineer.
-Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.
+${roleLine}
 
 ${systemInstruction}
 
 ${langInstruction}
 
 A high-quality image prompt must cover these SIX core visual elements and NOTHING else:
-1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.
-2. Environment — location, time of day, weather, background detail.
-3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.
+${subjectGuidance}
+${envGuidance}
+${compGuidance}
 4. Lighting — light source, direction, quality (hard/soft), color of light, shadows.
-5. Material — textures, fabrics, surfaces, finishes that sell realism or style.
+${matGuidance}
 6. Mood — emotional tone, atmosphere, color palette leaning.
 
 STRICT RULES:
@@ -367,19 +394,20 @@ STRICT RULES:
 - Each line must be a single concrete phrase. Be specific and visual (show, don't tell).
 - Translate any non-English source content into English for the prompt.`;
 
-  // Render the scene context, highlighting the target action.
+  // Render the scene context, highlighting the target block.
   const context = sceneBlocks.map(b => {
     const isTarget = b.id === targetBlockId;
-    const tag = isTarget ? ' [TARGET ACTION TO ILLUSTRATE]' : '';
+    const tag = isTarget ? targetTag : '';
     return `${b.type}:${tag} ${b.content}`;
   }).join('\n');
 
-  const userPrompt = `Scene context (the marked action is the one to turn into an image prompt):
+  const targetNoun = isCharacter ? 'TARGET CHARACTER' : 'TARGET ACTION';
+  const userPrompt = `Scene context (the marked ${targetNoun.toLowerCase()} is the one to turn into an image prompt):
 ---
 ${context}
 ---
 
-Generate the six-line image prompt for the TARGET ACTION. Remember: exactly six labeled lines, English, no technical terms, no markdown.`;
+Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.`;
 
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
 
