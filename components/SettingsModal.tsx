@@ -400,7 +400,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             { key: 'aiContinue', label: t.modes.continue },
                             { key: 'aiIdeas', label: t.modes.ideas },
                             { key: 'aiRewrite', label: t.modes.rewrite },
-                            { key: 'aiStoryboard', label: t.modes.storyboard }
+                            { key: 'aiStoryboard', label: t.modes.storyboard },
+                            { key: 'aiGraybox', label: t.modes.graybox }
                         ] as const).map(({key, label}) => (
                             <div key={key} className="flex flex-col gap-1.5">
                                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">

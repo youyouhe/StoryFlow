@@ -6,6 +6,11 @@ const CONTENT_HEIGHT_LIMIT = 840; // Reduced from 900 to account for space-y-1 g
 const CHARS_PER_LINE = 60; // Approximation for Courier Prime 12pt wrapping
 const BLOCK_GAP = 4; // space-y-1 = 4px between each block
 
+// Height added by an inline chip (imagePrompt / graybox) below a block's text.
+// Chip = mt-2 (8px) + py-1 top/bottom (8px) + text ~14px + border 2px ≈ 32px.
+// Round up slightly so pagination errs on the safe side (fewer page-seam spills).
+const CHIP_HEIGHT = 34;
+
 const estimateBlockHeight = (block: ScriptBlock): number => {
   // Approximate pixel values based on Tailwind classes in EditorBlock
   // Line height ~ 1.5rem * 16px = 24px.
@@ -20,28 +25,40 @@ const estimateBlockHeight = (block: ScriptBlock): number => {
   const lines = Math.max(explicitLines, wrappedLines);
   const textHeight = lines * lineHeight;
 
-  // Base height includes margin + text height + block gap (space-y-1)
+  // Chips (imagePrompt / graybox) render as extra rows below the text and are
+  // invisible to the line-based estimate above. An ACTION can carry BOTH chips
+  // (stacked), so count each independently. Without this the paginator
+  // under-measures the block and later blocks spill into the page seam.
+  let chipHeight = 0;
+  if (block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER')) {
+    chipHeight += CHIP_HEIGHT;
+  }
+  if (block.graybox && (block.type === 'SCENE_HEADING' || block.type === 'ACTION' || block.type === 'DIALOGUE')) {
+    chipHeight += CHIP_HEIGHT;
+  }
+
+  // Base height includes margin + text height + chips + block gap (space-y-1)
   switch (block.type) {
     case 'SCENE_HEADING':
-        // mt-8 (32px) + mb-4 (16px) + text + block gap
-        return 48 + textHeight + BLOCK_GAP;
+        // mt-8 (32px) + mb-4 (16px) + text + chips + block gap
+        return 48 + textHeight + chipHeight + BLOCK_GAP;
     case 'ACTION':
-        // mb-4 (16px) + text + block gap
-        return 16 + textHeight + BLOCK_GAP;
+        // mb-4 (16px) + text + chips + block gap
+        return 16 + textHeight + chipHeight + BLOCK_GAP;
     case 'CHARACTER':
-        // mt-4 (16px) + text + block gap
-        return 16 + textHeight + BLOCK_GAP;
+        // mt-4 (16px) + text + chips + block gap
+        return 16 + textHeight + chipHeight + BLOCK_GAP;
     case 'DIALOGUE':
-        // mb-4 (16px) + text + block gap
-        return 16 + textHeight + BLOCK_GAP;
+        // mb-4 (16px) + text + chips + block gap
+        return 16 + textHeight + chipHeight + BLOCK_GAP;
     case 'PARENTHETICAL':
-        // mb-0 + text + block gap
-        return textHeight + BLOCK_GAP;
+        // mb-0 + text + chips + block gap
+        return textHeight + chipHeight + BLOCK_GAP;
     case 'TRANSITION':
-        // mt-6 (24px) + mb-4 (16px) + text + block gap
-        return 40 + textHeight + BLOCK_GAP;
+        // mt-6 (24px) + mb-4 (16px) + text + chips + block gap
+        return 40 + textHeight + chipHeight + BLOCK_GAP;
     default:
-        return 20 + textHeight + BLOCK_GAP;
+        return 20 + textHeight + chipHeight + BLOCK_GAP;
   }
 };
 

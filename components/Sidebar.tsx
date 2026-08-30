@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ScriptBlock } from '../types';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen } from 'lucide-react';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -18,7 +18,8 @@ interface SidebarProps {
   onToggle: () => void;
   onNewScript: () => void;
   onScriptSettings: () => void;
-  onExportPDF?: () => void;
+  /** Open the export menu (format + options). */
+  onExport?: () => void;
   t: typeof TRANSLATIONS['en'];
   savedScripts: ScriptSummary[];
   onLoadScript: (id: string) => void;
@@ -35,7 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onToggle,
     onNewScript,
     onScriptSettings,
-    onExportPDF,
+    onExport,
     t,
     savedScripts,
     onLoadScript,
@@ -225,10 +226,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="p-3 border-t border-gray-200 dark:border-zinc-800 space-y-1 bg-gray-50/50 dark:bg-zinc-900/50">
         <button
-          onClick={onExportPDF}
+          onClick={onExport}
           className="flex items-center gap-2.5 w-full text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-zinc-800"
         >
-          <FileText className="w-4 h-4 opacity-70" />
+          <Download className="w-4 h-4 opacity-70" />
           <span>{t.exportPdf}</span>
         </button>
         <button 

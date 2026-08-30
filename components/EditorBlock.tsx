@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { ScriptBlock, BlockType, Theme } from '../types';
 import { clsx } from 'clsx';
-import { Image as ImageIcon, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { Image as ImageIcon, Boxes } from 'lucide-react';
 import { adaptColorForTheme } from '../utils/color';
 
 interface EditorBlockProps {
@@ -17,7 +17,16 @@ interface EditorBlockProps {
   customColor?: string;
   theme?: Theme;
   imagePromptLabel?: string;
-  imagePromptCopyLabel?: string;
+  imagePromptOpenLabel?: string;
+  onOpenImagePrompt?: (id: string) => void;
+  isImagePromptPanelOpen?: boolean;
+  /** Graybox (3D previs) chip — scene layout on SCENE_HEADING, camera/运镜 on
+   *  ACTION/DIALOGUE. Emerald accent to distinguish from the indigo
+   *  image-prompt chip when an ACTION block carries both. */
+  grayboxLabel?: string;
+  grayboxOpenLabel?: string;
+  onOpenGraybox?: (id: string) => void;
+  isGrayboxPanelOpen?: boolean;
 }
 
 // Map styles for screenplay formatting with distinct light/dark themes
@@ -53,11 +62,15 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
   customColor,
   theme = 'light',
   imagePromptLabel = 'Image Prompt',
-  imagePromptCopyLabel = 'Copy'
+  imagePromptOpenLabel = 'View',
+  onOpenImagePrompt,
+  isImagePromptPanelOpen = false,
+  grayboxLabel = 'Graybox',
+  grayboxOpenLabel = 'View',
+  onOpenGraybox,
+  isGrayboxPanelOpen = false
 }: EditorBlockProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [promptExpanded, setPromptExpanded] = useState(true);
-  const [copied, setCopied] = useState(false);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -123,40 +136,45 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
         spellCheck={false}
       />
 
-      {/* Storyboard image prompt (ACTION / CHARACTER blocks, when a prompt is saved) */}
+      {/* Storyboard image prompt chip (ACTION / CHARACTER blocks).
+          Clicking it opens the prompt in a right-side drawer (handled in App)
+          instead of expanding inline, so it costs only one line of editor space. */}
       {block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER') && (
-        <div className="mt-2 ml-2 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-900/10 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setPromptExpanded(v => !v)}
-            className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/20 transition-colors"
-          >
-            <ImageIcon className="w-3 h-3" />
-            <span>{imagePromptLabel}</span>
-            {promptExpanded
-              ? <ChevronDown className="w-3 h-3 ml-auto" />
-              : <ChevronRight className="w-3 h-3 ml-auto" />}
-          </button>
-          {promptExpanded && (
-            <div className="px-3 pb-2.5 pt-0.5">
-              <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap text-indigo-900/80 dark:text-indigo-200/70 select-text">
-                {block.imagePrompt}
-              </pre>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(block.imagePrompt || '').catch(() => {});
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                }}
-                className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
-              >
-                <Copy className="w-3 h-3" />
-                {copied ? '✓' : imagePromptCopyLabel}
-              </button>
-            </div>
+        <button
+          type="button"
+          onClick={() => onOpenImagePrompt?.(block.id)}
+          className={clsx(
+            "mt-2 ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border transition-colors",
+            isImagePromptPanelOpen
+              ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
+              : "bg-indigo-50/60 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-900/40 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20"
           )}
-        </div>
+        >
+          <ImageIcon className="w-3 h-3" />
+          <span>{imagePromptLabel}</span>
+          <span className="font-sans normal-case tracking-normal opacity-60">· {imagePromptOpenLabel}</span>
+        </button>
+      )}
+
+      {/* Graybox (3D previs) chip (SCENE_HEADING / ACTION / DIALOGUE blocks).
+          Mirrors the image-prompt chip but emerald-accented so the two are
+          visually distinct when an ACTION carries both. CHARACTER is excluded —
+          it owns the image-prompt design sheet, graybox is space + camera. */}
+      {block.graybox && (block.type === 'SCENE_HEADING' || block.type === 'ACTION' || block.type === 'DIALOGUE') && (
+        <button
+          type="button"
+          onClick={() => onOpenGraybox?.(block.id)}
+          className={clsx(
+            "mt-2 ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border transition-colors",
+            isGrayboxPanelOpen
+              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+              : "bg-emerald-50/60 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-900/40 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/20"
+          )}
+        >
+          <Boxes className="w-3 h-3" />
+          <span>{grayboxLabel}</span>
+          <span className="font-sans normal-case tracking-normal opacity-60">· {grayboxOpenLabel}</span>
+        </button>
       )}
     </div>
   );

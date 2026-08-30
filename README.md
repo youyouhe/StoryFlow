@@ -19,7 +19,8 @@ An intelligent screenplay editor supporting multiple script formats with AI assi
   - Continue writing from any point
   - Generate creative ideas
   - Rewrite existing blocks
-  - Support for Gemini & DeepSeek providers
+  - Storyboard: generate text-to-image prompts for ACTION (scene illustration) and CHARACTER (character design) blocks — six structured visual elements, saved per block and copied to your image tool
+  - Support for Gemini & DeepSeek providers, with configurable models and Gemini reasoning effort
 
 - **Bilingual Support**
   - English and Chinese interfaces
@@ -29,6 +30,7 @@ An intelligent screenplay editor supporting multiple script formats with AI assi
   - Proper pagination for print (US Letter / A4)
   - Smart block type detection
   - Standard screenplay margins and spacing
+  - Auto-adapting custom colors for light/dark themes
 
 ## Screenshots
 
@@ -90,6 +92,8 @@ Open [http://localhost:5173](http://localhost:5173) to start writing.
 | `Enter` | Create new block |
 | `Backspace` (at start) | Merge with previous block |
 | `Ctrl/Meta + Arrow keys` | Navigate between blocks |
+| `Alt+C` / `Alt+I` / `Alt+R` | AI continue / ideas / rewrite |
+| `Alt+S` | Generate storyboard image prompt (ACTION / CHARACTER) |
 
 AI shortcuts are customizable in settings.
 

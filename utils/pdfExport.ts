@@ -1,4 +1,5 @@
 import { ScriptBlock, ScriptMetadata, ScriptLanguage, PDFOptions, ColorSettings, BlockType } from '../types';
+import { summarizeGraybox } from './exportData';
 
 /**
  * Export screenplay to PDF using iframe + print
@@ -10,7 +11,7 @@ export const exportToPDF = async (
 ): Promise<void> => {
   const monoFont = getMonoFont(metadata.scriptLanguage);
   // Generate print HTML
-  const printHTML = generatePrintHTML(metadata, blocks, monoFont, options.titlePage !== false, options.colors);
+  const printHTML = generatePrintHTML(metadata, blocks, monoFont, options.titlePage !== false, options);
   // Create iframe for printing
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
@@ -55,8 +56,9 @@ const generatePrintHTML = (
   blocks: ScriptBlock[],
   monoFont: string,
   includeTitlePage: boolean,
-  colors?: ColorSettings
+  options: PDFOptions = {}
 ): string => {
+  const colors = options.colors;
   // Determine font based on language
   const useMonoFont = metadata.scriptLanguage === 'en' || metadata.scriptLanguage === 'dual' || metadata.scriptLanguage === 'zh';
   const bodyFont = useMonoFont ? monoFont : 'serif';
@@ -173,6 +175,52 @@ const generatePrintHTML = (
         .title-page .meta p {
           margin: 0.5em 0;
         }
+        /* Appendix: AI payloads (storyboard prompts + graybox) per block.
+           Kept out of the script body so it doesn't disturb the screenplay
+           layout; rendered as a labeled appendix after the script. */
+        .appendix {
+          page-break-before: always;
+          margin-top: 1in;
+        }
+        .appendix h2 {
+          font-size: 14pt;
+          font-weight: bold;
+          margin-bottom: 0.5in;
+          border-bottom: 1px solid #999;
+          padding-bottom: 0.1in;
+        }
+        .appendix-entry {
+          margin-bottom: 0.4in;
+          page-break-inside: avoid;
+        }
+        .appendix-entry .anchor {
+          font-size: 9pt;
+          color: #666;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 0.1in;
+        }
+        .appendix-entry .label {
+          font-weight: bold;
+          font-size: 11pt;
+          margin-top: 0.15in;
+        }
+        .appendix-entry .summary {
+          font-size: 10pt;
+          color: #444;
+          font-style: italic;
+        }
+        .appendix-entry pre {
+          font-family: 'Courier Prime', 'Courier New', monospace;
+          font-size: 8.5pt;
+          line-height: 1.35;
+          background: #f5f5f5;
+          border: 1px solid #ddd;
+          padding: 0.15in;
+          white-space: pre-wrap;
+          word-break: break-word;
+          margin-top: 0.05in;
+        }
       </style>
     </head>
     <body>
@@ -219,6 +267,44 @@ const generatePrintHTML = (
     }
   }
 
+  // Appendix: AI payloads (storyboard prompts + graybox) per block. Only
+  // emitted when the caller asked for either payload. Renders after the script
+  // body on its own page-break so the screenplay layout is undisturbed.
+  const wantPrompt = options.includeImagePrompts;
+  const wantGraybox = options.includeGraybox;
+  if (wantPrompt || wantGraybox) {
+    const entries: string[] = [];
+    blocks.forEach((block, i) => {
+      const hasP = wantPrompt && block.imagePrompt?.trim();
+      const hasG = wantGraybox && block.graybox;
+      if (!hasP && !hasG) return;
+      const anchorParts = [`Block ${i + 1}`, block.type];
+      if (options.includeBlockIds) anchorParts.push(block.id);
+      const anchor = escapeHtml(anchorParts.join(' · '));
+      let entry = `<div class="appendix-entry"><div class="anchor">${anchor}</div>`;
+      if (hasP) {
+        entry += `<div class="label">Storyboard prompt</div>`;
+        entry += `<pre>${escapeHtml(block.imagePrompt!.trim())}</pre>`;
+      }
+      if (hasG) {
+        const g = block.graybox!;
+        if (options.grayboxFormat === 'summary') {
+          entry += `<div class="label">Graybox</div><div class="summary">${escapeHtml(summarizeGraybox(g))}</div>`;
+        } else {
+          entry += `<div class="label">Graybox (JSON)</div>`;
+          entry += `<pre>${escapeHtml(JSON.stringify(g, null, 2))}</pre>`;
+        }
+      }
+      entry += `</div>`;
+      entries.push(entry);
+    });
+    if (entries.length) {
+      html += `<div class="appendix"><h2>Appendix — AI Payloads</h2>`;
+      html += entries.join('\n');
+      html += `</div>`;
+    }
+  }
+
   html += `
     </body>
     </html>
@@ -259,6 +345,6 @@ export const createPrintContainer = (
 ): HTMLElement => {
   const monoFont = getMonoFont(metadata.scriptLanguage);
   const container = document.createElement('div');
-  container.innerHTML = generatePrintHTML(metadata, blocks, monoFont, titlePage, colors);
+  container.innerHTML = generatePrintHTML(metadata, blocks, monoFont, titlePage, { colors });
   return container;
 };

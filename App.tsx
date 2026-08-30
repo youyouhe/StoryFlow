@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode } from './types';
+import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS } from './constants';
 import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition } from './services/geminiService';
+import { Graybox3DView } from './components/Graybox3DView';
+import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
-import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye } from 'lucide-react';
+import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
+import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
 
 // Helper to generate IDs
@@ -122,12 +125,32 @@ function App() {
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
-  const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null });
+  const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [aiMode, setAIMode] = useState<AIMode>('CONTINUE');
   const [isReadOnly, setIsReadOnly] = useState(false);
+  // Editable draft of the AI-suggested transition scene heading, so the user
+  // can tweak it before accepting a transition in the CONTINUE two-step flow.
+  const [transitionHeadingDraft, setTransitionHeadingDraft] = useState('');
+  // Storyboard prompt side-panel: when a block's prompt chip is clicked, its
+  // full content is shown in a right-side drawer instead of expanding inline
+  // (which ate editor space). Holds the block id whose prompt is open, or null.
+  const [promptPanelBlockId, setPromptPanelBlockId] = useState<string | null>(null);
+  // Which payload the side panel shows when a block holds both an imagePrompt
+  // and a graybox. The opener handlers set this so the panel opens on the
+  // payload whose chip was clicked.
+  const [panelTab, setPanelTab] = useState<'prompt' | 'graybox' | 'graybox3d'>('prompt');
+  const openImagePromptPanel = useCallback((id: string) => {
+    setPanelTab('prompt');
+    setPromptPanelBlockId(id);
+  }, []);
+  const openGrayboxPanel = useCallback((id: string) => {
+    setPanelTab('graybox3d');
+    setPromptPanelBlockId(id);
+  }, []);
   
   // States for title editing
   const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
@@ -213,6 +236,52 @@ function App() {
     setScreenplay(prev => ({
       ...prev,
       blocks: prev.blocks.map(b => b.id === id ? { ...b, type } : b)
+    }));
+  }, [isReadOnly]);
+
+  // Delete a block's storyboard image prompt. For CHARACTER blocks, the same
+  // character may appear in multiple blocks sharing one prompt — deleting on
+  // one occurrence clears the prompt from ALL same-name CHARACTER blocks, so
+  // "one prompt per character" stays consistent (mirrors the save propagation).
+  const handleDeleteImagePrompt = useCallback((id: string) => {
+    if (isReadOnly) return;
+    setScreenplay(prev => {
+      const target = prev.blocks.find(b => b.id === id);
+      const isCharacter = target?.type === 'CHARACTER';
+      const charName = isCharacter ? target!.content.trim() : '';
+      return {
+        ...prev,
+        blocks: prev.blocks.map(b => {
+          if (b.id === id) {
+            const { imagePrompt, ...rest } = b;
+            return imagePrompt ? rest : b;
+          }
+          if (isCharacter && b.type === 'CHARACTER' && b.content.trim() === charName && b.imagePrompt) {
+            const { imagePrompt, ...rest } = b;
+            return rest;
+          }
+          return b;
+        }),
+        lastModified: Date.now()
+      };
+    });
+  }, [isReadOnly]);
+
+  // Delete the graybox payload from a single block. Unlike image prompts there
+  // is no same-name CHARACTER propagation — graybox is per-block (a scene
+  // heading owns the layout; each action/dialogue owns its own camera).
+  const handleDeleteGraybox = useCallback((id: string) => {
+    if (isReadOnly) return;
+    setScreenplay(prev => ({
+      ...prev,
+      blocks: prev.blocks.map(b => {
+        if (b.id === id) {
+          const { graybox, ...rest } = b;
+          return graybox ? rest : b;
+        }
+        return b;
+      }),
+      lastModified: Date.now()
     }));
   }, [isReadOnly]);
 
@@ -339,21 +408,42 @@ function App() {
       setShowSettingsModal(false);
   };
 
-  const handleExportPDF = useCallback(async () => {
+  // Unified export dispatcher. The ExportMenu picks a format + options; this
+  // routes to the right backend (print pipeline for PDF, Blob download for
+  // Markdown/JSON). AI payloads (imagePrompt / graybox) are bundled per the
+  // chosen options so the user can grab the whole set at once instead of
+  // copying block-by-block.
+  const handleExport = useCallback(async (format: ExportFormat, options: ExportOptions) => {
       try {
-          const filename = `${screenplay.metadata.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-          await exportToPDF(screenplay.metadata, screenplay.blocks, {
-              filename,
-              titlePage: true,
-              colors: appSettings.colorSettings
-          });
+          if (format === 'pdf') {
+              const filename = `${screenplay.metadata.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+              await exportToPDF(screenplay.metadata, screenplay.blocks, {
+                  filename,
+                  titlePage: true,
+                  colors: appSettings.colorSettings,
+                  includeImagePrompts: options.includeImagePrompts,
+                  includeGraybox: options.includeGraybox,
+                  grayboxFormat: options.grayboxFormat,
+                  includeBlockIds: options.includeBlockIds,
+              });
+              return;
+          }
+          // Markdown / JSON share the same option set; grayboxFormat is only
+          // meaningful for Markdown (JSON is always lossless raw), but passing
+          // it through is harmless.
+          const sp: Screenplay = { ...screenplay, metadata: { ...screenplay.metadata } };
+          if (format === 'markdown') {
+              exportMarkdown(sp, options);
+          } else {
+              exportJSON(sp, options);
+          }
       } catch (error) {
-          console.error('PDF export failed:', error);
-          // Surface the error without reloading the page \u2014 autosave may not have
-          // captured the very latest edits, and a reload would discard them.
+          console.error('Export failed:', error);
+          // Surface the error without reloading the page \u2014 autosave may not
+          // have captured the very latest edits, and a reload would discard them.
           window.alert(t.pdfExportError);
       }
-  }, [screenplay.metadata, screenplay.blocks, appSettings.colorSettings, t]);
+  }, [screenplay, appSettings.colorSettings, t]);
 
   const getNextType = (currentType: BlockType): BlockType => {
     switch (currentType) {
@@ -403,15 +493,15 @@ function App() {
     const effectiveMode = modeOverride || aiMode;
 
     if (appSettings.provider === 'gemini' && !appSettings.geminiApiKey && !process.env.API_KEY) {
-        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing }));
+        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing, grayboxDraft: null, batchProgress: null }));
         return;
     }
     if (appSettings.provider === 'deepseek' && !appSettings.deepseekApiKey) {
-        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing }));
+        setAIState(prev => ({ ...prev, error: t.aiErrorKeyMissing, grayboxDraft: null, batchProgress: null }));
         return;
     }
 
-    setAIState({ isLoading: true, suggestion: null, error: null });
+    setAIState({ isLoading: true, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
 
     const currentTemplateId = screenplay.metadata.templateId || 'standard';
     const activeTemplate = TEMPLATES.find(t => t.id === currentTemplateId) || TEMPLATES[0];
@@ -421,7 +511,18 @@ function App() {
     try {
       let result = '';
       if (effectiveMode === 'CONTINUE') {
-        result = await generateContinuation(screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId);
+        // Lyrics has no scene concept — skip the transition-decision step and
+        // continue directly, preserving the original one-shot behavior.
+        if (currentTemplateId === 'lyrics') {
+          result = await generateContinuation(screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId);
+          setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+        } else {
+          // Two-step CONTINUE: first judge whether to stay or transition.
+          const decision = await decideSceneTransition(screenplay.blocks, systemInstruction, scriptLanguage, appSettings);
+          setTransitionHeadingDraft(decision.sceneHeading || '');
+          setAIState({ isLoading: false, suggestion: null, error: null, decision, grayboxDraft: null, batchProgress: null });
+          return;
+        }
       } else if (effectiveMode === 'IDEAS') {
         const ideas = await suggestIdeas(screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId);
         result = ideas.join('\n\n');
@@ -435,7 +536,7 @@ function App() {
       } else if (effectiveMode === 'STORYBOARD') {
         const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
         if (!currentBlock || (currentBlock.type !== 'ACTION' && currentBlock.type !== 'CHARACTER')) {
-            setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock });
+            setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock, decision: null, grayboxDraft: null, batchProgress: null });
             return;
         }
         // Slice the current scene: from the nearest preceding SCENE_HEADING
@@ -449,15 +550,203 @@ function App() {
         const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
         const kind = currentBlock.type === 'CHARACTER' ? 'character' : 'action';
         result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind);
+      } else if (effectiveMode === 'GRAYBOX') {
+        // Graybox: structured 3D previs JSON (scene layout or shot camera).
+        // Mirrors the STORYBOARD scene-slice, but emits a GrayboxData object
+        // stored in `grayboxDraft` (never `suggestion`).
+        const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
+        if (!currentBlock || (currentBlock.type !== 'SCENE_HEADING' && currentBlock.type !== 'ACTION' && currentBlock.type !== 'DIALOGUE')) {
+            setAIState({ isLoading: false, suggestion: null, error: t.grayboxWrongBlock, decision: null, grayboxDraft: null, batchProgress: null });
+            return;
+        }
+        const targetIdx = screenplay.blocks.findIndex(b => b.id === selectedBlockId);
+        let sceneStart = 0;
+        for (let i = targetIdx; i >= 0; i--) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
+        }
+        const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
+
+        // --- Cascading batch: Alt+G on a SCENE_HEADING ---
+        // Generate the scene graybox first; then, if the scene heading lacks a
+        // graybox or just got one, walk forward through every ACTION/DIALOGUE
+        // in this scene (up to the next SCENE_HEADING) and generate a shot
+        // graybox for each that doesn't already have one. Each result is
+        // written straight back to its block (real-time) so progress is
+        // durable even if the run is interrupted. Single-block Alt+G on an
+        // ACTION/DIALOGUE still works (no cascade). Directional guidance only:
+        // we don't prescribe shot choices here; the prompt carries that.
+        if (currentBlock.type === 'SCENE_HEADING') {
+          // --- Direction 1: same-heading scene graybox reuse ---
+          // A screenplay often repeats a scene heading ("INT. 宫廷寝殿 - 日")
+          // across CUT TO beats to denote time jumps within the same room.
+          // Regenerating the layout each time yields inconsistent geometry, and
+          // shot coords then stop lining up with any single layout. So before
+          // generating, look BACKWARD for an earlier SCENE_HEADING with the
+          // same content that already has a scene graybox; if found, reuse it
+          // verbatim (no AI call). Only the first sighting of a space designs
+          // it; every later revisit inherits that layout. The model still has
+          // full design freedom the first time — we only enforce consistency,
+          // not style.
+          let sceneGraybox: GrayboxData;
+          if (currentBlock.graybox) {
+            sceneGraybox = currentBlock.graybox;
+          } else {
+            let reuse: GrayboxData | null = null;
+            for (let i = 0; i < sceneStart; i++) {
+              const b = screenplay.blocks[i];
+              if (b.type === 'SCENE_HEADING' && b.content === currentBlock.content && b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
+                reuse = b.graybox;
+                break;
+              }
+            }
+            if (reuse) {
+              sceneGraybox = reuse;
+            } else {
+              sceneGraybox = await generateGraybox(sceneBlocks, selectedBlockId, systemInstruction, appSettings, 'scene');
+            }
+            // Persist immediately so a later failure doesn't lose it.
+            if (!sceneGraybox.error) {
+              setScreenplay(prev => ({
+                ...prev,
+                blocks: prev.blocks.map(b => b.id === selectedBlockId ? { ...b, graybox: sceneGraybox } : b),
+                lastModified: Date.now(),
+              }));
+            }
+          }
+
+          // 2. Collect shot blocks in this scene lacking a graybox.
+          //    Read from the latest screenplay (scene graybox may have just
+          //    been written) by snapshotting via a functional update check.
+          //    We gather indices, not stale block refs.
+          const shotIndices: number[] = [];
+          for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
+            const b = screenplay.blocks[i];
+            if (b.type === 'SCENE_HEADING') break; // next scene
+            if ((b.type === 'ACTION' || b.type === 'DIALOGUE') && !b.graybox) {
+              shotIndices.push(i);
+            }
+          }
+
+          if (sceneGraybox.error && shotIndices.length === 0) {
+            // Nothing to cascade and scene graybox failed — surface it.
+            setAIState({ isLoading: false, suggestion: null, error: sceneGraybox.error, decision: null, grayboxDraft: sceneGraybox, batchProgress: null });
+            return;
+          }
+
+          // 3. Run shot generation sequentially, writing each back live.
+          //    --- Directions A+B: feed the scene layout + the shots already
+          //    generated earlier in THIS scene back into each call, so the
+          //    cinematographer (a) places the camera against the real layout
+          //    and (b) can see the rhythm built so far and vary it. We collect
+          //    priorShots live as each succeeds (including any that pre-existed
+          //    on earlier beats in this scene before the cascade started).
+          const priorShots: GrayboxData[] = [];
+          // Seed with shot grayboxes already present on beats before the first
+          // missing one, so the rhythm reflects the whole scene, not just what
+          // this run produces.
+          for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
+            const b = screenplay.blocks[i];
+            if (b.type === 'SCENE_HEADING') break;
+            if ((b.type === 'ACTION' || b.type === 'DIALOGUE') && b.graybox && b.graybox.kind === 'shot' && !b.graybox.error) {
+              priorShots.push(b.graybox);
+            }
+          }
+          const sceneLayoutForShots = (!sceneGraybox.error && sceneGraybox.kind === 'scene') ? sceneGraybox : null;
+
+          const total = shotIndices.length;
+          let failures = 0;
+          let firstError: string | null = null;
+          let lastShotGraybox: GrayboxData | null = null;
+          for (let s = 0; s < total; s++) {
+            const blockIdx = shotIndices[s];
+            const block = screenplay.blocks[blockIdx];
+            setAIState({ isLoading: true, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: { current: s + 1, total } });
+            try {
+              // Slice this shot's scene context up to and including its block.
+              const shotSceneBlocks = screenplay.blocks.slice(sceneStart, blockIdx + 1);
+              const shotGraybox = await generateGraybox(
+                shotSceneBlocks, block.id, systemInstruction, appSettings, 'shot',
+                { sceneLayout: sceneLayoutForShots, priorShots: [...priorShots] },
+              );
+              if (shotGraybox.error) {
+                failures++;
+                if (!firstError) firstError = shotGraybox.error;
+                console.warn(`Graybox for block ${block.id} degraded:`, shotGraybox.error);
+              } else {
+                setScreenplay(prev => ({
+                  ...prev,
+                  blocks: prev.blocks.map(b => b.id === block.id ? { ...b, graybox: shotGraybox } : b),
+                  lastModified: Date.now(),
+                }));
+                priorShots.push(shotGraybox);   // feed the next beat
+                lastShotGraybox = shotGraybox;
+              }
+            } catch (err: any) {
+              failures++;
+              if (!firstError) firstError = err?.message || t.aiErrorGeneric;
+              console.warn(`Graybox for block ${block.id} failed:`, err);
+            }
+          }
+
+          // 4. Done. Show the scene graybox (or last shot) as the modal draft,
+          //    and report partial failures if any. If everything succeeded
+          //    silently, close-style "done" state: we keep the scene draft
+          //    visible so the user can review/accept.
+          const doneDraft = sceneGraybox.error ? (lastShotGraybox ?? sceneGraybox) : sceneGraybox;
+          const doneError = firstError && failures === total
+            ? (firstError || t.aiErrorGeneric)
+            : (firstError ? t.grayboxBatchPartial.replace('{failed}', String(failures)).replace('{total}', String(total)) : null);
+          setAIState({
+            isLoading: false,
+            suggestion: JSON.stringify(doneDraft, null, 2),
+            error: doneError,
+            decision: null,
+            grayboxDraft: doneDraft,
+            batchProgress: null,
+          });
+          return;
+        }
+
+        // --- Single-block shot graybox (ACTION/DIALOGUE) ---
+        // Direction A+B also applies here: a standalone Alt+G on one beat should
+        // still see the scene it lives in (so the camera lands on real layout
+        // coordinates) and any shots already designed for earlier beats in the
+        // same scene (so it joins an existing rhythm instead of ignoring it).
+        // Look up the scene graybox on the sceneStart heading, and gather prior
+        // shot grayboxes on beats between sceneStart+1 and targetIdx.
+        const sceneHeadingBlock = screenplay.blocks[sceneStart];
+        const sceneLayoutForSingle = sceneHeadingBlock?.graybox && sceneHeadingBlock.graybox.kind === 'scene' && !sceneHeadingBlock.graybox.error
+          ? sceneHeadingBlock.graybox : null;
+        const priorShotsSingle: GrayboxData[] = [];
+        for (let i = sceneStart + 1; i < targetIdx; i++) {
+          const b = screenplay.blocks[i];
+          if (b.type === 'SCENE_HEADING') break;
+          if ((b.type === 'ACTION' || b.type === 'DIALOGUE') && b.graybox && b.graybox.kind === 'shot' && !b.graybox.error) {
+            priorShotsSingle.push(b.graybox);
+          }
+        }
+        const kind: 'scene' | 'shot' = 'shot';
+        const graybox = await generateGraybox(
+          sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind,
+          { sceneLayout: sceneLayoutForSingle, priorShots: priorShotsSingle },
+        );
+        // Surface a degrade error in the error field; otherwise show the JSON
+        // in the suggestion box and hold the object for saving.
+        if (graybox.error) {
+          setAIState({ isLoading: false, suggestion: null, error: graybox.error, decision: null, grayboxDraft: graybox, batchProgress: null });
+        } else {
+          setAIState({ isLoading: false, suggestion: JSON.stringify(graybox, null, 2), error: null, decision: null, grayboxDraft: graybox, batchProgress: null });
+        }
+        return;
       }
-      setAIState({ isLoading: false, suggestion: result, error: null });
+      setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {
       const msg = err?.message || '';
       // Map known sentinel errors from the service layer to localized messages
       const friendly = msg === 'GEMINI_KEY_MISSING' || msg === 'DEEPSEEK_KEY_MISSING'
         ? t.aiErrorKeyMissing
         : (err?.message || t.aiErrorGeneric);
-      setAIState({ isLoading: false, suggestion: null, error: friendly });
+      setAIState({ isLoading: false, suggestion: null, error: friendly, decision: null, grayboxDraft: null, batchProgress: null });
     }
   }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t]);
 
@@ -495,6 +784,19 @@ function App() {
                 setAIMode('STORYBOARD');
                 setShowAIModal(true);
                 executeAI('STORYBOARD');
+                return;
+            }
+        }
+        if (checkShortcut(e, appSettings.shortcuts.aiGraybox)) {
+            // Trigger on SCENE_HEADING (layout + blocking), ACTION, or DIALOGUE
+            // (camera/运镜). CHARACTER is excluded — it owns the image-prompt
+            // design sheet, graybox is about space + camera.
+            const currentBlock = screenplay.blocks.find(b => b.id === id);
+            if (currentBlock?.type === 'SCENE_HEADING' || currentBlock?.type === 'ACTION' || currentBlock?.type === 'DIALOGUE') {
+                e.preventDefault();
+                setAIMode('GRAYBOX');
+                setShowAIModal(true);
+                executeAI('GRAYBOX');
                 return;
             }
         }
@@ -581,10 +883,54 @@ function App() {
   const handleAIAction = async () => {
     if (isReadOnly) return;
     setShowAIModal(true);
-    setAIState({ isLoading: false, suggestion: null, error: null });
+    setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   };
 
+  /**
+   * Second step of the CONTINUE flow: actually generate the continuation,
+   * constrained by the user's confirmed transition directive.
+   *   - allowTransition=false  → stay in the current scene (no new [SCENE])
+   *   - allowTransition=true   → open a new scene with the (edited) heading
+   * Called from the decision card's "Continue current scene" / "Accept transition"
+   * buttons. Undefined directive (lyrics / fallback) preserves the original one-shot.
+   */
+  const runContinuation = useCallback(async (directive?: { allowTransition: boolean; targetSceneHeading?: string }) => {
+    const currentTemplateId = screenplay.metadata.templateId || 'standard';
+    const activeTemplate = TEMPLATES.find(t => t.id === currentTemplateId) || TEMPLATES[0];
+    const systemInstruction = activeTemplate.systemPrompt;
+    const scriptLanguage = screenplay.metadata.scriptLanguage || 'en';
+
+    setAIState({ isLoading: true, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+    try {
+      const result = await generateContinuation(
+        screenplay.blocks, systemInstruction, scriptLanguage, appSettings, currentTemplateId, directive
+      );
+      setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const friendly = msg === 'GEMINI_KEY_MISSING' || msg === 'DEEPSEEK_KEY_MISSING'
+        ? t.aiErrorKeyMissing
+        : (err?.message || t.aiErrorGeneric);
+      setAIState({ isLoading: false, suggestion: null, error: friendly, decision: null, grayboxDraft: null, batchProgress: null });
+    }
+  }, [screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, appSettings, t]);
+
   const acceptAISuggestion = useCallback(() => {
+      // GRAYBOX saves the structured draft onto the selected block (no body edit).
+      // Guarded separately from `suggestion` since GRAYBOX never sets it.
+      if (aiMode === 'GRAYBOX') {
+          const graybox = aiState.grayboxDraft;
+          if (!graybox) return;
+          setScreenplay(prev => ({
+              ...prev,
+              blocks: prev.blocks.map(b => b.id === selectedBlockId ? { ...b, graybox } : b),
+              lastModified: Date.now()
+          }));
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+      }
+
       if (!aiState.suggestion) return;
 
       // IDEAS mode returns creative directions for reference, not script content.
@@ -592,7 +938,7 @@ function App() {
       if (aiMode === 'IDEAS') {
           navigator.clipboard?.writeText(aiState.suggestion).catch(() => {});
           setShowAIModal(false);
-          setAIState({ isLoading: false, suggestion: null, error: null });
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;
       }
 
@@ -601,7 +947,7 @@ function App() {
            const content = aiState.suggestion.replace(/^\[.*?\]\s*/, '');
            handleBlockChange(selectedBlockId, content);
            setShowAIModal(false);
-           setAIState({ isLoading: false, suggestion: null, error: null }); // Clear suggestion to prevent re-insertion
+           setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null }); // Clear suggestion to prevent re-insertion
            return;
       }
 
@@ -629,7 +975,7 @@ function App() {
               lastModified: Date.now()
           }));
           setShowAIModal(false);
-          setAIState({ isLoading: false, suggestion: null, error: null });
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;
       }
 
@@ -674,15 +1020,21 @@ function App() {
       }
 
       setShowAIModal(false);
-      setAIState({ isLoading: false, suggestion: null, error: null }); // Clear suggestion to prevent re-insertion
-  }, [aiState.suggestion, aiMode, selectedBlockId, handleBlockChange]);
+      setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null }); // Clear suggestion to prevent re-insertion
+  }, [aiState.suggestion, aiState.grayboxDraft, aiMode, selectedBlockId, handleBlockChange]);
 
-  // Auto-accept AI suggestions when enabled
+  // Auto-accept AI suggestions when enabled.
+  // Gated on !aiState.decision: the CONTINUE judgment step produces a decision
+  // (not a suggestion), so it must NOT trigger auto-insert — only the actual
+  // continuation suggestion (decision already consumed) should auto-accept.
+  // GRAYBOX also auto-saves its draft when enabled.
   useEffect(() => {
-      if (appSettings.autoAcceptAI && aiState.suggestion && !aiState.isLoading) {
-          acceptAISuggestion();
+      if (appSettings.autoAcceptAI && !aiState.isLoading && !aiState.decision) {
+          if (aiState.suggestion || aiState.grayboxDraft) {
+              acceptAISuggestion();
+          }
       }
-  }, [aiState.suggestion, aiState.isLoading, appSettings.autoAcceptAI, acceptAISuggestion]);
+  }, [aiState.suggestion, aiState.grayboxDraft, aiState.isLoading, aiState.decision, appSettings.autoAcceptAI, acceptAISuggestion]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-desk dark:bg-desk-dark text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">
@@ -712,7 +1064,7 @@ function App() {
             onDeleteScript={handleDeleteScript}
             onRenameScript={handleRenameScript}
             currentScriptId={screenplay.id}
-            onExportPDF={handleExportPDF}
+            onExport={() => setShowExportMenu(true)}
         />
       </div>
 
@@ -825,7 +1177,13 @@ function App() {
                                 customColor={appSettings.colorSettings[block.type]}
                                 theme={theme}
                                 imagePromptLabel={t.storyboardPromptLabel}
-                                imagePromptCopyLabel={t.aiCopyPrompt}
+                                imagePromptOpenLabel={t.imagePromptOpen}
+                                onOpenImagePrompt={openImagePromptPanel}
+                                isImagePromptPanelOpen={promptPanelBlockId === block.id}
+                                grayboxLabel={t.grayboxLabel}
+                                grayboxOpenLabel={t.grayboxOpen}
+                                onOpenGraybox={openGrayboxPanel}
+                                isGrayboxPanelOpen={promptPanelBlockId === block.id}
                             />
                         </div>
                     ))}
@@ -833,6 +1191,135 @@ function App() {
                  {pageIndex === pages.length - 1 && <div className="h-48" />}
              </div>
           ))}
+
+          {/* Storyboard prompt / Graybox side-panel.
+              Instead of expanding the prompt inline (which consumed editor
+              vertical space), clicking a block's prompt/graybox chip opens
+              this right-side drawer. A block may hold BOTH an imagePrompt and a
+              graybox (e.g. an ACTION with a storyboard + a camera shot) — in
+              that case a tiny segmented toggle switches the payload shown. */}
+          {(() => {
+            const panelBlock = promptPanelBlockId
+              ? screenplay.blocks.find(b => b.id === promptPanelBlockId)
+              : null;
+            if (!panelBlock) return null;
+            const hasPrompt = !!panelBlock.imagePrompt?.trim();
+            const hasGraybox = !!panelBlock.graybox;
+            if (!hasPrompt && !hasGraybox) return null;
+
+            // When both exist, the chip that opened the panel decides the
+            // initial view; the segmented control below lets the user switch.
+            // graybox3d = the Three.js previs; graybox = the raw JSON view.
+            const showingGrayboxJSON = hasGraybox && panelTab === 'graybox';
+            const showing3D = hasGraybox && panelTab === 'graybox3d';
+            const showingGraybox = showingGrayboxJSON || showing3D;
+            const activeGrayboxView: 'graybox3d' | 'graybox' = showing3D ? 'graybox3d' : 'graybox';
+
+            const copyText = showingGraybox
+              ? JSON.stringify(panelBlock.graybox, null, 2)
+              : (panelBlock.imagePrompt || '');
+
+            return (
+              <div className="fixed top-0 right-0 h-full w-full max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l border-gray-200 dark:border-zinc-800 flex flex-col animate-in slide-in-from-right duration-200">
+                <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                  <div className={`flex items-center gap-2 font-bold text-sm ${showingGraybox ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                    {showingGraybox ? <Boxes className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
+                    <span>{showingGraybox ? t.grayboxLabel : t.storyboardPromptLabel}</span>
+                  </div>
+                  <button
+                    onClick={() => { setPromptPanelBlockId(null); setPanelTab('prompt'); }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* When multiple payloads exist, offer a switcher. Graybox
+                    contributes two sub-tabs: 3D previs (graybox3d) and raw
+                    JSON (graybox). Build the tab list dynamically so only
+                    existing payloads appear. */}
+                {(hasPrompt && hasGraybox || hasGraybox) && hasGraybox && (() => {
+                  const tabs = (['prompt', 'graybox3d', 'graybox'] as const).filter(tab =>
+                    tab === 'prompt' ? hasPrompt : hasGraybox
+                  );
+                  return (
+                    <div className="px-4 pt-3 flex gap-1 flex-wrap">
+                      {tabs.map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setPanelTab(tab)}
+                          className={clsx(
+                            "px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border transition-colors",
+                            panelTab === tab
+                              ? (tab === 'graybox3d'
+                                  ? "bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500"
+                                  : tab === 'graybox'
+                                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                                    : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800")
+                              : "bg-transparent text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          {tab === 'graybox3d' ? (t.graybox3dLabel || '3D') : tab === 'graybox' ? t.grayboxLabel : t.storyboardPromptLabel}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <div className="px-4 py-2 text-[11px] font-mono text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-zinc-800 truncate">
+                  {panelBlock.type} · {panelBlock.content.slice(0, 40) || '(empty)'}
+                </div>
+                {showing3D && hasGraybox && panelBlock.graybox && (
+                  <div className="px-4 pt-2 pb-1">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-snug">
+                      {t.graybox3dHint || 'Interactive 3D previs. Drag to orbit.'}
+                    </p>
+                  </div>
+                )}
+                {showing3D && hasGraybox && panelBlock.graybox ? (
+                  <div className="flex-1 min-h-0 p-2">
+                    <Graybox3DView graybox={panelBlock.graybox} theme={theme} />
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto p-4">
+                    <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
+                      {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : panelBlock.imagePrompt}
+                    </pre>
+                  </div>
+                )}
+                <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(copyText).catch(() => {});
+                    }}
+                    className="flex-1 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Cloud className="w-3.5 h-3.5" />
+                    {showingGraybox ? t.grayboxCopy : t.aiCopyPrompt}
+                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => {
+                        // delete whichever payload is currently active
+                        if (showingGraybox) handleDeleteGraybox(panelBlock.id);
+                        else handleDeleteImagePrompt(panelBlock.id);
+                        // If the other payload still exists, keep the panel open
+                        // on it; otherwise close. When leaving graybox for a
+                        // still-present prompt, reset to prompt tab.
+                        if (showingGraybox && hasPrompt) setPanelTab('prompt');
+                        else if (!showingGraybox && hasGraybox) setPanelTab('graybox3d');
+                        else { setPromptPanelBlockId(null); setPanelTab('prompt'); }
+                      }}
+                      className="flex-1 py-2 text-xs font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {t.aiDeletePrompt}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <Toolbar 
@@ -861,10 +1348,10 @@ function App() {
                     
                     <div className="p-6 space-y-6">
                         <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
-                            {(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD'] as const).map(m => (
+                            {(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX'] as const).map(m => (
                                 <button
                                     key={m}
-                                    onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null})}}
+                                    onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}}
                                     className={clsx(
                                         "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
                                         aiMode === m
@@ -876,11 +1363,34 @@ function App() {
                                     {m === 'IDEAS' && t.modes.ideas}
                                     {m === 'REWRITE' && t.modes.rewrite}
                                     {m === 'STORYBOARD' && t.modes.storyboard}
+                                    {m === 'GRAYBOX' && t.modes.graybox}
                                 </button>
                             ))}
                         </div>
 
-                        {!aiState.suggestion && (
+                        {aiState.batchProgress && (
+                            <div className="text-center py-6 space-y-3">
+                                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 dark:text-emerald-400">
+                                    <Boxes className="w-8 h-8 animate-pulse" />
+                                </div>
+                                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    {t.grayboxBatchProgress
+                                        .replace('{current}', String(aiState.batchProgress.current))
+                                        .replace('{total}', String(aiState.batchProgress.total))}
+                                </p>
+                                <div className="w-full h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden mx-auto max-w-[80%]">
+                                    <div
+                                        className="h-full bg-emerald-500 transition-all duration-300"
+                                        style={{ width: `${(aiState.batchProgress.current / Math.max(aiState.batchProgress.total, 1)) * 100}%` }}
+                                    />
+                                </div>
+                                <p className="text-[11px] text-gray-400 dark:text-gray-500 px-4">
+                                    {t.graybox3dHint}
+                                </p>
+                            </div>
+                        )}
+
+                        {!aiState.suggestion && !aiState.decision && !aiState.grayboxDraft && !aiState.batchProgress && (
                              <div className="text-center py-6">
                                 <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-500 dark:text-indigo-400">
                                     <Bot className="w-8 h-8" />
@@ -890,16 +1400,84 @@ function App() {
                                     {aiMode === 'IDEAS' && t.prompts.ideas}
                                     {aiMode === 'REWRITE' && t.prompts.rewrite}
                                     {aiMode === 'STORYBOARD' && t.prompts.storyboard}
+                                    {aiMode === 'GRAYBOX' && t.prompts.graybox}
                                 </p>
+                                {aiMode === 'GRAYBOX' && (
+                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-6 px-4 leading-relaxed">
+                                        {t.grayboxBatchSceneHint}
+                                    </p>
+                                )}
                                 <button
                                     onClick={() => executeAI()}
                                     disabled={aiState.isLoading}
                                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w-4 h-4" />}
-                                    {aiState.isLoading ? t.aiGenerating : t.aiGenerate}
+                                    {aiState.isLoading
+                                      ? (aiMode === 'CONTINUE' ? t.transitionAssessing : t.aiGenerating)
+                                      : (aiMode === 'CONTINUE' ? t.transitionContinueScene : t.aiGenerate)}
                                 </button>
                              </div>
+                        )}
+
+                        {/* CONTINUE two-step: transition decision card (shown after
+                            the judgment step, before the continuation is written). */}
+                        {aiMode === 'CONTINUE' && aiState.decision && !aiState.suggestion && (
+                            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">{t.transitionSuggests}</span>
+                                        <span className={clsx(
+                                            "text-[11px] font-bold px-2 py-0.5 rounded-full",
+                                            aiState.decision.action === 'transition'
+                                                ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                                                : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
+                                        )}>
+                                            {aiState.decision.action === 'transition' ? t.transitionReasonTransition : t.transitionReasonContinue}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{aiState.decision.reason}</p>
+                                    {aiState.decision.action === 'transition' && (
+                                        <div className="mt-3">
+                                            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                                {t.transitionSceneLabel}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={transitionHeadingDraft}
+                                                onChange={e => setTransitionHeadingDraft(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-mono dark:text-white"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}
+                                        className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                                    >
+                                        {t.aiDiscard}
+                                    </button>
+                                    {aiState.decision.action === 'transition' && (
+                                        <button
+                                            onClick={() => runContinuation({ allowTransition: true, targetSceneHeading: transitionHeadingDraft.trim() })}
+                                            disabled={aiState.isLoading || !transitionHeadingDraft.trim()}
+                                            className="flex-1 py-2.5 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-lg shadow-amber-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                        >
+                                            {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
+                                            {t.transitionAccept}
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => runContinuation({ allowTransition: false })}
+                                        disabled={aiState.isLoading}
+                                        className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
+                                        {t.transitionContinueScene}
+                                    </button>
+                                </div>
+                            </div>
                         )}
 
                         {aiState.error && (
@@ -916,30 +1494,34 @@ function App() {
                                 {aiMode === 'STORYBOARD' && (
                                     <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.storyboardHint}</p>
                                 )}
+                                {aiMode === 'GRAYBOX' && (
+                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.grayboxHint}</p>
+                                )}
                                 <div className="p-4 bg-gray-50 dark:bg-zinc-900/50 rounded-xl border border-gray-100 dark:border-zinc-800 text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto text-gray-800 dark:text-gray-300 shadow-inner">
                                     {aiState.suggestion}
                                 </div>
                                 <div className="flex gap-3">
                                     <button
-                                        onClick={() => setAIState({isLoading:false, suggestion: null, error: null})}
+                                        onClick={() => setAIState({isLoading:false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null})}
                                         className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
                                     >
                                         {t.aiDiscard}
                                     </button>
-                                    {aiMode === 'STORYBOARD' && (
+                                    {(aiMode === 'STORYBOARD' || aiMode === 'GRAYBOX') && (
                                         <button
                                             onClick={() => navigator.clipboard?.writeText(aiState.suggestion || '').catch(() => {})}
                                             className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors flex items-center justify-center gap-1.5"
                                         >
                                             <Cloud className="w-3.5 h-3.5" />
-                                            {t.aiCopyPrompt}
+                                            {aiMode === 'GRAYBOX' ? t.grayboxCopy : t.aiCopyPrompt}
                                         </button>
                                     )}
                                     <button
                                         onClick={acceptAISuggestion}
-                                        className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all"
+                                        disabled={aiMode === 'GRAYBOX' && !aiState.grayboxDraft}
+                                        className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
-                                        {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : t.aiInsert}
+                                        {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : aiMode === 'GRAYBOX' ? t.grayboxSave : t.aiInsert}
                                     </button>
                                 </div>
                             </div>
@@ -951,7 +1533,7 @@ function App() {
 
         {/* Settings Modal */}
         {showSettingsModal && (
-            <SettingsModal 
+            <SettingsModal
                 metadata={screenplay.metadata}
                 appSettings={appSettings}
                 onSave={handleUpdateSettings}
@@ -959,6 +1541,14 @@ function App() {
                 t={t}
             />
         )}
+
+        {/* Export Menu (format + payload options) */}
+        <ExportMenu
+            open={showExportMenu}
+            onClose={() => setShowExportMenu(false)}
+            onExport={handleExport}
+            t={t}
+        />
 
         {/* Templates Modal */}
         {showTemplateModal && (
