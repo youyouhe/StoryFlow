@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     return {
       server: {
-        port: 3000,
+        port: 5173,
         host: '0.0.0.0',
         strictPort: true,
       },

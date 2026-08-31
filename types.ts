@@ -56,6 +56,11 @@ export interface GrayboxCharacter {
  *  subject stays framed). */
 export interface GrayboxCamera {
   shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-the-shoulder' | 'top-down' | 'pov';
+  /** one short sentence on WHY this shot serves the beat — the director's
+   *  intent (e.g. "Crane up to reveal the seal cracking as the elders reel").
+   *  Carried through normalize and surfaced in the UI so the previs reads as
+   *  more than just coordinates. Optional; older payloads may lack it. */
+  shotDescription?: string;
   position: [number, number, number];     // [x, y, z]
   lookAt: [number, number, number];       // [x, y, z] — initial / default look target
   movement: {

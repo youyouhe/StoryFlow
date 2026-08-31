@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm install          # install dependencies
-npm run dev          # web dev server → http://localhost:3000 (strictPort)
+npm run dev          # web dev server → http://localhost:5173 (strictPort)
 npm run build        # production build (outputs to dist/)
 npm run preview      # preview the production build
 
@@ -79,7 +79,7 @@ Defined in `appSettings.shortcuts` (defaults in `constants.ts`). Editing keys (T
 
 ### Tauri Notes
 
-`src-tauri/tauri.conf.json` runs `npm run dev` (port 3000) in dev and `npm run build` for the desktop bundle. The CSP allows `connect-src` only to `self`, `api.deepseek.com`, and `generativelanguage.googleapis.com` — adding a new AI provider host requires updating this CSP.
+`src-tauri/tauri.conf.json` runs `npm run dev` (port 5173) in dev and `npm run build` for the desktop bundle. The CSP allows `connect-src` only to `self`, `api.deepseek.com`, and `generativelanguage.googleapis.com` — adding a new AI provider host requires updating this CSP.
 
 ## Adding a New Template
 

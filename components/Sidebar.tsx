@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ScriptBlock } from '../types';
 import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -13,6 +13,10 @@ interface ScriptSummary {
 interface SidebarProps {
   blocks: ScriptBlock[];
   onScrollToBlock: (id: string) => void;
+  /** id of the SCENE_HEADING block that owns the editor's currently selected
+   *  block, so the outline can highlight + auto-scroll to the scene being
+   *  edited. null when the selection is before the first scene heading. */
+  activeSceneId: string | null;
   metadata: any;
   isOpen: boolean;
   onToggle: () => void;
@@ -31,6 +35,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
     blocks,
     onScrollToBlock,
+    activeSceneId,
     metadata,
     isOpen,
     onToggle,
@@ -47,6 +52,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'outline' | 'history'>('outline');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+
+  // Keep the highlighted scene button in view: when the active scene changes
+  // (user moved the cursor / selected a block in another scene), scroll the
+  // outline's own scroll container so the active button stays visible. Mirrors
+  // the editor's scrollIntoView pattern but on the sidebar side.
+  const activeBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeBtnRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeSceneId]);
 
   const scenes = blocks.filter(b => b.type === 'SCENE_HEADING');
   const sortedScripts = [...savedScripts].sort((a, b) => b.lastModified - a.lastModified);
@@ -131,16 +145,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {t.startWriting}
                     </div>
                 )}
-                {scenes.map((scene, idx) => (
+                {scenes.map((scene, idx) => {
+                    const isActive = scene.id === activeSceneId;
+                    return (
                     <button
                     key={scene.id}
+                    ref={isActive ? activeBtnRef : null}
                     onClick={() => onScrollToBlock(scene.id)}
-                    className="w-full text-left px-3 py-2 text-xs text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-zinc-900 hover:shadow-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition-all rounded-md font-mono flex items-center group border border-transparent hover:border-gray-100 dark:hover:border-zinc-800"
+                    className={clsx(
+                      "w-full text-left px-3 py-2 text-xs transition-all rounded-md font-mono flex items-center group border",
+                      isActive
+                        ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 shadow-sm"
+                        : "text-gray-600 dark:text-gray-400 border-transparent hover:bg-white dark:hover:bg-zinc-900 hover:shadow-sm hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-gray-100 dark:hover:border-zinc-800"
+                    )}
                     >
-                    <span className="w-5 opacity-40 text-[10px]">{idx + 1}</span>
+                    <span className={clsx("w-5 text-[10px]", isActive ? "opacity-70" : "opacity-40")}>{idx + 1}</span>
                     <span className="truncate flex-1 font-medium">{scene.content || 'UNTITLED'}</span>
                     </button>
-                ))}
+                    );
+                })}
                 </div>
             </>
         )}

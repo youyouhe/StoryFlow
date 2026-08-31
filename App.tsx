@@ -602,7 +602,18 @@ function App() {
             if (reuse) {
               sceneGraybox = reuse;
             } else {
-              sceneGraybox = await generateGraybox(sceneBlocks, selectedBlockId, systemInstruction, appSettings, 'scene');
+              // The scene graybox must see the WHOLE scene, not just the
+              // heading: character blocking depends on who appears in the
+              // beats below. Alt+G on a heading means targetIdx === sceneStart,
+              // so `sceneBlocks` would carry the heading alone — no CHARACTER
+              // cues, no beats, nothing to block. Slice sceneStart → the next
+              // SCENE_HEADING (or EOF) instead.
+              let sceneEnd = screenplay.blocks.length;
+              for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
+                if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneEnd = i; break; }
+              }
+              const sceneFullBlocks = screenplay.blocks.slice(sceneStart, sceneEnd);
+              sceneGraybox = await generateGraybox(sceneFullBlocks, selectedBlockId, systemInstruction, appSettings, 'scene');
             }
             // Persist immediately so a later failure doesn't lose it.
             if (!sceneGraybox.error) {
@@ -880,6 +891,20 @@ function App() {
     }
   };
 
+  // Derive the scene (nearest preceding SCENE_HEADING) that owns the currently
+  // selected block, so the sidebar outline can highlight + auto-scroll to the
+  // scene the user is actually editing. Scan-back is the same pattern already
+  // inlined in executeAI (3 sites) — kept local here for clarity; extracting a
+  // shared helper would touch those sites too, out of scope for this fix.
+  const activeSceneId = useMemo(() => {
+    const idx = screenplay.blocks.findIndex(b => b.id === selectedBlockId);
+    if (idx < 0) return null;
+    for (let i = idx; i >= 0; i--) {
+      if (screenplay.blocks[i].type === 'SCENE_HEADING') return screenplay.blocks[i].id;
+    }
+    return null; // blocks before the first scene heading — nothing to highlight
+  }, [screenplay.blocks, selectedBlockId]);
+
   const handleAIAction = async () => {
     if (isReadOnly) return;
     setShowAIModal(true);
@@ -1050,9 +1075,10 @@ function App() {
           "fixed inset-y-0 left-0 z-30 transform transition-transform duration-300 md:relative md:translate-x-0 shadow-xl md:shadow-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <Sidebar 
-            blocks={screenplay.blocks} 
-            onScrollToBlock={scrollToBlock} 
+        <Sidebar
+            blocks={screenplay.blocks}
+            onScrollToBlock={scrollToBlock}
+            activeSceneId={activeSceneId}
             metadata={screenplay.metadata}
             isOpen={true} 
             onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -1277,9 +1303,39 @@ function App() {
                   </div>
                 )}
                 {showing3D && hasGraybox && panelBlock.graybox ? (
-                  <div className="flex-1 min-h-0 p-2">
-                    <Graybox3DView graybox={panelBlock.graybox} theme={theme} />
-                  </div>
+                  (() => {
+                    // Owning scene context for the 3D view: the nearest
+                    // SCENE_HEADING at/above the panel block. Its graybox
+                    // supplies the layout + character blocking that shot
+                    // views render (the white-model POV export needs real
+                    // geometry under the camera, not an empty grid); its text
+                    // and the block itself feed the Seedance/H3 prompt builder.
+                    const panelIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
+                    let panelSceneGraybox: GrayboxData | null = null;
+                    let panelSceneHeading = '';
+                    for (let i = panelIdx; i >= 0; i--) {
+                      const b = screenplay.blocks[i];
+                      if (b.type === 'SCENE_HEADING') {
+                        panelSceneHeading = b.content;
+                        if (b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
+                          panelSceneGraybox = b.graybox;
+                        }
+                        break;
+                      }
+                    }
+                    return (
+                      <div className="flex-1 min-h-0 p-2">
+                        <Graybox3DView
+                          graybox={panelBlock.graybox}
+                          theme={theme}
+                          uiLang={lang}
+                          sceneGraybox={panelSceneGraybox}
+                          beat={{ type: panelBlock.type, content: panelBlock.content }}
+                          sceneHeading={panelSceneHeading}
+                        />
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="flex-1 overflow-y-auto p-4">
                     <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
