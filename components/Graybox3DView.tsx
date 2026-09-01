@@ -3,7 +3,8 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Line, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera } from '../types';
-import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClipboard } from '../utils/whiteModelPrompt';
+import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClipboard, WHITE_MODEL_STYLE_TEMPLATES } from '../utils/whiteModelPrompt';
+import { checkGrayboxHealth, HealthReport } from '../utils/grayboxHealth';
 
 /**
  * Graybox3DView — renders a GrayboxData payload as an interactive 3D previs.
@@ -27,7 +28,7 @@ import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClip
 /** White-model export recording spec (Seedance/H3 reference-video input). */
 const EXPORT_W = 1920;
 const EXPORT_H = 1080;
-const EXPORT_FPS = 30;
+const EXPORT_FPS = 24;
 const EXPORT_BITRATE = 10_000_000;
 /** Fallback clip length for shots whose movement.duration is 0/missing. */
 const EXPORT_FALLBACK_SECONDS = 3;
@@ -55,6 +56,9 @@ interface Graybox3DViewProps {
   beat?: { type: string; content: string } | null;
   /** Owning scene heading text, for prompt environment context. */
   sceneHeading?: string;
+  /** shotTypes of every shot graybox in the owning scene — feeds the W001
+   *  shot-variety check in the health report. Optional. */
+  sceneShotTypes?: string[];
 }
 
 // ---- semantic default colors per layout role (used when obj.color omitted) ----
@@ -568,13 +572,18 @@ const ShotControls: React.FC<{
   exporting: boolean;
   hasSceneGeometry: boolean;
   exportSupported: boolean;
+  health: HealthReport | null;
+  healthOpen: boolean;
+  onToggleHealth: () => void;
   labels: {
     pov: string; orbit: string; exportBtn: string; recording: string;
     seedance: string; h3: string; noScene: string; unsupported: string;
+    health: string; healthOpen: string; healthPass: string;
+    healthWarn: string; healthFail: string; healthExportBlocked: string;
   };
 }> = ({ camera, playing, onTogglePlay, onReset, onSeek, progress,
         viewMode, onViewMode, onExport, onPrompt, exporting,
-        hasSceneGeometry, exportSupported, labels }) => {
+        hasSceneGeometry, exportSupported, health, healthOpen, onToggleHealth, labels }) => {
   const type = camera.movement?.type ?? 'static';
   const duration = camera.movement?.duration ?? 0;
   const isStatic = type === 'static';
@@ -594,6 +603,46 @@ const ShotControls: React.FC<{
         <p className="mb-1.5 text-[11px] leading-snug text-gray-600 dark:text-gray-300 italic line-clamp-2">
           “{shotDesc}”
         </p>
+      )}
+
+      {/* health check summary + collapsible checklist (auto-run upstream) */}
+      {health && (
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={onToggleHealth}
+            className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-[10px] font-semibold border border-gray-200 dark:border-zinc-700/70 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${
+              health.counts.fail > 0 ? 'bg-red-500' : health.counts.warn > 0 ? 'bg-amber-400' : 'bg-emerald-500'
+            }`} />
+            <span className="text-gray-600 dark:text-gray-300">
+              {labels.health}
+              {health.counts.fail > 0
+                ? ` · ${labels.healthFail}`
+                : health.counts.warn > 0
+                  ? ` · ${labels.healthWarn.replace('n', String(health.counts.warn))}`
+                  : ` · ${labels.healthPass}`}
+            </span>
+            <span className="ml-auto text-gray-400">{healthOpen ? '▾' : '▸'}</span>
+          </button>
+          {healthOpen && (
+            <ul className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
+              {health.items.map((item, i) => (
+                <li key={`${item.code}-${i}`} className="flex items-start gap-1.5 px-1.5 text-[10px] leading-snug">
+                  <span className="shrink-0">{item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '❌'}</span>
+                  <span className={item.status === 'fail'
+                    ? 'text-red-600 dark:text-red-400'
+                    : item.status === 'warn'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-gray-400 dark:text-gray-500'}>
+                    <span className="font-mono mr-1">{item.code}</span>{item.message}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* view-mode segmented toggle + white-model export actions */}
@@ -623,8 +672,12 @@ const ShotControls: React.FC<{
         <button
           type="button"
           onClick={onExport}
-          disabled={exporting || !exportSupported}
-          title={!exportSupported ? labels.unsupported : (hasSceneGeometry ? labels.exportBtn : labels.noScene)}
+          disabled={exporting || !exportSupported || (health ? !health.passed : false)}
+          title={!exportSupported
+            ? labels.unsupported
+            : health && !health.passed
+              ? labels.healthExportBlocked
+              : (hasSceneGeometry ? labels.exportBtn : labels.noScene)}
           className={`ml-auto px-2 py-1 rounded-md text-[10px] font-semibold transition-colors flex items-center gap-1 ${
             exporting
               ? 'bg-red-500 text-white animate-pulse'
@@ -715,6 +768,9 @@ const UI_LABELS = {
     promptTitle: 'White-model prompt', copy: 'Copy', copied: 'Copied ✓',
     copyFail: 'Copy failed — select the text and copy manually.', close: 'Close',
     povHint: 'Through-the-lens view — this is exactly what the white-model export records.',
+    health: 'Health check', healthOpen: 'Checks', healthPass: 'all clear', healthWarn: 'n warnings', healthFail: 'blocked',
+    healthExportBlocked: 'Export blocked — fix the failing checks (❌) first.',
+    style: 'Style',
   },
   zh: {
     pov: '镜头视角', orbit: '轨道视角', exportBtn: '导出白模视频', recording: '录制中…',
@@ -724,10 +780,13 @@ const UI_LABELS = {
     promptTitle: '白模提示词', copy: '复制', copied: '已复制 ✓',
     copyFail: '复制失败——请手动选择文本复制。', close: '关闭',
     povHint: '过镜视角（镜头所见画面）——白模导出录制的就是这个画面。',
+    health: '体检', healthOpen: '检查项', healthPass: '全部通过', healthWarn: 'n 项警告', healthFail: '已拦截',
+    healthExportBlocked: '导出已拦截——请先修复 ❌ 未通过项。',
+    style: '风格',
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, uiLang = 'en' }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, uiLang = 'en' }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -744,6 +803,10 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   const [exportScale, setExportScale] = useState(1);
   const [promptTarget, setPromptTarget] = useState<'seedance' | 'h3' | null>(null);
   const [copyResult, setCopyResult] = useState<'ok' | 'fail' | null>(null);
+  // prompt style preset (appendix B) — session state, defaults to realistic
+  const [styleId, setStyleId] = useState<string>(WHITE_MODEL_STYLE_TEMPLATES[0].id);
+  // health-check checklist collapsed by default; the summary is always visible
+  const [healthOpen, setHealthOpen] = useState(false);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -757,29 +820,20 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     && typeof HTMLCanvasElement !== 'undefined'
     && typeof HTMLCanvasElement.prototype.captureStream === 'function';
 
-  // error state
-  if (graybox.error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-        <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>
-        </div>
-        <p className="text-xs text-red-600 dark:text-red-400 font-medium">Graybox generation error</p>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 break-words">{graybox.error}</p>
-      </div>
-    );
-  }
+  // ---- white-model health check (auto-run; pure, cheap) ----
+  const health: HealthReport | null = useMemo(
+    () => isShot && graybox.camera
+      ? checkGrayboxHealth({ camera: graybox.camera, characters: sceneChars, sceneShotTypes }, uiLang)
+      : null,
+    [isShot, graybox.camera, sceneChars, sceneShotTypes, uiLang],
+  );
+  const healthBlocksExport = !!health && !health.passed;
 
-  // empty state
+  // ALL remaining hooks run BEFORE the early returns below (Rules of Hooks):
+  // the same mounted instance can flip between valid/error/empty graybox
+  // when the user regenerates or switches blocks — a changing hook count
+  // mid-life crashes React ("Rendered more/fewer hooks than previous render").
   const hasScene = graybox.kind === 'scene' && ((graybox.layout?.length ?? 0) > 0 || (graybox.characters?.length ?? 0) > 0);
-  if (!isShot && !hasScene) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 dark:text-gray-600 mb-2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="m3.27 6.96 8.73 5.05 8.73-5.05M12 22.08V12" /></svg>
-        <p className="text-xs text-gray-400 dark:text-gray-500">No renderable graybox data</p>
-      </div>
-    );
-  }
 
   // advance progress via requestAnimationFrame (decoupled from R3F's own RAF,
   // so the slider tracks even if Canvas is not the active render target)
@@ -818,21 +872,11 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     }
   }, []);
 
-  const togglePlay = () => {
-    if (progressRef.current >= 1) progressRef.current = 0;
-    setProgressUI(progressRef.current);
-    setPlaying((p) => !p);
-  };
-  const reset = () => {
-    setPlaying(false);
-    progressRef.current = 0;
-    setProgressUI(0);
-  };
-
   // ---- white-model export: record the POV playback as a reference video ----
   const startExport = useCallback(() => {
     if (exporting || !isShot || !graybox.camera || !wrapRef.current) return;
     if (!exportSupported) return;
+    if (healthBlocksExport) return; // failing checks (❌) gate the export
 
     // measure the panel now — during export the inner canvas is absolutely
     // sized 1920×1080 and CSS-scaled back down so the layout never jumps
@@ -897,19 +941,55 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       };
       exportRafRef.current = requestAnimationFrame(tick);
     }, 450);
-  }, [exporting, isShot, graybox, exportSupported]);
+  }, [exporting, isShot, graybox, exportSupported, healthBlocksExport]);
 
   // ---- prompt builder + modal ----
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';
+    const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
     const input = {
       beatContent: beat?.content ?? '',
       camera: graybox.camera,
       characters: sceneChars,
       sceneHeading,
+      styleHint,
     };
     return promptTarget === 'seedance' ? buildSeedancePrompt(input) : buildH3Prompt(input);
-  }, [promptTarget, graybox.camera, beat, sceneChars, sceneHeading]);
+  }, [promptTarget, graybox.camera, beat, sceneChars, sceneHeading, styleId]);
+
+  // error state
+  if (graybox.error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+        <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>
+        </div>
+        <p className="text-xs text-red-600 dark:text-red-400 font-medium">Graybox generation error</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 break-words">{graybox.error}</p>
+      </div>
+    );
+  }
+
+  // empty state
+  if (!isShot && !hasScene) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 dark:text-gray-600 mb-2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="m3.27 6.96 8.73 5.05 8.73-5.05M12 22.08V12" /></svg>
+        <p className="text-xs text-gray-400 dark:text-gray-500">No renderable graybox data</p>
+      </div>
+    );
+  }
+
+  const togglePlay = () => {
+    if (progressRef.current >= 1) progressRef.current = 0;
+    setProgressUI(progressRef.current);
+    setPlaying((p) => !p);
+  };
+  const reset = () => {
+    setPlaying(false);
+    progressRef.current = 0;
+    setProgressUI(0);
+  };
 
   const doCopy = async () => {
     const ok = await copyTextToClipboard(promptText);
@@ -957,9 +1037,15 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
           exporting={exporting}
           hasSceneGeometry={hasSceneGeometry}
           exportSupported={exportSupported}
+          health={health}
+          healthOpen={healthOpen}
+          onToggleHealth={() => setHealthOpen(o => !o)}
           labels={{
             pov: L.pov, orbit: L.orbit, exportBtn: L.exportBtn, recording: L.recording,
             seedance: L.seedance, h3: L.h3, noScene: L.noScene, unsupported: L.unsupported,
+            health: L.health, healthOpen: L.healthOpen, healthPass: L.healthPass,
+            healthWarn: L.healthWarn, healthFail: L.healthFail,
+            healthExportBlocked: L.healthExportBlocked,
           }}
         />
       )}
@@ -988,6 +1074,18 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.style}</span>
+                <select
+                  value={styleId}
+                  onChange={(e) => setStyleId(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200"
+                >
+                  {WHITE_MODEL_STYLE_TEMPLATES.map(s => (
+                    <option key={s.id} value={s.id}>{s.zh} · {s.keywords}</option>
+                  ))}
+                </select>
+              </div>
               <textarea
                 readOnly
                 value={promptText}

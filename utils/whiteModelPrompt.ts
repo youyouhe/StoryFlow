@@ -44,7 +44,25 @@ export interface WhiteModelPromptInput {
   characters: GrayboxCharacter[];
   /** Owning scene heading text, for environment context. */
   sceneHeading?: string;
+  /** Style keywords injected into the style-lock lines. Defaults to a
+   *  neutral "realistic film" when omitted. */
+  styleHint?: string;
 }
+
+/** Style presets for the prompt modal (product spec appendix B). The zh
+ *  keywords ride into the generated prompt verbatim — both target models
+ *  are Chinese-first. */
+export const WHITE_MODEL_STYLE_TEMPLATES = [
+  { id: 'realistic', zh: '写实影视', keywords: '写实影视质感，自然光影' },
+  { id: 'xianxia', zh: '仙侠对峙', keywords: '仙侠、肃杀、冷色调、古风' },
+  { id: 'battle', zh: '战斗爆发', keywords: '热血、快节奏、粒子特效、动态模糊' },
+  { id: 'scenery', zh: '风景叙事', keywords: '宏大、静谧、自然光、壮丽' },
+  { id: 'emotional', zh: '情感对话', keywords: '温暖、柔光、微表情、细腻' },
+  { id: 'awakening', zh: '奇幻觉醒', keywords: '玄幻、发光、能量流动、震撼' },
+] as const;
+
+const styleOf = (input: WhiteModelPromptInput): string =>
+  input.styleHint?.trim() || '写实影视质感';
 
 const fmtSeconds = (s: number): string => {
   const v = Math.round(s * 10) / 10;
@@ -95,7 +113,7 @@ export const buildSeedancePrompt = (input: WhiteModelPromptInput): string => {
     ...(lines.length ? lines : ['- （白模中无角色胶囊体，仅场景空镜）']),
     `灰色几何体为场景陈设与地形，按 ${envRef} 的环境风格渲染。`,
     '',
-    `场景使用 ${envRef} 的${scene ? `「${scene}」` : ''}环境风格，整体保持写实影视质感。`,
+    `场景使用 ${envRef} 的${scene ? `「${scene}」` : ''}环境风格，整体保持${styleOf(input)}。`,
     '全程保持角色身份、服装、比例、站位逻辑与动作连续；',
     '不保留白模材质、网格线、轨迹线或任何辅助标记。',
   ].join('\n');
@@ -130,7 +148,7 @@ export const buildH3Prompt = (input: WhiteModelPromptInput): string => {
     beatLine(input),
     '',
     `请严格保持参考视频的运镜轨迹、机位节奏与角色站位；场景风格参考图片${envNo}${input.sceneHeading?.trim() ? `（${input.sceneHeading.trim()}）` : ''}。`,
-    '全程保持角色形象、服装与比例一致，输出写实影视质感；画面中不出现网格、轨迹线或任何辅助元素。',
+    `全程保持角色形象、服装与比例一致，输出${styleOf(input)}；画面中不出现网格、轨迹线或任何辅助元素。`,
   ].join('\n');
 };
 

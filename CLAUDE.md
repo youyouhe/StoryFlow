@@ -81,6 +81,31 @@ Defined in `appSettings.shortcuts` (defaults in `constants.ts`). Editing keys (T
 
 `src-tauri/tauri.conf.json` runs `npm run dev` (port 5173) in dev and `npm run build` for the desktop bundle. The CSP allows `connect-src` only to `self`, `api.deepseek.com`, and `generativelanguage.googleapis.com` — adding a new AI provider host requires updating this CSP.
 
+## Operating the Running App (agent → WebMCP)
+
+StoryFlow exposes its capabilities as WebMCP tools inside the running app
+(`services/webmcp.ts` registers `storyflow_*` tools on `document.modelContext`).
+
+**Primary path — the `storyflow` stdio MCP bridge** (`mcp-bridge/index.mjs`):
+proxies the page's WebMCP registry natively, so `storyflow_*` tools appear
+directly in tools/list with their schemas. It never hardcodes a tool
+inventory — when the page adds tools, the next list reflects it.
+
+1. Ensure the WebMCP browser is up: `bash scripts/webmcp-chromium.sh`
+   (headless Chromium with `--enable-features=WebMCP`, CDP on 127.0.0.1:9222,
+   opens http://localhost:5173/). Keep it running — the page is the tool host.
+2. Use the `storyflow_*` tools directly (read scripts, append blocks, graybox
+   health checks, Seedance/H3 prompt generation). `storyflow_append_blocks`
+   is the only write surface and is append-only by design.
+3. If tools error with "No StoryFlow page open" / "WebMCP unavailable":
+   relaunch `scripts/webmcp-chromium.sh` (secure context = localhost, not a
+   LAN IP). Regression test: `cd mcp-bridge && node test-client.mjs`.
+
+**Fallback path — `chrome-devtools` MCP**: its `evaluate_script` tool can call
+the same registry manually (`document.modelContext.getTools()` /
+`executeTool()`), and `take_screenshot` gives visual verification. Do NOT use
+click/fill to simulate human input — WebMCP replaces that.
+
 ## Adding a New Template
 
 1. Add the prompt text to `PROMPTS` in `constants.ts`.

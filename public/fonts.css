@@ -11,7 +11,10 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 400;
-  src: url('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA-Ek-_EeA.woff2') format('woff2');
+  /* Self-hosted (v20 latin subset). The previous hardcoded gstatic URL went
+     404 — Google rotates font file hashes, so remote pinning breaks silently.
+     Local file = no CDN dependency, consistent with Courier Prime. */
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
   font-display: swap;
 }
 

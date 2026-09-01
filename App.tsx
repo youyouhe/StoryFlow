@@ -10,6 +10,9 @@ import { Graybox3DView } from './components/Graybox3DView';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
+import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
+import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
+import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -157,6 +160,128 @@ function App() {
   const [headerTitleVal, setHeaderTitleVal] = useState('');
 
   const [viewingTemplate, setViewingTemplate] = useState<ScriptTemplate | null>(null);
+
+  // ---- WebMCP (Web Model Context Protocol) ---------------------------------
+  // Exposes StoryFlow operations as standardized in-browser tools for AI
+  // agents (ChatGPT's browser etc.). Experimental API, secure contexts only —
+  // on the LAN-IP dev setup registration quietly no-ops. The accessor is
+  // refreshed every render into a latest-ref so tool executions always see
+  // current state without re-registering.
+  const webmcpAccessorRef = useRef<StoryflowWebMcpAccessor | null>(null);
+  webmcpAccessorRef.current = {
+    getAppInfo: () => ({
+      app: 'StoryFlow' as const,
+      uiLanguage: lang,
+      scriptLanguage: screenplay.metadata.scriptLanguage,
+      provider: appSettings.provider,
+      currentScriptId: screenplay.id,
+      currentScriptTitle: screenplay.metadata.title,
+      blockCount: screenplay.blocks.length,
+      savedScriptCount: savedScripts.length,
+    }),
+    listScripts: () => savedScripts.map(s => ({ id: s.id, title: s.title, lastModified: s.lastModified })),
+    getBlocks: ({ from, to, types }) => {
+      const total = screenplay.blocks.length;
+      const start = Math.max(0, from ?? 0);
+      const end = Math.min(total - 1, to ?? Math.min(start + 199, total - 1));
+      const slice = screenplay.blocks.slice(start, end + 1)
+        .filter(b => !types || types.length === 0 || types.includes(b.type))
+        .map((b, i) => ({
+          index: start + i,
+          id: b.id,
+          type: b.type,
+          content: b.content,
+          hasGraybox: !!b.graybox,
+          grayboxKind: b.graybox?.kind,
+          hasImagePrompt: !!b.imagePrompt?.trim(),
+        }));
+      return { total, returned: slice.length, blocks: slice };
+    },
+    getGraybox: ({ blockIndex, blockId }) => {
+      const idx = blockIndex != null
+        ? blockIndex
+        : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (!b.graybox) return { error: `Block ${idx} (${b.type}) has no graybox payload.` };
+      return { blockIndex: idx, blockType: b.type, content: b.content, graybox: b.graybox };
+    },
+    appendBlocks: (blocks) => {
+      const firstIndex = screenplay.blocks.length;
+      setScreenplay(prev => ({
+        ...prev,
+        blocks: [...prev.blocks, ...blocks.map(nb => ({
+          id: generateId(),
+          type: nb.type,
+          content: nb.content,
+        }))],
+        lastModified: Date.now(),
+      }));
+      return { added: blocks.length, firstIndex, total: firstIndex + blocks.length };
+    },
+    generateVideoPrompt: ({ blockIndex, blockId }, target) => {
+      const idx = blockIndex != null
+        ? blockIndex
+        : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (!b.graybox || b.graybox.kind !== 'shot' || !b.graybox.camera) {
+        return { error: `Block ${idx} is not a shot with a camera graybox. Only ACTION/DIALOGUE blocks with a shot graybox have video prompts.` };
+      }
+      // owning scene: nearest SCENE_HEADING at/above the block
+      let sceneG: GrayboxData | null = null;
+      let sceneHead = '';
+      for (let i = idx; i >= 0; i--) {
+        const sb = screenplay.blocks[i];
+        if (sb.type === 'SCENE_HEADING') {
+          sceneHead = sb.content;
+          if (sb.graybox && sb.graybox.kind === 'scene' && !sb.graybox.error) sceneG = sb.graybox;
+          break;
+        }
+      }
+      const input = {
+        beatContent: b.content,
+        camera: b.graybox.camera,
+        characters: sceneG?.characters ?? [],
+        sceneHeading: sceneHead,
+      };
+      return { target, prompt: target === 'h3' ? buildH3Prompt(input) : buildSeedancePrompt(input) };
+    },
+    checkGrayboxHealth: ({ blockIndex, blockId }) => {
+      const idx = blockIndex != null
+        ? blockIndex
+        : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (!b.graybox || b.graybox.kind !== 'shot' || !b.graybox.camera) {
+        return { error: `Block ${idx} is not a shot with a camera graybox.` };
+      }
+      // owning scene: blocking + every shot's shotType in that scene
+      let sceneG: GrayboxData | null = null;
+      let sceneStart = 0;
+      for (let i = idx; i >= 0; i--) {
+        if (screenplay.blocks[i].type === 'SCENE_HEADING') {
+          sceneStart = i;
+          const sb = screenplay.blocks[i];
+          if (sb.graybox && sb.graybox.kind === 'scene' && !sb.graybox.error) sceneG = sb.graybox;
+          break;
+        }
+      }
+      const sceneShotTypes: string[] = [];
+      for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
+        const sb = screenplay.blocks[i];
+        if (sb.type === 'SCENE_HEADING') break;
+        if (sb.graybox?.kind === 'shot' && sb.graybox.camera && !sb.graybox.error) {
+          sceneShotTypes.push(sb.graybox.camera.shotType);
+        }
+      }
+      return checkGrayboxHealth(
+        { camera: b.graybox.camera, characters: sceneG?.characters ?? [], sceneShotTypes },
+        lang,
+      );
+    },
+  };
+  useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
   const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);
@@ -1313,14 +1438,26 @@ function App() {
                     const panelIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
                     let panelSceneGraybox: GrayboxData | null = null;
                     let panelSceneHeading = '';
+                    let panelSceneStart = 0;
                     for (let i = panelIdx; i >= 0; i--) {
                       const b = screenplay.blocks[i];
                       if (b.type === 'SCENE_HEADING') {
+                        panelSceneStart = i;
                         panelSceneHeading = b.content;
                         if (b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
                           panelSceneGraybox = b.graybox;
                         }
                         break;
+                      }
+                    }
+                    // every shot graybox's shotType in the owning scene — feeds
+                    // the health check's W001 shot-variety warning
+                    const panelSceneShotTypes: string[] = [];
+                    for (let i = panelSceneStart + 1; i < screenplay.blocks.length; i++) {
+                      const b = screenplay.blocks[i];
+                      if (b.type === 'SCENE_HEADING') break;
+                      if (b.graybox?.kind === 'shot' && b.graybox.camera && !b.graybox.error) {
+                        panelSceneShotTypes.push(b.graybox.camera.shotType);
                       }
                     }
                     return (
@@ -1332,6 +1469,7 @@ function App() {
                           sceneGraybox={panelSceneGraybox}
                           beat={{ type: panelBlock.type, content: panelBlock.content }}
                           sceneHeading={panelSceneHeading}
+                          sceneShotTypes={panelSceneShotTypes}
                         />
                       </div>
                     );
