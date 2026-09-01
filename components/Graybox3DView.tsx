@@ -2,9 +2,10 @@ import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Line, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera } from '../types';
+import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, RefImage, RefBindings } from '../types';
 import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClipboard, WHITE_MODEL_STYLE_TEMPLATES } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth, HealthReport } from '../utils/grayboxHealth';
+import { ReferenceBindingPanel, REF_BINDING_LABELS } from './ReferenceBindingPanel';
 
 /**
  * Graybox3DView — renders a GrayboxData payload as an interactive 3D previs.
@@ -59,6 +60,14 @@ interface Graybox3DViewProps {
   /** shotTypes of every shot graybox in the owning scene — feeds the W001
    *  shot-variety check in the health report. Optional. */
   sceneShotTypes?: string[];
+  /** White-model reference-image library (object URLs, session-managed in
+   *  App state; blobs live in IndexedDB). */
+  refImages?: RefImage[];
+  /** Per-screenplay capsule→image bindings, persisted by App. */
+  refBindings?: RefBindings;
+  onRefBindingsChange?: (next: RefBindings) => void;
+  onUploadRefImage?: (file: File) => void;
+  onRemoveRefImage?: (id: string) => void;
 }
 
 // ---- semantic default colors per layout role (used when obj.color omitted) ----
@@ -786,7 +795,7 @@ const UI_LABELS = {
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, uiLang = 'en' }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, uiLang = 'en' }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -947,15 +956,32 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';
     const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
+
+    // Resolve bindings → real image file names. Only pass them when at least
+    // one character or the env slot is bound — otherwise keep the legacy
+    // generic numbering so pre-binding prompts stay unchanged.
+    const imageById = (id?: string) => refImages.find((img) => img.id === id);
+    const boundChars = refBindings && refImages.length
+      ? Object.fromEntries(
+          Object.entries(refBindings.characters)
+            .filter(([, id]) => !!imageById(id))
+            .map(([name, id]) => [name, imageById(id)!.name]),
+        )
+      : undefined;
+    const hasAnyBinding = boundChars && Object.keys(boundChars).length > 0;
+    const envImage = refBindings && refImages.length && imageById(refBindings.environment)?.name;
+
     const input = {
       beatContent: beat?.content ?? '',
       camera: graybox.camera,
       characters: sceneChars,
       sceneHeading,
       styleHint,
+      ...(hasAnyBinding ? { characterImages: boundChars } : {}),
+      ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
     };
     return promptTarget === 'seedance' ? buildSeedancePrompt(input) : buildH3Prompt(input);
-  }, [promptTarget, graybox.camera, beat, sceneChars, sceneHeading, styleId]);
+  }, [promptTarget, graybox.camera, beat, sceneChars, sceneHeading, styleId, refImages, refBindings]);
 
   // error state
   if (graybox.error) {
@@ -1074,6 +1100,17 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              {onRefBindingsChange && refBindings && (
+                <ReferenceBindingPanel
+                  characters={sceneChars}
+                  images={refImages}
+                  bindings={refBindings}
+                  onChange={onRefBindingsChange}
+                  onUpload={onUploadRefImage ?? (() => {})}
+                  onRemoveImage={onRemoveRefImage ?? (() => {})}
+                  labels={REF_BINDING_LABELS[uiLang]}
+                />
+              )}
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.style}</span>
                 <select

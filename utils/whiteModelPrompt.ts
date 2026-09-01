@@ -47,6 +47,14 @@ export interface WhiteModelPromptInput {
   /** Style keywords injected into the style-lock lines. Defaults to a
    *  neutral "realistic film" when omitted. */
   styleHint?: string;
+  /** Bound reference images: character name -> image file name. When
+   *  provided, only bound characters enter the @图片N mapping (numbered in
+   *  binding order) and the env image takes the next number. Characters
+   *  without a binding are called out so the user notices. When omitted,
+   *  the legacy behavior applies (number all characters generically). */
+  characterImages?: Record<string, string>;
+  /** Bound environment/style image file name (takes the last slot). */
+  environmentImage?: string;
 }
 
 /** Style presets for the prompt modal (product spec appendix B). The zh
@@ -79,17 +87,37 @@ const beatLine = (input: WhiteModelPromptInput): string => {
 };
 
 /** Capsule → reference-image mapping lines (shared shape, target-specific
- *  reference syntax). Character images are numbered 1..N; the environment
- *  image takes the next number. */
+ *  reference syntax). Character images are numbered 1..N in binding order;
+ *  the environment image takes the next number.
+ *
+ *  Capsule COLORS stay assigned by blocking INDEX (matching the 3D render),
+ *  so a bound character keeps the color it wears on screen even when earlier
+ *  characters are unbound. When `characterImages` is omitted entirely, the
+ *  legacy generic numbering applies (all characters, placeholders). */
 const mappingLines = (
-  characters: GrayboxCharacter[],
+  input: WhiteModelPromptInput,
   ref: (n: number) => string,
-): { lines: string[]; envImageNo: number } => {
-  const lines = characters.slice(0, 8).map((c, i) => {
-    const color = whiteModelCharColor(i).zh;
-    return `- ${color}胶囊体 → ${ref(i + 1)} 的「${c.name}」`;
-  });
-  return { lines, envImageNo: Math.min(characters.length, 8) + 1 };
+): { lines: string[]; envImageNo: number; boundNames: string[] } => {
+  const { characters, characterImages } = input;
+  const capped = characters.slice(0, 8);
+
+  if (!characterImages) {
+    const lines = capped.map((c, i) =>
+      `- ${whiteModelCharColor(i).zh}胶囊体 → ${ref(i + 1)} 的「${c.name}」`);
+    return { lines, envImageNo: capped.length + 1, boundNames: capped.map((c) => c.name) };
+  }
+
+  const bound = capped
+    .map((c, i) => ({ c, color: whiteModelCharColor(i).zh, fileName: characterImages[c.name] }))
+    .filter((x) => !!x.fileName);
+  const unbound = capped.filter((c) => !characterImages[c.name]);
+
+  const lines = bound.map((x, n) =>
+    `- ${x.color}胶囊体 → ${ref(n + 1)} 的「${x.c.name}」（图片文件：${x.fileName}）`);
+  if (unbound.length) {
+    lines.push(`- （未绑定参考图：${unbound.map((c) => c.name).join('、')}——上传并绑定后自动进入映射）`);
+  }
+  return { lines, envImageNo: bound.length + 1, boundNames: bound.map((x) => x.c.name) };
 };
 
 /**
@@ -99,8 +127,9 @@ const mappingLines = (
  * helper artifacts from leaking into the render.
  */
 export const buildSeedancePrompt = (input: WhiteModelPromptInput): string => {
-  const { lines, envImageNo } = mappingLines(input.characters, (n) => `@图片${n}`);
+  const { lines, envImageNo } = mappingLines(input, (n) => `@图片${n}`);
   const envRef = `@图片${envImageNo}`;
+  const envName = input.environmentImage ? `（图片文件：${input.environmentImage}）` : '';
   const scene = input.sceneHeading?.trim();
 
   return [
@@ -111,9 +140,9 @@ export const buildSeedancePrompt = (input: WhiteModelPromptInput): string => {
     '',
     '白模角色映射：',
     ...(lines.length ? lines : ['- （白模中无角色胶囊体，仅场景空镜）']),
-    `灰色几何体为场景陈设与地形，按 ${envRef} 的环境风格渲染。`,
+    `灰色几何体为场景陈设与地形，按 ${envRef}${envName} 的环境风格渲染。`,
     '',
-    `场景使用 ${envRef} 的${scene ? `「${scene}」` : ''}环境风格，整体保持${styleOf(input)}。`,
+    `场景使用 ${envRef}${envName} 的${scene ? `「${scene}」` : ''}环境风格，整体保持${styleOf(input)}。`,
     '全程保持角色身份、服装、比例、站位逻辑与动作连续；',
     '不保留白模材质、网格线、轨迹线或任何辅助标记。',
   ].join('\n');
@@ -125,13 +154,12 @@ export const buildSeedancePrompt = (input: WhiteModelPromptInput): string => {
  * H3's 素材分工 idiom.
  */
 export const buildH3Prompt = (input: WhiteModelPromptInput): string => {
-  const { lines, envImageNo } = mappingLines(input.characters, (n) => `图片${n}`);
-  const charCount = Math.min(input.characters.length, 8);
+  const { lines, envImageNo, boundNames } = mappingLines(input, (n) => `图片${n}`);
   const envNo = envImageNo;
+  const envName = input.environmentImage ? `（${input.environmentImage}）` : '';
 
-  const rolePart = charCount
-    ? Array.from({ length: charCount }, (_, i) =>
-        `图片${i + 1} 控制角色「${input.characters[i].name}」`).join('；')
+  const rolePart = boundNames.length
+    ? boundNames.map((name, i) => `图片${i + 1} 控制角色「${name}」`).join('；')
     : '';
   const duty = [
     '视频1 控制运镜、镜头节奏与角色走位',
@@ -147,7 +175,7 @@ export const buildH3Prompt = (input: WhiteModelPromptInput): string => {
     '',
     beatLine(input),
     '',
-    `请严格保持参考视频的运镜轨迹、机位节奏与角色站位；场景风格参考图片${envNo}${input.sceneHeading?.trim() ? `（${input.sceneHeading.trim()}）` : ''}。`,
+    `请严格保持参考视频的运镜轨迹、机位节奏与角色站位；场景风格参考图片${envNo}${envName}${input.sceneHeading?.trim() ? `（${input.sceneHeading.trim()}）` : ''}。`,
     `全程保持角色形象、服装与比例一致，输出${styleOf(input)}；画面中不出现网格、轨迹线或任何辅助元素。`,
   ].join('\n');
 };

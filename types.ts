@@ -203,6 +203,25 @@ export interface PDFOptions {
  *  JSON are assembled as text and downloaded via Blob. */
 export type ExportFormat = 'pdf' | 'markdown' | 'json';
 
+/** A reference image resolved for UI display — the IndexedDB record's blob
+ *  turned into an object URL. Managed in App state, not persisted here. */
+export interface RefImage {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  createdAt: number;
+  url: string; // object URL, valid for the session
+}
+
+/** White-model reference bindings, persisted per screenplay in localStorage
+ *  (`ref_bindings_{scriptId}`). Keys are character names as they appear in
+ *  the scene's character blocking; values are RefImage ids. */
+export interface RefBindings {
+  characters: Record<string, string>;
+  environment?: string;
+}
+
 /** Options shared across the non-PDF exporters. Controls which AI payloads
  *  are bundled and how graybox is rendered. */
 export interface ExportOptions {

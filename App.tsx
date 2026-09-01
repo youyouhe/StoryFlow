@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData } from './types';
+import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS } from './constants';
 import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +13,7 @@ import { exportToPDF } from './utils/pdfExport';
 import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
+import { listRefImages, addRefImage, removeRefImage as removeStoredRefImage } from './services/refImageStore';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -146,6 +147,11 @@ function App() {
   // and a graybox. The opener handlers set this so the panel opens on the
   // payload whose chip was clicked.
   const [panelTab, setPanelTab] = useState<'prompt' | 'graybox' | 'graybox3d'>('prompt');
+  // White-model reference-image library (global, IndexedDB-backed) and the
+  // per-screenplay capsule→image bindings (localStorage). Blobs stay out of
+  // the screenplay JSON so exports remain clean; object URLs are session-only.
+  const [refImages, setRefImages] = useState<RefImage[]>([]);
+  const [refBindings, setRefBindings] = useState<RefBindings>({ characters: {} });
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -282,6 +288,57 @@ function App() {
     },
   };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
+
+  // ---- white-model reference images + bindings ------------------------------
+  // Library: load once from IndexedDB, expose blobs as session object URLs.
+  useEffect(() => {
+    let urls: string[] = [];
+    listRefImages().then((stored) => {
+      setRefImages(stored.map((s) => {
+        const url = URL.createObjectURL(s.blob);
+        urls.push(url);
+        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url };
+      }));
+    }).catch((e) => console.warn('Failed to load reference library', e));
+    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); };
+  }, []);
+
+  // Bindings: per-screenplay, persisted in localStorage next to the script.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`ref_bindings_${screenplay.id}`);
+      setRefBindings(raw ? { characters: {}, ...(JSON.parse(raw) as RefBindings) } : { characters: {} });
+    } catch { setRefBindings({ characters: {} }); }
+  }, [screenplay.id]);
+  useEffect(() => {
+    try { localStorage.setItem(`ref_bindings_${screenplay.id}`, JSON.stringify(refBindings)); } catch { /* quota — bindings are tiny; ignore */ }
+  }, [refBindings, screenplay.id]);
+
+  const handleUploadRefImage = useCallback(async (file: File) => {
+    try {
+      const stored = await addRefImage(file);
+      setRefImages((prev) => [...prev, {
+        id: stored.id, name: stored.name, type: stored.type, size: stored.size, createdAt: stored.createdAt,
+        url: URL.createObjectURL(stored.blob),
+      }]);
+    } catch (e) {
+      console.warn('Failed to store reference image', e);
+    }
+  }, []);
+  const handleRemoveRefImage = useCallback((id: string) => {
+    removeStoredRefImage(id).catch((e) => console.warn('Failed to delete reference image', e));
+    setRefImages((prev) => {
+      const gone = prev.find((p) => p.id === id);
+      if (gone) URL.revokeObjectURL(gone.url);
+      return prev.filter((p) => p.id !== id);
+    });
+    // scrub bindings pointing at the removed image
+    setRefBindings((prev) => {
+      const characters = Object.fromEntries(Object.entries(prev.characters).filter(([, v]) => v !== id));
+      const environment = prev.environment === id ? undefined : prev.environment;
+      return { characters, environment };
+    });
+  }, []);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
   const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);
@@ -1470,6 +1527,11 @@ function App() {
                           beat={{ type: panelBlock.type, content: panelBlock.content }}
                           sceneHeading={panelSceneHeading}
                           sceneShotTypes={panelSceneShotTypes}
+                          refImages={refImages}
+                          refBindings={refBindings}
+                          onRefBindingsChange={setRefBindings}
+                          onUploadRefImage={handleUploadRefImage}
+                          onRemoveRefImage={handleRemoveRefImage}
                         />
                       </div>
                     );
