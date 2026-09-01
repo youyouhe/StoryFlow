@@ -1,0 +1,2623 @@
+{
+  "id": "pb8c8fvgr",
+  "metadata": {
+    "title": "Untitled 玄幻 / 仙侠",
+    "author": "Unknown",
+    "draft": "First Draft",
+    "templateId": "xuanhuan",
+    "scriptLanguage": "zh"
+  },
+  "blocks": [
+    {
+      "id": "lzgozhtmp",
+      "type": "SCENE_HEADING",
+      "content": "外. 灵剑峰 - 白天",
+      "graybox": {
+        "kind": "scene",
+        "layout": [
+          {
+            "id": "ground",
+            "type": "plane",
+            "role": "environment",
+            "label": "峰顶",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "size": [
+              120,
+              0.1,
+              120
+            ],
+            "color": "#8B7D6B"
+          },
+          {
+            "id": "stone_platform",
+            "type": "box",
+            "role": "environment",
+            "label": "演武场",
+            "position": [
+              0,
+              0.25,
+              0
+            ],
+            "size": [
+              20,
+              0.5,
+              20
+            ],
+            "color": "#A9A9A9"
+          },
+          {
+            "id": "sword_monolith",
+            "type": "box",
+            "role": "prop",
+            "label": "灵剑碑",
+            "position": [
+              0,
+              3.5,
+              2
+            ],
+            "size": [
+              2,
+              6,
+              1
+            ],
+            "color": "#C0C0C0"
+          },
+          {
+            "id": "cliff_left",
+            "type": "box",
+            "role": "environment",
+            "label": "左崖",
+            "position": [
+              -25,
+              4,
+              -15
+            ],
+            "size": [
+              20,
+              8,
+              15
+            ],
+            "color": "#696969"
+          },
+          {
+            "id": "cliff_right",
+            "type": "box",
+            "role": "environment",
+            "label": "右崖",
+            "position": [
+              30,
+              5,
+              10
+            ],
+            "size": [
+              25,
+              10,
+              20
+            ],
+            "color": "#696969"
+          },
+          {
+            "id": "mountain_north",
+            "type": "box",
+            "role": "environment",
+            "label": "远山·北",
+            "position": [
+              -30,
+              15,
+              -80
+            ],
+            "size": [
+              100,
+              30,
+              10
+            ],
+            "color": "#4A5D4E"
+          },
+          {
+            "id": "mountain_south",
+            "type": "box",
+            "role": "environment",
+            "label": "远山·南",
+            "position": [
+              20,
+              12,
+              90
+            ],
+            "size": [
+              120,
+              25,
+              10
+            ],
+            "color": "#5B6E5B"
+          },
+          {
+            "id": "pine_trunk",
+            "type": "cylinder",
+            "role": "environment",
+            "label": "古松",
+            "position": [
+              -8,
+              3,
+              -8
+            ],
+            "size": [
+              1,
+              6,
+              1
+            ],
+            "color": "#8B4513"
+          },
+          {
+            "id": "pine_canopy",
+            "type": "sphere",
+            "role": "environment",
+            "label": "松冠",
+            "position": [
+              -8,
+              7,
+              -8
+            ],
+            "size": [
+              6,
+              4,
+              6
+            ],
+            "color": "#2E8B57"
+          },
+          {
+            "id": "cloud_1",
+            "type": "plane",
+            "role": "environment",
+            "label": "流云",
+            "position": [
+              -30,
+              25,
+              -40
+            ],
+            "size": [
+              60,
+              0.2,
+              20
+            ],
+            "color": "#FFFFFF"
+          },
+          {
+            "id": "cloud_2",
+            "type": "plane",
+            "role": "environment",
+            "label": "流云",
+            "position": [
+              40,
+              20,
+              30
+            ],
+            "size": [
+              50,
+              0.2,
+              15
+            ],
+            "color": "#FFFFFF"
+          }
+        ]
+      }
+    },
+    {
+      "id": "7ssl4zwtm",
+      "type": "ACTION",
+      "content": "灵气在林枫周身盘旋。他猛然突破了炼气九层。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            5,
+            1.6,
+            0
+          ],
+          "lookAt": [
+            0,
+            1,
+            0
+          ],
+          "movement": {
+            "type": "orbit",
+            "duration": 3,
+            "path": [
+              [
+                5,
+                1.6,
+                0
+              ],
+              [
+                2.5,
+                1.6,
+                4.33
+              ],
+              [
+                -2.5,
+                1.6,
+                4.33
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1.4,
+                0
+              ],
+              [
+                0,
+                1.8,
+                0
+              ]
+            ]
+          },
+          "focus": "林风"
+        }
+      }
+    },
+    {
+      "id": "0cuy2iq33",
+      "type": "CHARACTER",
+      "content": "莫长老"
+    },
+    {
+      "id": "e06hh2u7c",
+      "type": "DIALOGUE",
+      "content": "不可能！废灵根竟然突破了？",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            -1.5,
+            1.6,
+            2.8
+          ],
+          "lookAt": [
+            -2,
+            1.6,
+            2
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 2,
+            "path": [
+              [
+                -1.5,
+                1.6,
+                2.8
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "8fjle4sal",
+      "type": "CHARACTER",
+      "content": "林枫"
+    },
+    {
+      "id": "cfkp56zst",
+      "type": "DIALOGUE",
+      "content": "天道可判我，但你不配。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0.6,
+            1.6,
+            -2
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 4,
+            "lookPath": [
+              [
+                0,
+                1.6,
+                0
+              ],
+              [
+                0,
+                30,
+                0
+              ],
+              [
+                0,
+                1.6,
+                0
+              ]
+            ]
+          },
+          "focus": "林风"
+        }
+      }
+    },
+    {
+      "id": "xcrityit8",
+      "type": "SCENE_HEADING",
+      "content": "内. 宗门议事殿 - 黄昏",
+      "graybox": {
+        "kind": "scene",
+        "layout": [
+          {
+            "id": "floor",
+            "type": "plane",
+            "role": "floor",
+            "label": "地面",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "size": [
+              20,
+              0.1,
+              16
+            ],
+            "color": "#c8c8c8"
+          },
+          {
+            "id": "wall_north",
+            "type": "box",
+            "role": "wall",
+            "label": "北墙",
+            "position": [
+              0,
+              4,
+              -8
+            ],
+            "size": [
+              20,
+              8,
+              0.5
+            ],
+            "color": "#a8a8a8"
+          },
+          {
+            "id": "wall_south",
+            "type": "box",
+            "role": "wall",
+            "label": "南墙",
+            "position": [
+              0,
+              4,
+              8
+            ],
+            "size": [
+              20,
+              8,
+              0.5
+            ],
+            "color": "#a8a8a8"
+          },
+          {
+            "id": "wall_east",
+            "type": "box",
+            "role": "wall",
+            "label": "东墙",
+            "position": [
+              10,
+              4,
+              0
+            ],
+            "size": [
+              0.5,
+              8,
+              16
+            ],
+            "color": "#a8a8a8"
+          },
+          {
+            "id": "wall_west",
+            "type": "box",
+            "role": "wall",
+            "label": "西墙",
+            "position": [
+              -10,
+              4,
+              0
+            ],
+            "size": [
+              0.5,
+              8,
+              16
+            ],
+            "color": "#a8a8a8"
+          },
+          {
+            "id": "ceiling",
+            "type": "box",
+            "role": "ceiling",
+            "label": "屋顶",
+            "position": [
+              0,
+              7.75,
+              0
+            ],
+            "size": [
+              20,
+              0.5,
+              16
+            ],
+            "color": "#808080"
+          },
+          {
+            "id": "main_table",
+            "type": "box",
+            "role": "furniture",
+            "label": "议事长桌",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "size": [
+              8,
+              1,
+              3
+            ],
+            "color": "#6b5b4a"
+          },
+          {
+            "id": "chair_north",
+            "type": "box",
+            "role": "furniture",
+            "label": "北侧座椅",
+            "position": [
+              0,
+              0.6,
+              -2.8
+            ],
+            "size": [
+              1.8,
+              1.2,
+              1.8
+            ],
+            "color": "#5a5a5a"
+          },
+          {
+            "id": "chair_south",
+            "type": "box",
+            "role": "furniture",
+            "label": "南侧座椅",
+            "position": [
+              0,
+              0.6,
+              2.8
+            ],
+            "size": [
+              1.8,
+              1.2,
+              1.8
+            ],
+            "color": "#5a5a5a"
+          },
+          {
+            "id": "pillar_nw",
+            "type": "box",
+            "role": "prop",
+            "label": "西北柱",
+            "position": [
+              -8,
+              4,
+              -5
+            ],
+            "size": [
+              1,
+              8,
+              1
+            ],
+            "color": "#999999"
+          },
+          {
+            "id": "pillar_se",
+            "type": "box",
+            "role": "prop",
+            "label": "东南柱",
+            "position": [
+              8,
+              4,
+              5
+            ],
+            "size": [
+              1,
+              8,
+              1
+            ],
+            "color": "#999999"
+          }
+        ]
+      }
+    },
+    {
+      "id": "nppv7hbqv",
+      "type": "ACTION",
+      "content": "殿内九盏长明灵灯烈烈灼烧，灵气如潮汐涤荡梁柱。掌门端坐主位，五长老分列两侧，筑基以上的威压如山峦层叠。殿门轰然洞开，林枫迈步而入，衣袂猎猎，周身尚萦绕着突破炼气九层后的道韵余波，双目隐有紫意流转。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "wide",
+          "position": [
+            0,
+            0.8,
+            -5
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            8
+          ],
+          "movement": {
+            "type": "crane",
+            "duration": 6,
+            "path": [
+              [
+                0,
+                0.8,
+                -5
+              ],
+              [
+                0,
+                1.6,
+                -1
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.6,
+                8
+              ],
+              [
+                0,
+                1.6,
+                1
+              ]
+            ]
+          },
+          "focus": "Lin Feng"
+        }
+      }
+    },
+    {
+      "id": "latr15wh1",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "hebu7bt4m",
+      "type": "DIALOGUE",
+      "content": "莫长老以惊鸿令召全殿议事——所奏之事，便是你突破炼气九层。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            0,
+            0.8,
+            3
+          ],
+          "lookAt": [
+            0,
+            1.2,
+            -2.8
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 5,
+            "path": [
+              [
+                0,
+                0.8,
+                3
+              ]
+            ]
+          },
+          "focus": "掌门"
+        }
+      }
+    },
+    {
+      "id": "ldfresszc",
+      "type": "PARENTHETICAL",
+      "content": "(居高临下，眸光深邃如渊)"
+    },
+    {
+      "id": "rnodiqbml",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "osbpl328x",
+      "type": "ACTION",
+      "content": "莫长老一步踏出，袖袍鼓荡，筑基后期的灵压化作无形巨浪朝林枫碾去。触及少年身前三寸，那滔滔威压竟如浪击孤礁，无声溃散。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            1.5,
+            1.6,
+            1
+          ],
+          "lookAt": [
+            2,
+            1.6,
+            2
+          ],
+          "movement": {
+            "type": "pan",
+            "duration": 3,
+            "lookPath": [
+              [
+                2,
+                1.6,
+                2
+              ],
+              [
+                0,
+                1.6,
+                5
+              ]
+            ]
+          },
+          "focus": "Lin Feng"
+        }
+      }
+    },
+    {
+      "id": "hm4udoebf",
+      "type": "CHARACTER",
+      "content": "莫长老"
+    },
+    {
+      "id": "jjl0l2ahx",
+      "type": "DIALOGUE",
+      "content": "此子废灵根入宗十年，困于炼气三层不得寸进！今却一朝直破炼气九层，必是窃修邪魔禁术！老夫请以诛魔令行搜魂之法，验明正身！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "over-the-shoulder",
+          "position": [
+            -0.7,
+            1.6,
+            5.5
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            -1.5
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 7,
+            "path": [
+              [
+                -0.7,
+                1.6,
+                5.5
+              ],
+              [
+                -0.7,
+                1.6,
+                4
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "t4agpdz5h",
+      "type": "PARENTHETICAL",
+      "content": "(怒目圆睁，指尖杀意凝成寸芒)"
+    },
+    {
+      "id": "p66fceikw",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "tj83963le",
+      "type": "ACTION",
+      "content": "二长老袖袍一拂，一道铜光掠出，化作古镜悬于殿上。镜背符文如星河流转，镜面漾开水波般的光纹。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0,
+            1.6,
+            -5
+          ],
+          "lookAt": [
+            0,
+            1.2,
+            -2.8
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 5,
+            "lookPath": [
+              [
+                0,
+                1.2,
+                -2.8
+              ],
+              [
+                0,
+                5,
+                0
+              ]
+            ]
+          },
+          "focus": "古镜"
+        }
+      }
+    },
+    {
+      "id": "ws232iqlv",
+      "type": "CHARACTER",
+      "content": "二长老"
+    },
+    {
+      "id": "llkp5tez0",
+      "type": "DIALOGUE",
+      "content": "且慢。搜魂大法有伤天和，若此子无辜，岂非自折栋梁？不如以归元镜照之，灵基纯净与否，一观便知。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            0,
+            1.6,
+            4
+          ],
+          "lookAt": [
+            0,
+            1.5,
+            0
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 4,
+            "path": [
+              [
+                0,
+                1.6,
+                4
+              ]
+            ]
+          },
+          "focus": "二长老"
+        }
+      }
+    },
+    {
+      "id": "dvyy2o54h",
+      "type": "PARENTHETICAL",
+      "content": "(并指一引，灵力注入镜心)"
+    },
+    {
+      "id": "l6js1n98v",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "xik7t67bd",
+      "type": "ACTION",
+      "content": "归元镜金光倾泻，将林枫全身罩定。金色光柱纯净如琉璃，无一丝杂染。镜面剧颤，爆出清越龙吟，万千金色符文涌出，绕林枫丹田凝成九转灵轮，灵轮之上混沌气旋吞吐明灭。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "top-down",
+          "position": [
+            1.5,
+            5,
+            1
+          ],
+          "lookAt": [
+            0,
+            1,
+            1
+          ],
+          "movement": {
+            "type": "orbit",
+            "duration": 6,
+            "path": [
+              [
+                1.5,
+                5,
+                1
+              ],
+              [
+                1.06,
+                5,
+                2.06
+              ],
+              [
+                0,
+                5,
+                2.5
+              ],
+              [
+                -1.06,
+                5,
+                2.06
+              ],
+              [
+                -1.5,
+                5,
+                1
+              ]
+            ]
+          },
+          "focus": "Lin Feng"
+        }
+      }
+    },
+    {
+      "id": "fidghe51c",
+      "type": "CHARACTER",
+      "content": "二长老"
+    },
+    {
+      "id": "rprrgh9b1",
+      "type": "DIALOGUE",
+      "content": "九转无垢灵轮……灵基纯净，更胜本宗真传第一人！绝无半分魔染之痕！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0.8,
+            0.9,
+            2.2
+          ],
+          "lookAt": [
+            0,
+            1,
+            1
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 4,
+            "path": [
+              [
+                0.8,
+                0.9,
+                2.2
+              ],
+              [
+                0.8,
+                0.9,
+                2.2
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1,
+                1
+              ],
+              [
+                0,
+                1.6,
+                1
+              ]
+            ]
+          },
+          "focus": "Lin Feng"
+        }
+      }
+    },
+    {
+      "id": "v2cjvhg5i",
+      "type": "PARENTHETICAL",
+      "content": "(双手微颤，险些握不住镜诀)"
+    },
+    {
+      "id": "5ctz60pdo",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "l389xv49o",
+      "type": "ACTION",
+      "content": "莫长老面色由青转红，复又铁青，一掌拍碎身旁案几，木屑纷飞。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            3,
+            1.6,
+            2.5
+          ],
+          "lookAt": [
+            -1,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "handheld",
+            "duration": 3,
+            "path": [
+              [
+                3,
+                1.6,
+                2.5
+              ],
+              [
+                2.95,
+                1.55,
+                2.5
+              ],
+              [
+                3.05,
+                1.62,
+                2.47
+              ]
+            ],
+            "lookPath": [
+              [
+                -1,
+                1.6,
+                0
+              ],
+              [
+                -1,
+                1.6,
+                0
+              ],
+              [
+                0,
+                0.8,
+                0.3
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "xjtb0vr34",
+      "type": "CHARACTER",
+      "content": "莫长老"
+    },
+    {
+      "id": "ku4jzeaat",
+      "type": "DIALOGUE",
+      "content": "荒谬！废灵根如顽石堵窍，引气入体便耗去整整十年！就算灵基纯净，那一身修为又从何而来？！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            2,
+            0.4,
+            -2
+          ],
+          "lookAt": [
+            5.8,
+            0.5,
+            0
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 2,
+            "lookPath": [
+              [
+                5.8,
+                0.5,
+                0
+              ],
+              [
+                5,
+                1.6,
+                0
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "a9g6r138e",
+      "type": "PARENTHETICAL",
+      "content": "(目中血丝隐现，厉声喝问)"
+    },
+    {
+      "id": "6s6lkl9ca",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "y8rwtlrwp",
+      "type": "ACTION",
+      "content": "烟气与木屑弥漫中，林枫缓缓抬眸，目光平而淡地落在莫长老脸上。殿中灵气随他眸光一静，仿佛万物俯首。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "pov",
+          "position": [
+            0,
+            1.7,
+            2
+          ],
+          "lookAt": [
+            0,
+            0.5,
+            1.5
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 3,
+            "path": [
+              [
+                0,
+                1.7,
+                2
+              ],
+              [
+                0,
+                1.7,
+                2
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                0.5,
+                1.5
+              ],
+              [
+                0,
+                1.7,
+                -2.8
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "kyykg2ya2",
+      "type": "CHARACTER",
+      "content": "林枫"
+    },
+    {
+      "id": "xb7z3hybf",
+      "type": "DIALOGUE",
+      "content": "莫长老只知灵根通天，却不知命在己身。十年来，我以肉身铸炉、窍穴为炭、凡骨作薪，焚尽一身凡尘枷锁。薪尽火传，一举冲开九重天关。天道可鉴，何须向你自证？",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            1.8,
+            1.6,
+            3
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            2
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 8,
+            "path": [
+              [
+                1.8,
+                1.6,
+                3
+              ]
+            ]
+          },
+          "focus": "Lin Feng"
+        }
+      }
+    },
+    {
+      "id": "ugtpvkkoq",
+      "type": "PARENTHETICAL",
+      "content": "(语气淡然，字字如大道钟鸣，震得殿中灵气嗡然共振)"
+    },
+    {
+      "id": "qp36jnf55",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "z4aszgv8t",
+      "type": "ACTION",
+      "content": "殿内寂然。掌门缓缓起身，掌中浮出一枚枯黄古玉简。玉简甫现，万道霞光喷薄而出，一股穿越万古的苍茫威压令众长老齐齐色变。古篆自玉简表面逐字浮起，赫然是：废体涅槃，大道始成。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "wide",
+          "position": [
+            0,
+            1,
+            5
+          ],
+          "lookAt": [
+            0,
+            1.2,
+            -2.8
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 6,
+            "path": [
+              [
+                0,
+                1,
+                5
+              ]
+            ]
+          },
+          "focus": "枯黄古玉简"
+        }
+      }
+    },
+    {
+      "id": "rcazy82hy",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "o9w8pt3kx",
+      "type": "DIALOGUE",
+      "content": "此乃开宗祖师遗留的神念玉简。祖训有言：若有弟子以废灵根打破命数、凡骨登天，便是混沌道体觉醒之兆——当入祖地参悟。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            0,
+            1.6,
+            0.5
+          ],
+          "lookAt": [
+            0,
+            1.8,
+            -2.6
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 6,
+            "path": [
+              [
+                0,
+                1.6,
+                0.5
+              ],
+              [
+                0,
+                1.6,
+                -1.5
+              ]
+            ]
+          },
+          "focus": "掌门"
+        }
+      }
+    },
+    {
+      "id": "qcj3mui6u",
+      "type": "PARENTHETICAL",
+      "content": "(目光灼灼，凝视着始终平静的林枫)"
+    },
+    {
+      "id": "ee516z3or",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "wgn8p50ow",
+      "type": "ACTION",
+      "content": "莫长老瞳孔骤缩，血涌上脸，猛踏一步，殿砖炸裂数道蛛网裂纹。他环顾四周，众长老却尽数垂眸不言。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            2,
+            1.6,
+            1.5
+          ],
+          "lookAt": [
+            -2,
+            1.7,
+            0.5
+          ],
+          "movement": {
+            "type": "pan",
+            "duration": 5,
+            "path": [
+              [
+                2,
+                1.6,
+                1.5
+              ],
+              [
+                2,
+                1.6,
+                1.5
+              ]
+            ],
+            "lookPath": [
+              [
+                -2,
+                1.7,
+                0.5
+              ],
+              [
+                -4.5,
+                1.6,
+                -2.5
+              ],
+              [
+                3.5,
+                1.6,
+                -1.5
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "3q0snk12k",
+      "type": "CHARACTER",
+      "content": "莫长老"
+    },
+    {
+      "id": "ltcadqmfs",
+      "type": "DIALOGUE",
+      "content": "祖地？！那可是唯有金丹境长老才有资格踏入的圣地！掌门，一个炼气九层的小辈，焉能入祖地！这分明是亵渎祖师遗训！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            0,
+            1.6,
+            5
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            2
+          ],
+          "movement": {
+            "type": "orbit",
+            "duration": 6,
+            "path": [
+              [
+                0,
+                1.6,
+                5
+              ],
+              [
+                3,
+                1.6,
+                2
+              ],
+              [
+                0,
+                1.6,
+                -1
+              ],
+              [
+                -3,
+                1.6,
+                2
+              ]
+            ]
+          },
+          "focus": "莫长老"
+        }
+      }
+    },
+    {
+      "id": "9apmzen6a",
+      "type": "PARENTHETICAL",
+      "content": "(怒不可遏，声音在空旷大殿中来回激荡)"
+    },
+    {
+      "id": "iukeom2kj",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "n0s5neskb",
+      "type": "ACTION",
+      "content": "掌门端坐不动，直至话音落地，才缓缓抬起眼帘。那双眼中仿佛藏着万丈星渊，只一眼，便令殿中空气为之凝固。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "extreme-close-up",
+          "position": [
+            0,
+            1.6,
+            -2.3
+          ],
+          "lookAt": [
+            0,
+            1.5,
+            -2.8
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 5,
+            "path": [
+              [
+                0,
+                1.6,
+                -2.3
+              ]
+            ]
+          },
+          "focus": "掌门"
+        }
+      }
+    },
+    {
+      "id": "4s9rpi75j",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "la8aaop9f",
+      "type": "DIALOGUE",
+      "content": "莫悔，你修行三百载，依仗的是灵根；可你何曾领悟，天道从不只有一条死路？混沌道体先废而后立，先死而后生。你今日之怒，不过是傲慢生根，惧见命数无常罢了。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "over-the-shoulder",
+          "position": [
+            0.8,
+            1.7,
+            3.2
+          ],
+          "lookAt": [
+            0,
+            1.5,
+            -2.8
+          ],
+          "movement": {
+            "type": "static",
+            "duration": 6,
+            "path": [
+              [
+                0.8,
+                1.7,
+                3.2
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.5,
+                -2.8
+              ]
+            ]
+          },
+          "focus": "掌门"
+        }
+      }
+    },
+    {
+      "id": "xifpulymc",
+      "type": "PARENTHETICAL",
+      "content": "(声音一沉，最后一句如在铜钟上撞响，久久回荡)"
+    },
+    {
+      "id": "pz8cfzcc3",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "mrnkb9ijk",
+      "type": "ACTION",
+      "content": "莫长老面色青红交替，喉结滚动数次，终于垂首不语。掌门转向林枫，袖袍一挥，一枚金芒玉牌落入其掌中。便在此刻，整座宗门上空骤然暗去——血色残月撕裂云层，东方千里外，一道古老封印发出碎裂轰鸣，滔天魔气如黑潮般翻涌而起。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "wide",
+          "position": [
+            -6,
+            1.6,
+            3
+          ],
+          "lookAt": [
+            -6,
+            1.7,
+            1
+          ],
+          "movement": {
+            "type": "crane",
+            "duration": 10,
+            "path": [
+              [
+                -6,
+                1.6,
+                3
+              ],
+              [
+                0,
+                4.5,
+                1.5
+              ],
+              [
+                0,
+                12,
+                -4
+              ]
+            ],
+            "lookPath": [
+              [
+                -6,
+                1.7,
+                1
+              ],
+              [
+                0,
+                1.6,
+                1.5
+              ],
+              [
+                150,
+                40,
+                0
+              ]
+            ]
+          },
+          "focus": "东方魔气（封印碎裂）"
+        }
+      }
+    },
+    {
+      "id": "qb7yzkrx5",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "3n4j2845u",
+      "type": "DIALOGUE",
+      "content": "万魔渊的封印……竟提前松动了！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            1.5,
+            1.6,
+            -2
+          ],
+          "lookAt": [
+            0,
+            1.7,
+            -3
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 4,
+            "path": [
+              [
+                1.5,
+                1.6,
+                -2
+              ],
+              [
+                1,
+                1.6,
+                -2.5
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.7,
+                -3
+              ],
+              [
+                0,
+                1.7,
+                -3
+              ]
+            ]
+          },
+          "focus": "掌门"
+        }
+      }
+    },
+    {
+      "id": "dly1qqm55",
+      "type": "PARENTHETICAL",
+      "content": "(霍然变色，眸光如电射向天际)"
+    },
+    {
+      "id": "28tf7baew",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "23y7om47i",
+      "type": "SCENE_HEADING",
+      "content": "外景 万魔渊封印处 - 夜",
+      "graybox": {
+        "kind": "scene",
+        "layout": [
+          {
+            "id": "ground",
+            "type": "plane",
+            "role": "environment",
+            "label": "荒原",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "size": [
+              120,
+              0.02,
+              120
+            ],
+            "color": "#1a1a24"
+          },
+          {
+            "id": "abyss",
+            "type": "plane",
+            "role": "environment",
+            "label": "万魔渊",
+            "position": [
+              0,
+              0.02,
+              -22
+            ],
+            "size": [
+              50,
+              0.02,
+              60
+            ],
+            "color": "#04040a"
+          },
+          {
+            "id": "seal_platform",
+            "type": "cylinder",
+            "role": "environment",
+            "label": "封印台",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "size": [
+              12,
+              1,
+              12
+            ],
+            "color": "#3c3c4e"
+          },
+          {
+            "id": "seal_stele",
+            "type": "box",
+            "role": "prop",
+            "label": "镇魔碑",
+            "position": [
+              0,
+              1.2,
+              0
+            ],
+            "size": [
+              1.5,
+              2.5,
+              0.8
+            ],
+            "color": "#6a6a7e"
+          },
+          {
+            "id": "pillar_north",
+            "type": "box",
+            "role": "prop",
+            "label": "封印柱",
+            "position": [
+              0,
+              3,
+              -7
+            ],
+            "size": [
+              1.5,
+              6,
+              1.5
+            ],
+            "color": "#4b4b5e"
+          },
+          {
+            "id": "pillar_east",
+            "type": "box",
+            "role": "prop",
+            "label": "封印柱",
+            "position": [
+              7,
+              3,
+              0
+            ],
+            "size": [
+              1.5,
+              6,
+              1.5
+            ],
+            "color": "#4b4b5e"
+          },
+          {
+            "id": "pillar_south",
+            "type": "box",
+            "role": "prop",
+            "label": "封印柱",
+            "position": [
+              0,
+              3,
+              7
+            ],
+            "size": [
+              1.5,
+              6,
+              1.5
+            ],
+            "color": "#4b4b5e"
+          },
+          {
+            "id": "pillar_west",
+            "type": "box",
+            "role": "prop",
+            "label": "封印柱",
+            "position": [
+              -7,
+              3,
+              0
+            ],
+            "size": [
+              1.5,
+              6,
+              1.5
+            ],
+            "color": "#4b4b5e"
+          },
+          {
+            "id": "mountain_range",
+            "type": "box",
+            "role": "environment",
+            "label": "远山",
+            "position": [
+              0,
+              12,
+              55
+            ],
+            "size": [
+              100,
+              24,
+              20
+            ],
+            "color": "#2f2f3e"
+          },
+          {
+            "id": "moon",
+            "type": "sphere",
+            "role": "environment",
+            "label": "夜月",
+            "position": [
+              -35,
+              40,
+              -85
+            ],
+            "size": [
+              8,
+              8,
+              8
+            ],
+            "color": "#e8e8f0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "w89gocq22",
+      "type": "ACTION",
+      "content": "血色残月如一只淌血的独眼，悬在万魔渊上空。千丈深渊之中，封印石碑通体龟裂，刻于碑面的古符文逐寸崩碎。三道金丹身影盘坐于碑前，灵力凝成百丈光幕，死死抵住深渊裂缝中奔涌而出的黑色魔气。魔气化作无数狰狞鬼面，啃噬光幕，发出金石碎裂的刺耳尖啸。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "wide",
+          "position": [
+            0,
+            2,
+            12
+          ],
+          "lookAt": [
+            -35,
+            40,
+            -85
+          ],
+          "movement": {
+            "type": "pan",
+            "duration": 6,
+            "lookPath": [
+              [
+                -35,
+                40,
+                -85
+              ],
+              [
+                0,
+                1,
+                -3
+              ]
+            ]
+          },
+          "focus": "three Jindan cultivators"
+        }
+      }
+    },
+    {
+      "id": "6x5w3evmd",
+      "type": "CHARACTER",
+      "content": "镇渊长老"
+    },
+    {
+      "id": "q71c2hd66",
+      "type": "DIALOGUE",
+      "content": "快！传讯宗门——封印撑不过一炷香！万魔渊，要破了！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            0.3,
+            1.2,
+            3.8
+          ],
+          "lookAt": [
+            -0.5,
+            1,
+            2
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 4,
+            "path": [
+              [
+                0.3,
+                1.2,
+                3.8
+              ],
+              [
+                0.3,
+                1.2,
+                3
+              ]
+            ]
+          },
+          "focus": "镇渊长老"
+        }
+      }
+    },
+    {
+      "id": "73u2juu1g",
+      "type": "PARENTHETICAL",
+      "content": "(嘴角溢血，双臂骨骼在灵力冲击下噼啪爆响)"
+    },
+    {
+      "id": "h622erqpv",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "7ya1jjxmu",
+      "type": "ACTION",
+      "content": "镇渊长老身后的传讯弟子面无人色，咬破舌尖，一口精血喷入怀中古玉。古玉炸裂，化作一道血色流光冲天而去。几乎同一瞬，光幕在魔气冲击下裂开一角，三头通体缠绕黑焰的魔物探出利爪，扑向最近的一名护法。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0,
+            1.6,
+            -1
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            2
+          ],
+          "movement": {
+            "type": "crane",
+            "duration": 6,
+            "path": [
+              [
+                0,
+                1.6,
+                -1
+              ],
+              [
+                0,
+                15,
+                -1
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.6,
+                2
+              ],
+              [
+                0,
+                30,
+                2
+              ],
+              [
+                0,
+                5,
+                -10
+              ]
+            ]
+          },
+          "focus": "传讯弟子"
+        }
+      }
+    },
+    {
+      "id": "wtajjkwdf",
+      "type": "CHARACTER",
+      "content": "镇渊长老"
+    },
+    {
+      "id": "3gg8ahs8m",
+      "type": "DIALOGUE",
+      "content": "孽障！老夫金丹在此，岂容你等猖獗！苍澜剑诀，第三式——斩渊！",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            2,
+            0.8,
+            -1
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            -2
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 3,
+            "lookPath": [
+              [
+                0.6,
+                1.2,
+                -2
+              ],
+              [
+                0,
+                1.6,
+                -2
+              ]
+            ]
+          },
+          "focus": "镇渊长老"
+        }
+      }
+    },
+    {
+      "id": "09pbpx7v3",
+      "type": "PARENTHETICAL",
+      "content": "(长啸一声，本命飞剑出鞘，剑光如匹练横扫而出)"
+    },
+    {
+      "id": "0qo3m1rpg",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "bgzp2o3n6",
+      "type": "SCENE_HEADING",
+      "content": "内景 太清殿 - 夜"
+    },
+    {
+      "id": "p83atco7o",
+      "type": "ACTION",
+      "content": "血色流光穿门而入，在殿中炸作一道急促的钟鸣。掌门掌中的枯黄玉简应声亮起，浮现“渊破”二字。众长老齐齐变色，莫长老更是霍然抬头。掌门缓缓起身，目光穿过殿门，落在远处天际冲霄而起的魔气黑潮上。"
+    },
+    {
+      "id": "buaynhupz",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "ystmg2w7m",
+      "type": "DIALOGUE",
+      "content": "万魔渊封印崩裂，镇渊长老传讯求援。乾坤、玄炎两位长老率内门弟子即刻驰援，以星斗锁魔阵封住渊口；其余长老坐镇本宗，开启护山大阵，严防魔潮分袭山门。"
+    },
+    {
+      "id": "32dg9xcum",
+      "type": "PARENTHETICAL",
+      "content": "(声色虽沉，却有不容置疑的威压，字字如锤)"
+    },
+    {
+      "id": "1em2my5c0",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "5b73g3vfm",
+      "type": "ACTION",
+      "content": "乾坤、玄炎两位长老领命而出，袖袍卷起两道遁光，瞬息消失在殿外。莫长老面皮抖了抖，终究抱拳低头。掌门的目光却落在殿中始终沉默的林枫身上，指尖金光微凝。"
+    },
+    {
+      "id": "bju50loz0",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "gae8v91mi",
+      "type": "DIALOGUE",
+      "content": "林枫，混沌道体初醒，便逢魔渊剧变。天道冥冥，此非巧合。你可愿随乾坤长老同赴万魔渊，在生死之间，收割你应得的造化？"
+    },
+    {
+      "id": "981mn31n0",
+      "type": "PARENTHETICAL",
+      "content": "(目光深邃，既是试探，亦是托付)"
+    },
+    {
+      "id": "4yhgk3mb0",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "acsuoawo2",
+      "type": "ACTION",
+      "content": "殿中灵气随掌门话音一凝。众长老的目光齐刷刷投向那个仅炼气九层的少年，或疑虑，或凝重。掌中金芒玉牌被灵气轻轻托起，悬于林枫胸前，光晕流转如活物。他缓缓抬眼，目光平而淡。"
+    },
+    {
+      "id": "g7vjeqoyg",
+      "type": "CHARACTER",
+      "content": "林枫"
+    },
+    {
+      "id": "sxajd69oi",
+      "type": "DIALOGUE",
+      "content": "弟子上宗十年，受宗门之恩，亦受宗门之辱。今日既承祖师遗训，便当以这一身凡骨，为宗门挡住劫数。弟子，愿往。"
+    },
+    {
+      "id": "9u5ohffgq",
+      "type": "PARENTHETICAL",
+      "content": "(语气平缓，却有一股说不清道不明的决绝，令莫长老瞳孔微缩)"
+    },
+    {
+      "id": "4z7z93ypw",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "uunmcghkk",
+      "type": "ACTION",
+      "content": "掌门微微颔首，袖中飞出一枚青光古符，烙印在林枫眉心。古符入体，一股温和而澎湃的灵力贯通四肢百骸，周身浮现出一道淡金色的护体光晕。"
+    },
+    {
+      "id": "3nkncf1rx",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "3878dg5v3",
+      "type": "DIALOGUE",
+      "content": "此乃青元护身符，可挡金丹境一击。到了万魔渊，切莫深入渊底，只以混沌道体引动天地灵气，助镇渊长老重凝封印便是。"
+    },
+    {
+      "id": "4e4lo3be2",
+      "type": "PARENTHETICAL",
+      "content": "(语气罕见地缓了一缓，露出一丝长辈的关照)"
+    },
+    {
+      "id": "oy1xutxqt",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "6k4swmdog",
+      "type": "ACTION",
+      "content": "莫长老嘴角翕动，似欲再言，却被掌门冷峻目光钉在原地，只得闷哼一声，别过脸去。掌门不再看他，抬手一挥，殿门轰然洞开，夜风裹着魔气腥潮扑入殿内。远处天际魔气冲霄，隐约可见一道青铜古阵的光柱在黑暗中明灭摇晃。"
+    },
+    {
+      "id": "5ndfneyta",
+      "type": "CHARACTER",
+      "content": "掌门"
+    },
+    {
+      "id": "p3bhcc4qt",
+      "type": "DIALOGUE",
+      "content": "去吧。此劫过后，你若能活着回来，本座便亲自为你开启祖地之门。"
+    },
+    {
+      "id": "x22xj1cqf",
+      "type": "PARENTHETICAL",
+      "content": "(声音沉入风里，像一句迟来的应许)"
+    },
+    {
+      "id": "0ynroeu8a",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "enci8ousr",
+      "type": "SCENE_HEADING",
+      "content": "外景 万魔渊封印处 - 夜"
+    },
+    {
+      "id": "daq0epwui",
+      "type": "ACTION",
+      "content": "万魔渊上空，血色天空被撕开一道千丈豁口，魔气如黑潮奔涌。三道金丹长老的身影已在魔潮中摇摇欲坠。乾坤长老的遁光率先落于渊口，一把抓住浑身是血的镇渊长老，反手掷给身后弟子，随即足下金光暴涨，剑阵轰然压向渊口。"
+    },
+    {
+      "id": "z4k4bki5i",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "dgsa6zwwn",
+      "type": "DIALOGUE",
+      "content": "玄炎！随我结星斗锁魔阵！其余弟子听令——护住那小子！"
+    },
+    {
+      "id": "r073qhjlg",
+      "type": "PARENTHETICAL",
+      "content": "(目光瞥见遁光中踏出的那抹青袍身影，头也不回地喝道)"
+    },
+    {
+      "id": "j2hhavq8l",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "jogpvtwei",
+      "type": "ACTION",
+      "content": "林枫踏出遁光，双脚落于碎裂的封印碑前。脚下大地震颤，魔气如触手缠绕而上，却在触及他周身那层淡金光晕时嘶嘶溃散，仿佛遇上了天敌。他眉心青光微亮，混沌道体本能运转，将方圆十丈内的魔气碾碎、吞噬，如一座万古神炉，焚尽业火。"
+    },
+    {
+      "id": "r2ig05zkd",
+      "type": "CHARACTER",
+      "content": "镇渊长老"
+    },
+    {
+      "id": "p3jjacd4h",
+      "type": "DIALOGUE",
+      "content": "混沌道体……果真现世了！天不亡我太清宗！小友，速在碑前盘坐，老朽以血为引，为你接一道灵脉印记，你将道体灵力灌入碑心，封印便可重凝！"
+    },
+    {
+      "id": "cju1letz2",
+      "type": "PARENTHETICAL",
+      "content": "(满脸血污中爆出狂喜，拼尽残力捏出一道血色印诀)"
+    },
+    {
+      "id": "uv40q0bnw",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "jjptzjkac",
+      "type": "ACTION",
+      "content": "就在血色印诀即将按上石碑的一瞬，深渊之底骤然传来一声震碎天地的怒吼。一只覆满黑鳞、百丈之巨的利爪猛然探出裂缝，五指合拢，将封印石碑连同残存符文一把捏成齑粉！黑气冲天而起，一道庞大模糊的魔影自血月下缓缓立起，两点红芒如地狱之灯，锁定了碑前那道渺小的人影。"
+    },
+    {
+      "id": "mk2d4eky4",
+      "type": "CHARACTER",
+      "content": "未知魔影"
+    },
+    {
+      "id": "stetlcm5p",
+      "type": "DIALOGUE",
+      "content": "混沌道体……三千年了，本座终于等来这具可供夺舍的躯壳！"
+    },
+    {
+      "id": "nfhwpon1i",
+      "type": "PARENTHETICAL",
+      "content": "(低沉如古钟轰鸣，带着令人灵魂冻结的贪婪与狂喜)"
+    },
+    {
+      "id": "p4kf598bc",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "hrmbnhrai",
+      "type": "ACTION",
+      "content": "百丈魔影完全立起，黑焰如万道瀑布垂落，脚下封印阵基寸寸崩碎。乾坤长老的星斗锁魔阵只撑了三个呼吸便裂纹遍布，众弟子被魔威压得跪伏于地，唯林风周身那层淡金光晕仍在嗡鸣颤抖。"
+    },
+    {
+      "id": "0jrm73i7c",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "1l1mzvxo6",
+      "type": "DIALOGUE",
+      "content": "镇渊师兄！地脉印记可还在？这魔物至少是元婴级，光靠锁魔阵撑不住！"
+    },
+    {
+      "id": "idkql8iw0",
+      "type": "PARENTHETICAL",
+      "content": "(一手死死掐诀，嘴角血线不断)"
+    },
+    {
+      "id": "fhs60rd2u",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "7hodk5vxj",
+      "type": "ACTION",
+      "content": "镇渊长老挣扎着从血泊中爬起来，一掌拍在自己胸口，逼出一团本命精血。血珠化作一枚古朴符文，悬浮半空，隐隐勾连地底灵脉。"
+    },
+    {
+      "id": "99cxyjh6t",
+      "type": "CHARACTER",
+      "content": "镇渊长老"
+    },
+    {
+      "id": "pyqp88rsw",
+      "type": "DIALOGUE",
+      "content": "印记还在！但封印碑已碎，必须以道体为媒介直接引灵脉灌入渊口！林风，靠近老朽！"
+    },
+    {
+      "id": "2o2a22bzk",
+      "type": "PARENTHETICAL",
+      "content": "(声音撕裂，浑身血光暴涨)"
+    },
+    {
+      "id": "xj6c3to92",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "0o0lf3248",
+      "type": "ACTION",
+      "content": "林风脚下一蹬，身形如青鸟掠至镇渊长老身前。血色符文径自没入他的眉心，一瞬间，他的视野拔高万里，清晰地看见地底深处一条条灵脉如蛟龙蛰伏。"
+    },
+    {
+      "id": "az35wbsw6",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "uect69led",
+      "type": "DIALOGUE",
+      "content": "长老放心，弟子这条命，今天不打算带回去。诸脉听我号令——起！"
+    },
+    {
+      "id": "f2yepcc3u",
+      "type": "PARENTHETICAL",
+      "content": "(双掌猛地按向大地，混沌道体运转到极致)"
+    },
+    {
+      "id": "m5o6xgvw8",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "g2wnpb9rf",
+      "type": "ACTION",
+      "content": "整座万魔渊的枯竭灵脉被强行唤醒，青白灵光如地火喷涌，顺着林风的经脉汇入指间。魔影愤怒地抬起巨爪，一爪拍碎残余星斗阵纹，朝林风头顶压落。"
+    },
+    {
+      "id": "2lmjeboa3",
+      "type": "CHARACTER",
+      "content": "玄炎长老"
+    },
+    {
+      "id": "1mq2kmv5u",
+      "type": "DIALOGUE",
+      "content": "乾坤！护道体！这一爪我来挡！"
+    },
+    {
+      "id": "60x7i6alu",
+      "type": "PARENTHETICAL",
+      "content": "(长啸一声，全身燃起青色灵焰，决绝地冲天而起)"
+    },
+    {
+      "id": "skr0lv5qq",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "qefpafmbc",
+      "type": "ACTION",
+      "content": "玄炎长老以身为盾，撞上那只覆满黑鳞的巨爪。灵焰轰然炸开，半空中洒下一片焦黑血雨。玄炎长老护体灵光如破灯般熄灭，整个人倒栽进废墟中，再无动静。那只巨爪也被炸得偏移数尺，落在林风身侧三丈外，大地裂开一道百丈深沟。"
+    },
+    {
+      "id": "7ar61ivdp",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "1lagepyga",
+      "type": "DIALOGUE",
+      "content": "玄炎！！——孽畜！老夫与你同归！"
+    },
+    {
+      "id": "x732oinqj",
+      "type": "PARENTHETICAL",
+      "content": "(目眦欲裂，本命飞剑红光大盛，竟开始燃烧剑体)"
+    },
+    {
+      "id": "pe665vir6",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "bzsu2jwlr",
+      "type": "ACTION",
+      "content": "林风只觉两行滚烫的东西从眼角滑落。混沌道体在这一刻轰然蜕变，炼气九层的桎梏被冲开，一缕金丹境才有的金色灵光在丹田凝聚。他怒吼一声，双掌下的灵光化作一道千丈光柱，贯穿渊口。"
+    },
+    {
+      "id": "3a8nkcxdv",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "7xff41x7b",
+      "type": "DIALOGUE",
+      "content": "长老们的血不会白流！封印给我——凝！"
+    },
+    {
+      "id": "h6byso96b",
+      "type": "PARENTHETICAL",
+      "content": "(声音悲怆而暴烈，眉心的青元护身符轰然炸开化作最后一道屏障)"
+    },
+    {
+      "id": "s9epoeq3q",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "dccfne62w",
+      "type": "ACTION",
+      "content": "青白灵光从地底喷涌而出，如同一张仙光织成的大网，将渊口裂缝牢牢网住。魔影半截身躯被压得碎裂，黑焰四溅，发出厉鬼般的长嚎。然而那对红芒猛然锁定林风，一道乌黑细芒无声无息穿过光网，直刺林风眉心。"
+    },
+    {
+      "id": "2blnkwwrt",
+      "type": "CHARACTER",
+      "content": "未知魔影"
+    },
+    {
+      "id": "8kqujn4uo",
+      "type": "DIALOGUE",
+      "content": "你以为封印了本座就能活命？这一缕魔魂，便先收你这副皮囊！"
+    },
+    {
+      "id": "bar3pn3ql",
+      "type": "PARENTHETICAL",
+      "content": "(细芒快得不可思议，已近林风眉心三寸)"
+    },
+    {
+      "id": "8i1d3hs4y",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "o7cufmchk",
+      "type": "ACTION",
+      "content": "千钧一发之际，一道血光从旁射来，将乌黑细芒撞开半寸。是镇渊长老以尽最后力气掷出一枚碎裂玉佩。细芒擦着林风额角飞过，留下焦黑血痕。镇渊长老生机急速流逝，却咧嘴一笑。"
+    },
+    {
+      "id": "7bqyresaz",
+      "type": "CHARACTER",
+      "content": "镇渊长老"
+    },
+    {
+      "id": "7b1t32rfm",
+      "type": "DIALOGUE",
+      "content": "老朽修了一辈子丹道，到头来……还是这块破玉最管用。林风……你很好……比我们这些老骨头……强多了。"
+    },
+    {
+      "id": "c89lp88qi",
+      "type": "PARENTHETICAL",
+      "content": "(声音越来越轻，头缓缓垂落)"
+    },
+    {
+      "id": "27ffj9002",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "z3igdwjh0",
+      "type": "ACTION",
+      "content": "林风胸口剧烈起伏，看着倒下的镇渊长老，又看了看远处废墟中再无动静的玄炎长老和满身染血的乾坤长老。他猛地咬破舌尖，一口精血喷在灵光网上，混沌道体彻底沸腾，万千灵脉如百川入海，同时灌入渊口。"
+    },
+    {
+      "id": "2l66mcwsp",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "psro6g78k",
+      "type": "DIALOGUE",
+      "content": "今日之事，弟子铭记。魔渊不闭，此血不干！"
+    },
+    {
+      "id": "icmv13j5l",
+      "type": "PARENTHETICAL",
+      "content": "(双目染血，却亮得像两盏星灯，声动四野)"
+    },
+    {
+      "id": "n3tcbw8ii",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "o7a14jg4m",
+      "type": "ACTION",
+      "content": "轰——！天地间响起一记深沉钟鸣。千丈光网收缩成一道赤金色封印，死死嵌入地底，将残余魔气尽数碾碎。魔影半截躯体被硬生生压回裂缝，只留下一声不甘的咆哮在夜风中回荡。林风单膝跪地，七窍溢血，手背上却多了一枚漆黑魔印，灼烫如烙铁。他低头看了一眼，缓缓攥紧了拳。"
+    },
+    {
+      "id": "5z1twbsgj",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "70v46plkc",
+      "type": "DIALOGUE",
+      "content": "万魔渊……锁住了。但那只魔……还会回来。"
+    },
+    {
+      "id": "st25rco9c",
+      "type": "PARENTHETICAL",
+      "content": "(仰头望向血月下的天空，目光幽深)"
+    },
+    {
+      "id": "mv43m741q",
+      "type": "TRANSITION",
+      "content": "FADE OUT."
+    },
+    {
+      "id": "9ldeyji6l",
+      "type": "SCENE_HEADING",
+      "content": "INT. 天玄山议事大殿 - 黎明"
+    },
+    {
+      "id": "w5h1eqfu5",
+      "type": "ACTION",
+      "content": "裂顶的殿宇漏下道道金晖，断剑、碎玉与干涸血污横陈一地。乾坤长老半倚主座，怀中抱着玄炎长老那柄断成两截的本命剑，指节捏得发白。殿中弟子垂首跪伏，药炉灰烟与血腥味搅在一处，沉如死水。"
+    },
+    {
+      "id": "1726k1dgy",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "nqs8arodd",
+      "type": "ACTION",
+      "content": "殿门吱呀推开，林风赤着上身蹒跚踏入。绷带透出血痕，右手手背上那枚漆黑魔印正泛着幽蓝微光，仿佛一枚烙入骨髓的活咒。他走到主座前丈许，双膝重重落地。"
+    },
+    {
+      "id": "fvfdpgt77",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "lqvsksje8",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "a317b9761",
+      "type": "DIALOGUE",
+      "content": "镇渊、玄炎两位师弟的命，换你活着回来。你倒好，进门便跪着请罚？林风，你可知你手上那枚印记是什么？"
+    },
+    {
+      "id": "h7a5z303u",
+      "type": "PARENTHETICAL",
+      "content": "(嗓音嘶哑如裂帛，目光却死死钉在林风手背)"
+    },
+    {
+      "id": "urp9wo1of",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "mwonz843t",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "b4p3f0wmi",
+      "type": "DIALOGUE",
+      "content": "弟子不知。封印合拢的刹那，有一缕黑气钻入掌心，此后识海之中总有一个声音唤弟子敞开丹田。"
+    },
+    {
+      "id": "8pm7phu7l",
+      "type": "PARENTHETICAL",
+      "content": "(抬头，眼底金色灵光与一缕黑气纠缠明灭)"
+    },
+    {
+      "id": "ew4vtd324",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "g6kblw6il",
+      "type": "ACTION",
+      "content": "乾坤长老霍然起身，一步抢上前扣住林风手腕。一缕丹火顺着脉门探入，林风体内那枚初凝的金丹灵光外，竟缠绕着一圈细密如蛛网的乌黑魔纹，正沿着经脉缓缓向四肢百骸爬去。乾坤长老脸色惨变，一口鲜血喷出。"
+    },
+    {
+      "id": "i80mh9ap9",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "s2ea5rp1p",
+      "type": "DIALOGUE",
+      "content": "这是那头老魔的本命魔魂印！它没想杀你，它要借你的混沌道体为炉，重新孕育魔胎！"
+    },
+    {
+      "id": "x22w5lxkr",
+      "type": "PARENTHETICAL",
+      "content": "(五指扣得更紧，浑身灵光大乱)"
+    },
+    {
+      "id": "4dipg3ag0",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "1qwpj1xwc",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "wjzi6yi4j",
+      "type": "DIALOGUE",
+      "content": "那便让它借。弟子本就打算用这副皮囊做牢笼，将它永世困于体内。它要在弟子丹田生根，弟子就在丹田里铸一座镇魔塔。"
+    },
+    {
+      "id": "8cfjeds8u",
+      "type": "PARENTHETICAL",
+      "content": "(声音平静却滚烫，仿佛在说一件早已决定好的事)"
+    },
+    {
+      "id": "hib9mok3y",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "05eq8j95n",
+      "type": "ACTION",
+      "content": "满殿哗然。屏风后转出一道白衣身影，青锋出鞘三寸，剑气拂动满殿药灰。正是灵药峰峰主云岫长老，她面容冷厉，眸光如霜刃扫过林风。"
+    },
+    {
+      "id": "3a78tyoi0",
+      "type": "CHARACTER",
+      "content": "云岫长老"
+    },
+    {
+      "id": "8j7yv16kc",
+      "type": "DIALOGUE",
+      "content": "糊涂！元婴老魔的魔魂附体，岂是你小小金丹境能压制的？依门规，身染魔气者当即刻废去修为，逐出山门。乾坤师兄，这个恶人，我来做！"
+    },
+    {
+      "id": "dv8mb662y",
+      "type": "PARENTHETICAL",
+      "content": "(一步踏前，剑吟大作)"
+    },
+    {
+      "id": "7meo7q97f",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "oeckbfz0z",
+      "type": "ACTION",
+      "content": "林风非但没有退避，反而重重叩首，额头磕在青砖上洇出一片血痕。他抬臂，将魔印高悬于顶，朝云岫长老微一躬身。"
+    },
+    {
+      "id": "48ouqgaq8",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "njqmousz9",
+      "type": "DIALOGUE",
+      "content": "弟子愿以命立誓：若有一日魔魂反噬，不劳长老动手，弟子自裁于万魔渊口，以死谢罪。但在那之前，玄炎长老的仇、镇渊长老的仇，弟子要亲手讨回来。长老的剑若不能斩向那只魔，便暂且记在弟子账上。"
+    },
+    {
+      "id": "9bdh7kflh",
+      "type": "PARENTHETICAL",
+      "content": "(声不高，却震得殿中数十盏烛火齐齐一矮)"
+    },
+    {
+      "id": "zameqs6sf",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "vyiw9b9gf",
+      "type": "ACTION",
+      "content": "云岫长老持剑的手顿在半空，良久，缓缓还剑入鞘。乾坤长老闭上眼，扯下半枚乌金令牌扔出，令牌划过一道弧光，斜插进林风面前砖缝中。"
+    },
+    {
+      "id": "z7a5a6ld1",
+      "type": "CHARACTER",
+      "content": "乾坤长老"
+    },
+    {
+      "id": "nfn4xh53d",
+      "type": "DIALOGUE",
+      "content": "掌门佩剑封存在藏剑阁第三层。拿令牌去取剑，然后天亮前滚出山门——寻不到磨灭魔魂印的法子，不许你踏回天玄山半步！"
+    },
+    {
+      "id": "3q3pxebp5",
+      "type": "PARENTHETICAL",
+      "content": "(背过身去，肩头微颤，声音却硬如铁石)"
+    },
+    {
+      "id": "i2d9vtm3c",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "vkgzy3xds",
+      "type": "ACTION",
+      "content": "林风拾起令牌，朝乾坤长老、云岫长老各拜三拜，起身大步走向殿外。晨曦劈面打来，他手背的魔印明灭不定，脚下却沉如磐石。殿外云海翻涌，一道长阶直通藏剑阁，尽头隐隐传来一声压了多年的剑吟，似在等他。"
+    },
+    {
+      "id": "iri6eab3k",
+      "type": "CHARACTER",
+      "content": "林风"
+    },
+    {
+      "id": "xsen1mqsq",
+      "type": "DIALOGUE",
+      "content": "万魔渊，锁住了。那只魔——我会亲手让它魂飞魄散。"
+    },
+    {
+      "id": "gfsher95x",
+      "type": "PARENTHETICAL",
+      "content": "(没有回头，背影没入一片金色晨光之中)"
+    },
+    {
+      "id": "jic3a0tmc",
+      "type": "TRANSITION",
+      "content": "FADE OUT."
+    }
+  ],
+  "lastModified": 1788176271525
+}

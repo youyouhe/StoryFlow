@@ -1,0 +1,1048 @@
+{
+  "id": "hemuxs0mq",
+  "metadata": {
+    "title": "Untitled 穿越 / 历史",
+    "author": "Unknown",
+    "draft": "First Draft",
+    "templateId": "timetravel",
+    "scriptLanguage": "zh"
+  },
+  "blocks": [
+    {
+      "id": "krqyp9zzv",
+      "type": "SCENE_HEADING",
+      "content": "内. 宫廷寝殿 - 古代"
+    },
+    {
+      "id": "mr0kp69d4",
+      "type": "ACTION",
+      "content": "萧萧头痛欲裂地醒来。她看着自己的手——纤细，戴着玉镯。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0,
+            1.4,
+            2.2
+          ],
+          "lookAt": [
+            0,
+            1.4,
+            0
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 3,
+            "path": [
+              [
+                0,
+                1.4,
+                2.2
+              ],
+              [
+                0,
+                1.4,
+                2.2
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.4,
+                0
+              ],
+              [
+                0,
+                0.9,
+                0.2
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "uslju5jcn",
+      "type": "CHARACTER",
+      "content": "侍女"
+    },
+    {
+      "id": "p7mkwd0rf",
+      "type": "DIALOGUE",
+      "content": "公主！您终于醒了！皇上在等您。"
+    },
+    {
+      "id": "mhuzsnnw7",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "pj7ocbx1u",
+      "type": "PARENTHETICAL",
+      "content": "(内心独白)"
+    },
+    {
+      "id": "oyl2kjkns",
+      "type": "DIALOGUE",
+      "content": "皇上？我刚才还在开董事会..."
+    },
+    {
+      "id": "7dre65qvn",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "dum8w1mnd",
+      "type": "ACTION",
+      "content": "萧萧猛地坐起身，环顾四周。雕花木梁、纱帐、青铜香炉——完全陌生的环境。她捏了一下自己的脸颊，疼。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            -0.8,
+            1.4,
+            1.8
+          ],
+          "lookAt": [
+            -3,
+            1.2,
+            0
+          ],
+          "movement": {
+            "type": "handheld",
+            "duration": 5,
+            "path": [
+              [
+                -0.8,
+                1.4,
+                1.8
+              ],
+              [
+                -0.78,
+                1.42,
+                1.79
+              ],
+              [
+                -0.82,
+                1.38,
+                1.81
+              ],
+              [
+                -0.79,
+                1.41,
+                1.8
+              ],
+              [
+                -0.8,
+                1.4,
+                1.8
+              ]
+            ],
+            "lookPath": [
+              [
+                -3,
+                1.2,
+                0
+              ],
+              [
+                -3,
+                3.5,
+                0
+              ],
+              [
+                -3,
+                1,
+                -3
+              ],
+              [
+                -3,
+                1,
+                3
+              ],
+              [
+                -3,
+                1.2,
+                0
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "nrda7uup4",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "jbtbb1nf3",
+      "type": "DIALOGUE",
+      "content": "不是做梦...这布局风格，根本不是我那个写字楼的顶楼会议室。"
+    },
+    {
+      "id": "e1nwum1gh",
+      "type": "PARENTHETICAL",
+      "content": "(低头看着自己身上的绫罗衣裳，指尖微微发抖)"
+    },
+    {
+      "id": "t1ovs19m6",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "y1u9ec0hb",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "p6xo0nsp7",
+      "type": "ACTION",
+      "content": "侍女惶恐地跪倒，额头贴地，双肩止不住发抖。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            1.5,
+            0.7,
+            1.5
+          ],
+          "lookAt": [
+            0,
+            0.2,
+            0
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 4,
+            "path": [
+              [
+                1.5,
+                0.7,
+                1.5
+              ],
+              [
+                0.5,
+                0.7,
+                0.5
+              ]
+            ]
+          },
+          "focus": "侍女"
+        }
+      }
+    },
+    {
+      "id": "isye4a5la",
+      "type": "CHARACTER",
+      "content": "侍女"
+    },
+    {
+      "id": "718tbeteq",
+      "type": "DIALOGUE",
+      "content": "公主殿下，您说什么会议室？奴婢听不懂...您落水受惊，皇上急得不行，让您一醒就去见驾。"
+    },
+    {
+      "id": "pa2x7eiy2",
+      "type": "PARENTHETICAL",
+      "content": "(声音颤抖)"
+    },
+    {
+      "id": "7hml72uvb",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "25r20osjs",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "h57w5g643",
+      "type": "ACTION",
+      "content": "萧萧深吸一口气，强行压下慌乱。她赤脚走到铜镜前，看到镜中一张陌生却精致的脸，眉间带着一丝与她本人相似的倔强。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "over-the-shoulder",
+          "position": [
+            -0.8,
+            1.7,
+            -3
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            -2
+          ],
+          "movement": {
+            "type": "tracking",
+            "duration": 5,
+            "path": [
+              [
+                -0.8,
+                1.7,
+                -3
+              ],
+              [
+                -0.8,
+                1.7,
+                -0.5
+              ],
+              [
+                -0.8,
+                1.7,
+                2
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.6,
+                -2
+              ],
+              [
+                0,
+                1.6,
+                3
+              ],
+              [
+                0,
+                1.6,
+                5
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "ku3fhztju",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "xx5ooarnk",
+      "type": "PARENTHETICAL",
+      "content": "(盯着镜中的自己，压低声音)"
+    },
+    {
+      "id": "o34xgve9c",
+      "type": "DIALOGUE",
+      "content": "穿越？还是综艺整蛊？先确认朝代，再确认身份。我不能慌。"
+    },
+    {
+      "id": "3enx3au01",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "6bms262dl",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "14kqsbbzy",
+      "type": "ACTION",
+      "content": "萧萧转身，目光如面试官般锐利，盯着跪地的侍女连珠炮发问。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "medium",
+          "position": [
+            1.8,
+            1.4,
+            0
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "pan",
+            "duration": 1.2,
+            "path": [
+              [
+                1.8,
+                1.4,
+                0
+              ],
+              [
+                1.8,
+                1.4,
+                0
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                1.6,
+                -3
+              ],
+              [
+                0,
+                1.6,
+                0
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "xf4zvyaoq",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "irkjj2p7a",
+      "type": "DIALOGUE",
+      "content": "现在是什么年号？皇帝的名讳是什么？我——我是谁？"
+    },
+    {
+      "id": "dtx49z80e",
+      "type": "PARENTHETICAL",
+      "content": "(语速极快，语气带着职场惯性的压迫感)"
+    },
+    {
+      "id": "y1yvaibv4",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "bvkwg8wzk",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "3in83n9x1",
+      "type": "ACTION",
+      "content": "侍女吓得脸色苍白，以为公主落水后伤了头脑。她慌忙抬头，眼眶泛红。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0,
+            1.6,
+            1
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 2,
+            "lookPath": [
+              [
+                0,
+                1.6,
+                0
+              ],
+              [
+                0,
+                2.1,
+                -0.2
+              ]
+            ]
+          },
+          "focus": "侍女"
+        }
+      }
+    },
+    {
+      "id": "v500j6daf",
+      "type": "CHARACTER",
+      "content": "侍女"
+    },
+    {
+      "id": "mfj6ifnvk",
+      "type": "DIALOGUE",
+      "content": "公主您别吓奴婢！您是明月公主，圣上最宠的女儿。今年是景和三年啊！"
+    },
+    {
+      "id": "jxx0qa4wh",
+      "type": "PARENTHETICAL",
+      "content": "(几乎是哭腔)"
+    },
+    {
+      "id": "c81hkmkjp",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "7e3e7ol93",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "p2fw4iei0",
+      "type": "ACTION",
+      "content": "萧萧内心翻江倒海。景和三年——她读过那么多史书，这个年号在正史里根本不存在。她终于确认了自己掉进了真正的异时空。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0.3,
+            1.6,
+            0.9
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "handheld",
+            "duration": 4,
+            "path": [
+              [
+                0.3,
+                1.6,
+                0.9
+              ],
+              [
+                0.28,
+                1.62,
+                0.88
+              ],
+              [
+                0.32,
+                1.58,
+                0.86
+              ],
+              [
+                0.29,
+                1.61,
+                0.84
+              ],
+              [
+                0.31,
+                1.59,
+                0.82
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "tn28yd4yh",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "4r00r0r3e",
+      "type": "PARENTHETICAL",
+      "content": "(内心独白，瞳孔微缩)"
+    },
+    {
+      "id": "apnk4g7qw",
+      "type": "DIALOGUE",
+      "content": "景和三年...查无此年。我不仅换了时空，还掉进了一个正史野史都没记载的平行世界。"
+    },
+    {
+      "id": "6yh8vw9jw",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "vj6wywaat",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "wuugao87g",
+      "type": "ACTION",
+      "content": "萧萧垂下眼帘，突然想起自己公司去年立项的那款架空历史游戏——这里的服饰、年号，竟与游戏设定高度重合。她眼中闪过一丝光亮。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0.2,
+            1.6,
+            2.5
+          ],
+          "lookAt": [
+            0.2,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 3,
+            "path": [
+              [
+                0.2,
+                1.6,
+                2.5
+              ],
+              [
+                0.2,
+                1.6,
+                1
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "o7bkw3ahj",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "8t6m7hltj",
+      "type": "PARENTHETICAL",
+      "content": "(低声自语，带着几分难以置信)"
+    },
+    {
+      "id": "s1a9jh8ma",
+      "type": "DIALOGUE",
+      "content": "等一下。如果这是那款游戏的世界线...那剧情走向、关键人物、谁是幕后黑手，我可都记得一清二楚。"
+    },
+    {
+      "id": "4j871oiic",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "e62kjqmnu",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "10gp5rw95",
+      "type": "ACTION",
+      "content": "门外传来太监尖细的催促声，打破了寝殿的寂静。萧萧的眉头拧起，但已从慌乱中迅速挣脱，开始盘算对策。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0,
+            1.6,
+            2
+          ],
+          "lookAt": [
+            0,
+            1.6,
+            0
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 4,
+            "path": [
+              [
+                0,
+                1.6,
+                2
+              ],
+              [
+                0,
+                1.6,
+                1
+              ]
+            ]
+          },
+          "focus": "萧萧"
+        }
+      }
+    },
+    {
+      "id": "g3hc5irfg",
+      "type": "CHARACTER",
+      "content": "太监（内）"
+    },
+    {
+      "id": "ywtuc8mzg",
+      "type": "DIALOGUE",
+      "content": "公主殿下，皇上那儿催着呢，说若是醒了，即刻去御书房相见，有要事相商。"
+    },
+    {
+      "id": "ure7pbm4s",
+      "type": "PARENTHETICAL",
+      "content": "(隔着门，语气恭敬却透着催促)"
+    },
+    {
+      "id": "w8stdrbul",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "2gjjd89un",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "0k3p20e32",
+      "type": "ACTION",
+      "content": "萧萧快速整理衣襟，对着铜镜中陌生的脸露出一个职业化的微笑。她低声对自己说了一句现代职场格言，然后挺直脊背，眼神从惊慌转为掌控。"
+    },
+    {
+      "id": "6b4ir8kw8",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "9tam04ukf",
+      "type": "PARENTHETICAL",
+      "content": "(对着镜中的自己，眼神坚定)"
+    },
+    {
+      "id": "dvxaxj3n4",
+      "type": "DIALOGUE",
+      "content": "既然穿都穿了，就当换了个项目组。项目代号——保命。目标——弄清楚这个世界的规则。这局游戏，我接了。"
+    },
+    {
+      "id": "0zkhucx7k",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "iaywvojzq",
+      "type": "SCENE_HEADING",
+      "content": "INT. 宫廷寝殿 - 日"
+    },
+    {
+      "id": "8eywraiyj",
+      "type": "ACTION",
+      "content": "她转身走向门口，宽大的裙裾扫过石板地面。阳光从门缝里射进来，照在她脸上——那是属于现代职场精英的、胸有成竹的表情。侍女神色惶惶，亦步亦趋地跟上。"
+    },
+    {
+      "id": "ytkfiyr83",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "86mhbb4s5",
+      "type": "PARENTHETICAL",
+      "content": "(脚步一顿，回眸看向侍女，嘴角微扬)"
+    },
+    {
+      "id": "0n523yvvs",
+      "type": "DIALOGUE",
+      "content": "对了，往后在没旁人的时候，别叫我公主。叫我——萧总。"
+    },
+    {
+      "id": "k0aesxd6m",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "rz6wyykqw",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "h8igojvfo",
+      "type": "ACTION",
+      "content": "御书房内熏着龙涎香，案上奏折堆叠如小山，最上面一封落着“北境大都护府”的火漆印。萧萧跨过门槛，目光飞快扫过一圈——窗棂、屏风、侍立在角落的宦官——瞬间完成了一次现代职场式的“进场扫描”。龙案后，皇帝抬眼，眼底藏着打量。"
+    },
+    {
+      "id": "4phxtjd65",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "uz1o7ntgn",
+      "type": "DIALOGUE",
+      "content": "儿臣参见父皇。父皇急着召儿臣来，想必不是叙家常。"
+    },
+    {
+      "id": "j1wiznkx1",
+      "type": "PARENTHETICAL",
+      "content": "(行礼起身，姿态从容，心里却在默念——景和三年，北境急报，与游戏开局一模一样)"
+    },
+    {
+      "id": "4zs6qb0wy",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "ffst46al9",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "qah53ns4l",
+      "type": "ACTION",
+      "content": "皇帝被她的直接噎了一下，随即把一道折子推到她面前：蛮族连破三城，兵锋直指京城。折末一行朱批力透纸背——一个“战”字，旁边却密密麻麻附着六成朝臣署名，皆主和亲。"
+    },
+    {
+      "id": "uw703sdlt",
+      "type": "CHARACTER",
+      "content": "皇帝"
+    },
+    {
+      "id": "2th6vv3oq",
+      "type": "DIALOGUE",
+      "content": "蛮族使者三日后到京，扬言若不应下和亲，便踏平北境。满朝文武吵了三日，无一人敢对朕说实话。你落水前素来主意最多——你说，和，还是战？"
+    },
+    {
+      "id": "kpzuti6wl",
+      "type": "PARENTHETICAL",
+      "content": "(语气沉得能滴出水)"
+    },
+    {
+      "id": "qaurr4qba",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "agakcyaz3",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "bofbxir6q",
+      "type": "ACTION",
+      "content": "萧萧正要开口，余光瞥见西侧屏风下的衣袍边角极不自然地缩了一下——紫金蟒纹，是宰相服色。她心头骤紧：游戏里，景和三年“枢机之变”的起点，正是宰相裴延龄藏身御书房屏风后窃听皇帝与公主密谈。位置、服色、时机，严丝合缝地对上了。"
+    },
+    {
+      "id": "nlu36ouoz",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "h98k2kb4f",
+      "type": "PARENTHETICAL",
+      "content": "(挑眉，笑意坦然)"
+    },
+    {
+      "id": "y9rkq29gz",
+      "type": "DIALOGUE",
+      "content": "儿臣愚钝——想先问问父皇，主和亲的折子，是谁领衔递的？"
+    },
+    {
+      "id": "jshvdj5k9",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "10o3e9jzr",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "x6nxzyvy4",
+      "type": "ACTION",
+      "content": "皇帝微微眯起眼，尚未答话。屏风后传来一声不自然的轻咳，随即一人缓步踱出——裴延龄，紫金蟒袍，腰悬金鱼袋，面容清癯，笑容温雅，目光却冷锐如刀。"
+    },
+    {
+      "id": "wxwknexrb",
+      "type": "CHARACTER",
+      "content": "裴延龄"
+    },
+    {
+      "id": "ly2racu82",
+      "type": "PARENTHETICAL",
+      "content": "(拱手行礼，话里有话)"
+    },
+    {
+      "id": "0jhm8wdmv",
+      "type": "DIALOGUE",
+      "content": "老臣参见陛下。老臣本在偏殿候旨，听闻公主醒转，心内挂念，便不请自来。和亲之策，正是老臣领衔所奏——公主可是有指教？"
+    },
+    {
+      "id": "g78sx5dmv",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "lxjadv7bf",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "1d90upjhf",
+      "type": "ACTION",
+      "content": "萧萧不疾不徐地迎上他的目光。眼前这张脸，与游戏立绘上那个被玩家恨得牙痒的“笑面宰相”几乎重合。在现代，她见过太多同类——善于把贪欲包装成忠心的表演者。她轻笑一声。"
+    },
+    {
+      "id": "vinncu5ib",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "11771xoxn",
+      "type": "PARENTHETICAL",
+      "content": "(语速不快，字字清晰)"
+    },
+    {
+      "id": "653cnowjm",
+      "type": "DIALOGUE",
+      "content": "指教不敢当。儿臣病中无聊，爱听宫人讲些市井闲话——上月十五夜，蛮族使节扮作皮货商人，在西市“胡记茶楼”与裴相府上的二管家密会两个时辰。那茶楼掌柜的账本，可还记着“客人”的每一笔打赏呢。"
+    },
+    {
+      "id": "j5gldhr8v",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "ru8bsjexe",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "3d4f4kcpz",
+      "type": "ACTION",
+      "content": "裴延龄脸上的笑意僵了一瞬，旋即又化开。他在朝堂沉浮数十载，不是三言两语就能吓住的。"
+    },
+    {
+      "id": "b1g6patvm",
+      "type": "CHARACTER",
+      "content": "裴延龄"
+    },
+    {
+      "id": "blb4nrmrw",
+      "type": "PARENTHETICAL",
+      "content": "(向皇帝拱手，声音沉痛)"
+    },
+    {
+      "id": "gnooh13ee",
+      "type": "DIALOGUE",
+      "content": "公主大病初愈，怕是听了小人谗言。老臣府中二管家嗜赌成性，夜行街市是常事。什么账本、什么密会——陛下明鉴，这是有人设局，要构陷老臣啊！"
+    },
+    {
+      "id": "z89iy4no5",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "zsye0eemv",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "k0pb1zodd",
+      "type": "ACTION",
+      "content": "萧萧仿佛早料他会抵赖，手指轻轻叩了叩龙案上那封北境急报——这是她做项目汇报时的老习惯。"
+    },
+    {
+      "id": "4vs29ma1r",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "ve3onuu3y",
+      "type": "PARENTHETICAL",
+      "content": "(语气像在陈述一份季度财报)"
+    },
+    {
+      "id": "d388wwyh2",
+      "type": "DIALOGUE",
+      "content": "裴相莫急。账本只是其一。那夜贵府二管家出府，走的不是正门，是后巷角门，守夜人记得分明。再者——蛮族送裴相的“回礼”，此刻正押在一支打着“江南绸缎”旗号的商队里，明日清晨出城。父皇此刻派一队禁军出城十里，一搜便知。"
+    },
+    {
+      "id": "8b98p8b0d",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "e9jagldrg",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "2kyw3lt8i",
+      "type": "ACTION",
+      "content": "殿内骤然静得能听见烛花爆响。裴延龄嘴唇翕动，喉结上下滚了滚，却终究没能吐出一个字。皇帝的目光在二人之间缓缓逡巡，最终定在萧萧脸上，带着审视的光。"
+    },
+    {
+      "id": "o28xal3g9",
+      "type": "CHARACTER",
+      "content": "皇帝"
+    },
+    {
+      "id": "lt3q89i68",
+      "type": "DIALOGUE",
+      "content": "你昏迷三日，醒来便能掐住当朝宰相的咽喉。朕倒想问问——这些耳目眼线，你何时布下的？"
+    },
+    {
+      "id": "t9e7w8r1g",
+      "type": "PARENTHETICAL",
+      "content": "(手指在龙椅扶手上一下一下地敲)"
+    },
+    {
+      "id": "clndxex09",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "4dkkm9ek9",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "oyoe43exn",
+      "type": "ACTION",
+      "content": "萧萧心头一跳——这个问题，游戏剧本里没有。她飞快运转大脑：明月公主的生母出身谍探世家，临终留有一盒旧人名单，这条设定在游戏里不过是寥寥数笔的背景。她把心一横，决定押上这张牌。"
+    },
+    {
+      "id": "5mj180vxc",
+      "type": "CHARACTER",
+      "content": "萧萧"
+    },
+    {
+      "id": "4qm1wsz3s",
+      "type": "PARENTHETICAL",
+      "content": "(垂眸，语气恳切)"
+    },
+    {
+      "id": "t2n8bmprj",
+      "type": "DIALOGUE",
+      "content": "回父皇——是母妃留的。母妃临终前，将一盒旧人名册交予儿臣，嘱咐说宫中险恶，留作护身。儿臣原只当它是个念想，不敢声张。今日见裴相勾结外敌、危及社稷，儿臣才斗胆和盘托出。若父皇要治儿臣私蓄眼线之罪，儿臣甘愿受罚。"
+    },
+    {
+      "id": "kg9e114h8",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    },
+    {
+      "id": "tgbd4fzxm",
+      "type": "SCENE_HEADING",
+      "content": "INT. 御书房 - 日"
+    },
+    {
+      "id": "bpx6gl83n",
+      "type": "ACTION",
+      "content": "皇帝沉默良久。窗外日影移过金砖地面，殿内静得能听见彼此的呼吸。他终于站起身，绕到萧萧面前，抬手拍了拍她的肩——像寻常父亲，又像君王交付一把利剑。"
+    },
+    {
+      "id": "w5l3jvue5",
+      "type": "CHARACTER",
+      "content": "皇帝"
+    },
+    {
+      "id": "6t15dsfln",
+      "type": "DIALOGUE",
+      "content": "蛮族使者三日后到京。这件事，朕全权交给你。要人给人，要兵给兵——朕倒要看看，朕的女儿能翻出多大的浪来。"
+    },
+    {
+      "id": "x3tbhgcix",
+      "type": "PARENTHETICAL",
+      "content": "(低沉，却带着罕见的信任)"
+    },
+    {
+      "id": "jmhok4061",
+      "type": "TRANSITION",
+      "content": "CUT TO:"
+    }
+  ],
+  "lastModified": 1788106302681
+}

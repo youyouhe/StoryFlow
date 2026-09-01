@@ -1,0 +1,2115 @@
+ ▐▛███▜▌   Claude Code v2.1.220
+▝▜█████▛▘  glm_for_coding · API Usage Billing
+  ▘▘ ▝▝    ~/StoryFlow
+
+
+❯ /clear                                                                        
+
+❯ /model                                                                        
+  ⎿  Set model to glm_for_coding and saved as your default for new sessions
+
+❯ /context 
+  ⎿  Context Usage
+     ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀   glm_for_coding
+     ⛁ ⛀ ⛁ ⛁ ⛀ ⛶ ⛶ ⛶ ⛶ ⛶   25k/200k tokens (12%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ 
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   Estimated usage by category
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System prompt: 1.6k tokens (0.8%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System tools: 17.1k tokens (8.5%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ MCP tools: 2.5k tokens (1.3%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Custom agents: 40 tokens (0.0%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Memory files: 1.5k tokens (0.7%)
+     ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Skills: 2k tokens (1.0%)
+                           ⛁ Messages: 209 tokens (0.1%)
+                           ⛶ Free space: 175k (87.5%)
+
+     MCP tools · /mcp
+     ├ mcp__web-reader__webReader: 236 tokens
+     ├ mcp__web-search-prime__web_search_prime: 285 tokens
+     ├ mcp__zai-mcp-server__analyze_data_visualization: 210 tokens
+     ├ mcp__zai-mcp-server__analyze_image: 185 tokens
+     ├ mcp__zai-mcp-server__analyze_video: 186 tokens
+     ├ mcp__zai-mcp-server__diagnose_error_screenshot: 215 tokens
+     ├ mcp__zai-mcp-server__extract_text_from_screenshot: 221 tokens
+     ├ mcp__zai-mcp-server__ui_diff_check: 205 tokens
+     ├ mcp__zai-mcp-server__ui_to_artifact: 283 tokens
+     ├ mcp__zai-mcp-server__understand_technical_diagram: 215 tokens
+     ├ mcp__zread__get_repo_structure: 88 tokens
+     ├ mcp__zread__read_file: 90 tokens
+     └ mcp__zread__search_doc: 109 tokens
+
+     Custom agents · .claude/agents/
+
+     Plugin
+     └ glm-plan-usage:usage-query-agent: 40 tokens
+
+     Memory files · /memory
+     └ CLAUDE.md: 1.5k tokens
+
+     Skills · /skills
+
+     User
+     ├ karpathy-guidelines: < 20 tokens
+     ├ dbskill-upgrade: < 20 tokens
+     ├ 0-7-edit-dictionary-entry: < 20 tokens
+     ├ 0-7-login-with-credentials: < 20 tokens
+     ├ dbs-deconstruct: < 20 tokens
+     ├ dbs-benchmark: < 20 tokens
+     ├ dbs-diagnosis: < 20 tokens
+     ├ dbs-action: < 20 tokens
+     ├ dbs-content: < 20 tokens
+     ├ dbs-hook: < 20 tokens
+     └ dbs: < 20 tokens
+
+     Plugin (bidsmart-skills)
+     ├ bidsmart-skills:bid-requirements: ~80 tokens
+     ├ bidsmart-skills:bid-ppt: ~50 tokens
+     ├ bidsmart-skills:generate-placeholder-toolkit: < 20 tokens
+     ├ bidsmart-skills:bid-commercial-proposal: < 20 tokens
+     ├ bidsmart-skills:bid-material-extraction: < 20 tokens
+     ├ bidsmart-skills:image-placeholder-guide: < 20 tokens
+     ├ bidsmart-skills:bid-mermaid-diagrams: < 20 tokens
+     ├ bidsmart-skills:design-system-applier: < 20 tokens
+     ├ bidsmart-skills:web-prompt-categories: < 20 tokens
+     ├ bidsmart-skills:bid-material-search: < 20 tokens
+     ├ bidsmart-skills:bid-poc-screenshots: < 20 tokens
+     ├ bidsmart-skills:bid-software-design: < 20 tokens
+     ├ bidsmart-skills:bid-system-decomp: < 20 tokens
+     ├ bidsmart-skills:bid-tech-proposal: < 20 tokens
+     ├ bidsmart-skills:web-builder-initial: < 20 tokens
+     ├ bidsmart-skills:web-builder-update: < 20 tokens
+     ├ bidsmart-skills:web-markers-parser: < 20 tokens
+     ├ bidsmart-skills:bid-evaluation: < 20 tokens
+     ├ bidsmart-skills:bid-verification: < 20 tokens
+     ├ bidsmart-skills:bid-analysis: < 20 tokens
+     ├ bidsmart-skills:bid-assembly: < 20 tokens
+     ├ bidsmart-skills:bid-eval-html: < 20 tokens
+     ├ bidsmart-skills:bid-learner: < 20 tokens
+     ├ bidsmart-skills:bid-manager: < 20 tokens
+     ├ bidsmart-skills:bigmodel-ocr: < 20 tokens
+     ├ bidsmart-skills:project-namer: < 20 tokens
+     ├ bidsmart-skills:bid-audit: < 20 tokens
+     ├ bidsmart-skills:bid-md2doc: < 20 tokens
+     └ bidsmart-skills:bid-poc: < 20 tokens
+
+     Plugin (glm-plan-usage)
+     ├ glm-plan-usage:usage-query-skill: < 20 tokens
+     └ glm-plan-usage:usage-query: < 20 tokens
+
+     Built-in
+     ├ dataviz: ~380 tokens
+     ├ claude-api: ~360 tokens
+     ├ update-config: ~240 tokens
+     ├ run: ~120 tokens
+     ├ loop: ~110 tokens
+     ├ keybindings-help: ~80 tokens
+     ├ fewer-permission-prompts: ~60 tokens
+     ├ simplify: ~60 tokens
+     ├ init: ~20 tokens
+     ├ security-review: < 20 tokens
+     └ review: < 20 tokens
+
+❯ @2026-08-30-133642-command-messageinitcommand-message.txt                     
+  我们上一次的会话，超过了context。我们读取后面部分，继续工作                   
+
+● 我先读取那个会话文件，看看我们上次进行到哪里了。
+
+  Read 1 file (ctrl+o to expand)
+
+● 文件被截断了，只显示了前 1875 行。让我继续读取后面的内容，找到我们中断的位置。
+
+  Read 1 file (ctrl+o to expand)
+
+● 我已读完上次会话的全部记录。我们已经完成了相当多的工作。让我总结一下上次会话的
+  进度和未完成的部分。
+
+  上次会话进度回顾
+
+  已完成并提交到 main 的工作：
+  1. ✅ 修复 8 个 bug（Gemini 模型可配置、续写插入位置、IDEAS 模式、PDF
+  错误处理、i18n 等）
+  2. ✅ 升级 DeepSeek 到 V4 模型 + Gemini 到 3.7 Flash + 显式迁移旧模型名
+  3. ✅ Gemini 推理思考级别（thinking level）控制
+  4. ✅ 配色明暗自动适配（adaptColorForTheme + 中性色回落 + Tailwind v4 dark
+  mode 修复）
+  5. ✅ 分镜文生图提示词功能（ACTION 块，STORYBOARD 模式，Alt+S）
+  6. ✅ CHARACTER 块也支持文生图提示词（一份/角色，同名共享）
+  7. ✅ README 中英双语更新
+
+  最后中断的位置：
+
+  你提出了一个新问题——场景转换控制。核心痛点：当前续写（CONTINUE）只让 AI
+  "advance the current scene logically"，转不转场、何时转全靠 AI
+  自由发挥，用户无法控制叙事节奏。
+
+  我已经进入 plan 模式，并和你确认了两个设计决策：
+  - 场景转换由谁控制 → AI 建议 + 用户确认
+  - AI 建议转场时提供多少信息 → 给标题 + 动机
+
+  但 plan 还没写完——写 plan 时 context 超了 200k 限制（201442 > 200000），API
+  报错，会话被迫退出。
+
+  ---
+  让我确认一下当前代码状态，然后把这个未完成的"场景转换控制"plan 做完。
+
+● Bash(git log --oneline -5 && echo "=== status ===" && git status --short &&
+      echo "=== uncommitted README? ===" && git diff --stat HEAD)
+  ⎿  321c238 feat: support storyboard image prompts for CHARACTER blocks
+     31c60ed Merge feat/storyboard-and-fixes: storyboard image-prompt + bug
+      fixes
+     … +12 lines (ctrl+o to expand)
+
+● 我已读完上次会话的完整记录。上次会话进行到场景转换控制这个新功能的设计规划阶段
+  时，因 context 超限中断了。当前 git 状态：README 的两处更新（分镜功能文档 +
+  快捷键表）还未提交，场景转换控制的代码尚未开始。
+
+  让我先确认一下上次中断时的计划状态——计划文件是否已经保存。
+
+  Listed 1 directory (ctrl+o to expand)
+
+● 我已读完上次会话的完整记录。上次会话在 8 分多钟的思考后，因 API 
+  上下文超限（201442 > 200000）而中断了，中断时正准备为「场景转换控制」功能做最
+  后的方案确认（已确认两步式续写：AI 判断 + 用户确认）。
+
+  让我先核实当前代码状态，确认哪些改动已落地、哪些还悬着。
+
+● Bash(git log --oneline -3 && echo "=== scene-transition code? ===" && grep -rn
+      "decideSceneTransition\|transitionDecision\|TransitionDecision\|continueD
+      irective\|run…)
+  ⎿  321c238 feat: support storyboard image prompts for CHARACTER blocks
+     31c60ed Merge feat/storyboard-and-fixes: storyboard image-prompt + bug
+      fixes
+     … +3 lines (ctrl+o to expand)
+
+● 我已经理清了上次会话的状态。下面是当前情况的汇总：
+
+  上次会话中断点
+
+  我们一直在完善 StoryFlow 剧本编辑器。最近几个提交（已推送到 main）：
+
+  1. feat: add storyboard image-prompt generation and fix core bugs — 修复了 8
+  个 bug（Gemini 模型可配置、续写插入位置、IDEAS 模式、PDF 错误处理、i18n
+  等），并新增 ACTION 块的分镜文生图提示词功能（Alt+S 触发，六要素结构化）
+  2. feat: support storyboard image prompts for CHARACTER blocks —
+  把文生图提示词扩展到 CHARACTER 块，同名角色保留一份提示词
+
+  中断时正在做的事
+
+  你最后提了一个设计问题："续写是接着上一个场景继续，但场景的转换是必然的，这个
+  谁来控制？除了灵感模式，还有别的方法吗？你来 plan 下"
+
+  我进入了 plan mode，确认了两个关键决策（你已答过）：
+  - 场景转换由谁控制 → AI 建议 + 用户确认（推荐）
+  - AI 建议转场时给多少信息 → 给标题 + 动机（推荐）
+
+  我刚写完 plan 并调用 ExitPlanMode 准备让你审阅时，context 超过了 200k 
+  限制（API 400 错误），会话中断了。
+
+  当前仓库状态
+
+  321c238 feat: support storyboard image prompts for CHARACTER blocks  ←
+  最新已推送
+   M README.md              ← 未提交（更新了分镜功能文档）
+   M README.zh-CN.md        ← 未提交（同步中文文档）
+  ?? 2026-08-30-...txt      ← 上次会话的 transcript 文件（无需提交）
+
+  我核对了代码：场景转换控制功能尚未实现（decideSceneTransition、transitionDecis
+  ion 等符号在代码里都不存在）。那个 plan 写好后还没动手就崩了。
+
+  还遗留一个待办
+
+  两个 README 里"启动开发服务器"那段仍写着 http://localhost:5173，但实际端口是
+  3000（vite.config.ts 的 strictPort: 
+  true）。这是早就有的不一致，上次我提了但没修。
+
+  ---
+  现在有三个可以继续的方向，你想先做哪个？
+
+  1. 实现场景转换控制功能（plan 已写好，存在 ~/.claude/plans/shimmying-singing-t
+  reehouse.md）——这是上次中断的主任务。核心思路：CONTINUE 改成两段式——先让 AI
+  判断"该继续当前场景 / 该转场"并给标题+动机，用户三选一（继续/采纳转场/丢弃）后
+  再续写，把转场决策权交还用户。
+  2. 修复 README 的端口错误（5173→3000）并提交推送 README 更新——小修，几分钟。
+  3. 其他你想加的新功能或要核实的点。
+
+  你定方向，我继续。
+
+✻ Churned for 4m 10s
+
+※ recap: We're improving StoryFlow, a screenplay editor; last session added storyboard image-prompts for ACTION/CHARACTER blocks, all pushed to main. README docs are staged uncommitted, and the scene-transition-control feature was planned but never built. Next action: tell me which to do first—implement scene-transition control, or commit the README docs and fix the wrong port. (disable recaps in /config)
+
+❯ 1                                                                             
+
+● 好，继续实现场景转换控制功能。先把 plan 重新确认一遍，然后进入计划模式让你审阅
+  。我先核实几个关键代码位置的当前状态，确保 plan 落地时行号和逻辑对得上。
+
+  Read 1 file (ctrl+o to expand)
+
+● 现在我来读取 App.tsx 的 AI 部分以了解当前的连接逻辑，重点关注
+  executeAI、acceptAISuggestion 和 modal 的 JSX。
+
+  Read 1 file (ctrl+o to expand)
+
+● I now have a complete picture of the current state. The plan is solid and
+  well-specified. Let me present it for approval before implementing — this is a
+  multi-file feature touching the AI service layer, state machine, and Modal
+  UI.
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● I have enough context from the last session's transcript and my re-reading of
+  the code. The plan from shimmying-singing-treehouse.md was solid and already
+  user-approved in its design decisions. Let me verify a few remaining
+  implementation details before finalizing.
+
+  Read 1 file (ctrl+o to expand)
+
+● Explore(Trace CONTINUE flow and AIState wiring)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● While that explores, let me read a few targeted pieces myself to verify the
+  translation structure and the lyrics template — these aren't in the agent's
+  overlap if I'm quick and precise.
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● I have enough context on the lyrics template. Now let me wait for the
+  exploration agent to finish its trace of the CONTINUE flow, then design the
+  plan.
+
+  Read 1 file (ctrl+o to expand)
+● 我已经掌握了所需的所有上下文信息。现在让我等待 Explore agent
+  的报告，以确认我对 modal
+  流程的理解，然后再编写计划。在它运行的同时，让我核实一个细节——即 autoAcceptAI
+  与 CONTINUE 流程的交互方式（这与两步流设计冲突）。
+
+  Read 1 file (ctrl+o to expand)
+
+● I have enough context now. The exploration agent's findings align with what
+  I've read directly. Let me finalize the plan by reading the exact AI modal JSX
+  region once more to confirm the insertion point, then write the plan.
+
+  Read 1 file (ctrl+o to expand)
+
+● 我已经获取了所需的全部上下文。让我检查一下之前保存的计划，以确认我的理解是否与
+  中断前的意图一致，然后制定最终计划。
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● 我在探索智能体的工作进展时，已经有了足够的了解。让我等它确认一下具体的流程追踪
+  细节，同时检查一下 Toolbar 中 AI
+  按钮的连接方式，因为这涉及到“面板入口”的实现。
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Agent "Trace CONTINUE flow and AIState wiring" finished · 5m 50s
+
+● The exploration agent gave me a complete map. I have everything I need to
+  finalize the plan. Let me write it to the plan file.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● 我已经完成了调研和方案设计。基于上次会话中已确认的两个决策（AI 建议 + 
+  用户确认、转场给标题+动机），结合 Explore agent 对 CONTINUE
+  全链路的精确追踪，方案已写入 plan 文件。
+
+  核心设计：把 CONTINUE 从"一次调用直出"改成两段式——
+
+  1. 判断步：新增 decideSceneTransition，让 AI 先判断"该继续当前场景 /
+  该转场"并给标题+动机，产出结构化 JSON（需给 callAIProvider 加 jsonMode
+  参数，Gemini 用 responseMimeType、DeepSeek 用 response_format）。
+  2. 续写步：用户三选一（继续当前场景 / 采纳转场 / 丢弃）后，调
+  generateContinuation 并注入转场指令约束 AI。
+
+  几个我额外补强、上次 plan 没充分考虑的点（基于这次对代码的精确核查）：
+
+  - 状态用 aiState.decision 而非独立 useState——所有 setAIState 调用点同步重置
+  decision，避免脏状态残留（吸取上次 EditorBlock 回落语义没传导的教训）。
+  - autoAcceptAI 兼容——现有 effect 在任何 suggestion
+  非空时立即插入，两段式下需加 !aiState.decision 条件，否则判断步刚出
+  decision、续写步还没跑就被错误触发。
+  - mode tab 切换、lyrics 短路、JSON 解析降级等边界都覆盖了。
+
+  IDEAS / REWRITE / STORYBOARD 保持原样，不动。
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/abundant-beaming-yao.md · /plan to edit
+     续写场景转换控制（Scene-Transition Awareness for CONTINUE）
+
+     Context
+
+     当前 CONTINUE（续写）模式把生成内容直接追加到剧本末尾，AI
+     在续写中途可能自行插入新 [SCENE]
+     场景标题，也可能在同一场景里闷头写下去——场景何时转换完全由 AI 
+     黑箱决定，用户没有掌控权。
+
+     实际剧作中，转场是重要的叙事节奏决策（该不该切、切到哪里、为何切），不应交
+     给 AI 随机决定。本方案让 AI 在续写前先做"场景转换判断"并给出建议，用户确认
+     后再续写，把转场决策权交还用户。
+
+     已与用户确认的决策：
+     - AI 建议 + 用户确认：AI 每次续写前判断"该继续当前场景 /
+     该转场"，给出判断与动机；用户在 AI
+     面板看到建议并选择采纳或否决，保留人工最终决定权。
+     - 转场时给"标题 + 动机"：AI 建议转场时一并给出新场景标题（INT./EXT. 
+     LOCATION - TIME）和一两句转场动机。
+
+     设计：两段式续写流程
+
+     把 CONTINUE 从"一次调用直出剧本块"改为两步：
+
+     1. 判断步（新）：调用新函数 decideSceneTransition，输出结构化判断：action: 
+     'continue'|'transition'、reason、（仅 transition 时）sceneHeading。
+     2. 续写步：用户确认后，按判断结果调 generateContinuation，并把"是否允许转场
+     / 目标场景标题"作为指令注入，约束 AI 行为。
+
+     判断结果展示在 AI 面板（CONTINUE 模式），用户三选一：
+     - 继续当前场景 → 调续写，强制"不要转场，只在当前场景内推进"
+     - 采纳转场（仅当 AI 建议 transition）→
+     调续写，指令含"以给定场景标题开头的新场景"
+     - 丢弃 → 关闭面板
+
+     ▎ 范围控制：IDEAS / REWRITE / STORYBOARD 保持现有一次性调用模式不变，只有 
+     ▎ CONTINUE 走两步。
+
+     数据与状态
+
+     扩展 AIState（types.ts:78-82），新增一个可空字段持有判断结果（不污染剧本数
+     据模型，不开新 useState）：
+
+     export interface SceneTransitionDecision {
+       action: 'continue' | 'transition';
+       reason: string;
+       sceneHeading?: string;   // 仅 transition
+     }
+
+     export interface AIState {
+       isLoading: boolean;
+       suggestion: string | null;
+       error: string | null;
+       decision: SceneTransitionDecision | null;  // 新增：续写前的判断中间态
+     }
+
+     CONTINUE 流程状态机：
+     - 进入 CONTINUE → 自动跑判断步 → aiState.decision 填充，suggestion 仍为
+     null → 面板显示判断卡 + 三按钮
+     - 用户点"继续/采纳" → 跑续写步 → suggestion 填充 → 显示续写结果（沿用现有
+     Insert 流程）
+     - 任何时候"丢弃"/切换 mode tab → 清空 decision 和 suggestion
+
+     用 aiState.decision 而非独立 useState：现有代码所有 setAIState({...})
+     调用点都把 suggestion/error 一起重置，把 decision 也纳入可保证它跟
+     loading/suggestion 同步清空，避免遗留脏状态（这是上次会话教训——EditorBlock
+     回落语义没传导到调用方就是这个坑）。
+
+     autoAcceptAI 兼容（App.tsx:681-685）：现有 autoAcceptAI effect 在任何
+     suggestion 非空时立即 acceptAISuggestion()。两步式下需改成：仅当 suggestion
+     非空 且 decision 已被消费（即 decision === null 或新增一个 phase
+     标记）时才 auto-accept。最简改法：auto-accept effect 条件加 && 
+     !aiState.decision——判断步产出 decision 时不触发自动插入；续写步产出
+     suggestion 且 decision 已清空时才触发。续写步在 setAIState 时同时把
+     decision 置 null。
+
+     服务层：services/geminiService.ts
+
+     新增 decideSceneTransition（镜像现有函数签名风格，复用 callAIProvider）
+
+     export interface SceneTransitionDecision {
+       action: 'continue' | 'transition';
+       reason: string;
+       sceneHeading?: string;
+     }
+
+     export const decideSceneTransition = async (
+       blocks: ScriptBlock[],
+       systemInstruction: string,
+       scriptLanguage: ScriptLanguage,
+       settings: AppSettings,
+     ): Promise<SceneTransitionDecision>
+
+     要点：
+     - 复用 getScriptContext(blocks, 
+     settings.aiContextBlocks)（geminiService.ts:5-12）+
+     getLanguageInstruction（:14-24）。
+     - system prompt：让 AI
+     作为剧本结构顾问，判断当前场景是否已到"该转场"的节点（戏拍完了 / 信息传达完
+     / 节奏需要切换 / 时间地点该变）。强调只判断、不写剧本正文。
+     - 要求严格 JSON 
+     输出：{"action":"transition","reason":"...","sceneHeading":"INT. 反派藏身处
+     - 夜"} 或 {"action":"continue","reason":"..."}。
+     - JSON 模式落地：当前 callAIProvider（geminiService.ts:27-103）两 provider
+     都只返回纯文本，无 responseMimeType/response_format。需给 callAIProvider
+     加一个可选 jsonMode?: boolean 参数：
+       - Gemini 分支（:88-97）：jsonMode 时在 config 加 responseMimeType: 
+     'application/json'（不加 responseSchema，保持改动小；用 prompt 约束 +
+     容错解析兜底）。
+       - DeepSeek 分支（:43-50）：jsonMode 时在 body 加 response_format: { type:
+     'json_object' }。
+       - 默认 false，不影响现有三个函数的调用。
+     - 解析：JSON.parse + 字段校验，失败则降级 {action:'continue', reason: 
+     <原文或错误提示>}（容错，不阻塞续写）。
+
+     改造 generateContinuation（geminiService.ts:106-184）
+
+     新增可选第 6 参数 continueDirective：
+
+     generateContinuation(
+       blocks, systemInstruction, scriptLanguage, settings, templateId,
+       continueDirective?: { allowTransition: boolean; targetSceneHeading?:
+     string }
+     )
+
+     在 user prompt（默认 screenplay 分支 :153-181）追加约束指令：
+     - allowTransition=false → 追加 "You MUST stay in the current scene. Do NOT
+     write a new [SCENE] heading. Continue the existing scene only."
+     - allowTransition=true + targetSceneHeading → 追加 "Begin with a new scene:
+     [SCENE] <targetSceneHeading>. Then write the new scene's content."
+     - 不传（向后兼容）→ 维持原行为（lyrics 分支不受此参数影响，仍走原 lyrics
+     prompt）。
+
+     App.tsx 改动
+
+     executeAI（:402-462）—— CONTINUE 分支拆两步
+
+     把 CONTINUE 分支的"直接 generateContinuation"改为"先
+     decideSceneTransition"：
+
+     - CONTINUE 入口（热键 Alt+C :468-475、面板 Generate 按钮
+     :894-901、handleAIAction :581-585）调 executeAI('CONTINUE') 时，executeAI
+     的 CONTINUE 分支改为调 decideSceneTransition(...)，结果写入 setAIState({ 
+     isLoading:false, suggestion:null, error:null, decision })。
+     - 新增 runContinuation(directive) 函数（useCallback）：用户确认后调用，调
+     generateContinuation(..., directive)，结果写入 setAIState({ 
+     isLoading:false, suggestion:result, error:null, decision:null })，清空
+     decision。
+     - lyrics 短路：CONTINUE 在 currentTemplateId === 'lyrics'
+     时跳过判断步，直接 runContinuation(undefined)
+     维持原行为（歌词无场景概念）。
+     - 其他模式（IDEAS/REWRITE/STORYBOARD）的 setAIState 调用点同步加 decision: 
+     null（确保切换 mode 时清空）。
+
+     AI Modal JSX（:848-950）—— CONTINUE 判断卡
+
+     在 empty-state（!aiState.suggestion，:883-903）和
+     suggestion-state（:911-946）之间插入第三态：当 aiMode === 'CONTINUE' 且
+     aiState.decision 非空 且 !aiState.suggestion 时，渲染判断卡：
+     - 显示 action（继续当前场景 / 建议转场）+ reason。
+     - 若 transition，高亮显示建议的 sceneHeading，用可编辑 <input>
+     让用户改标题后再采纳。
+     - 三个按钮：
+       - "继续当前场景"（t.transitionContinueScene）→
+     runContinuation({allowTransition:false})
+       - "采纳转场"（t.transitionAccept，仅 transition 时可见）→
+     runContinuation({allowTransition:true, targetSceneHeading: editedHeading})
+       - "丢弃"（t.aiDiscard）→ setAIState({isLoading:false, suggestion:null, 
+     error:null, decision:null})
+     - empty-state 的 Generate 按钮在 CONTINUE 模式下：首次（decision 为
+     null）显示"评估场景节奏"触发判断步；判断步 loading 时显示
+     t.aiGenerating/spinner。
+
+     mode tab 切换清空（:867）
+
+     现有 setAIMode(m); setAIState({isLoading:false, suggestion:null, 
+     error:null}) 改为也带 decision: null。
+
+     acceptAISuggestion（:587-678）—— CONTINUE 分支不变
+
+     续写结果（suggestion）的 [TYPE] 块解析 +
+     追加逻辑沿用现状（:636-677），无需改动。STORYBOARD/IDEAS/REWRITE
+     分支也不变。
+
+     auto-accept effect（:681-685）
+
+     条件改为 appSettings.autoAcceptAI && aiState.suggestion && 
+     !aiState.isLoading && !aiState.decision。
+
+     翻译（constants.ts，en + zh 同步）
+
+     en 块（:512-661）和 zh 块（:662-811）各新增一组键，放在
+     aiInsert/storyboardHint 附近（:553 / :703 一带）：
+
+     - transitionAssessing — "Assessing scene rhythm…" / "正在评估场景节奏…"
+     - transitionContinueScene — "Continue current scene" / "继续当前场景"
+     - transitionAccept — "Accept transition" / "采纳转场"
+     - transitionSuggests — "AI suggests:" / "AI 建议："
+     - transitionSceneLabel — "New scene heading" / "新场景标题"
+     - transitionReasonContinue — "Continue in the current scene." /
+     "继续在当前场景内推进。"
+     - transitionReasonTransition — "Transition to a new scene." /
+     "转场到新场景。"
+
+     涉及文件清单
+
+     - types.ts — AIState.decision、新增 SceneTransitionDecision（或放 service
+     里导出）
+     - services/geminiService.ts — callAIProvider 加 jsonMode；新增
+     decideSceneTransition；generateContinuation 加 continueDirective
+     - App.tsx — executeAI CONTINUE 拆两步 + lyrics 短路；新增
+     runContinuation；Modal 判断卡 JSX；所有 setAIState 调用点补
+     decision；auto-accept effect 加 !decision
+     - constants.ts — en/zh 新增 7 个翻译键
+
+     边界与容错
+
+     - 判断步失败（API 错误 / JSON 解析失败）：降级 decision = 
+     {action:'continue', 
+     reason:'<错误或原文>'}，用户仍可点"继续当前场景"完成续写，不阻塞创作。
+     - 向后兼容：generateContinuation 的 continueDirective 可选；callAIProvider
+     的 jsonMode 可选默认 false。老调用路径不受影响。
+     - 非 CONTINUE 模式：IDEAS/REWRITE/STORYBOARD 不引入判断步，保持简洁。
+     - lyrics 模板：CONTINUE 在 lyrics 下跳过判断步直接续写（无场景概念）。
+
+     验证
+
+     1. npm run typecheck + npm run build 通过（重点：AIState.decision
+     字段类型一致性、callAIProvider 新参数、generateContinuation 新参数）。
+     2. npm run dev 端到端手测：
+       - 写一个有 2-3 个 block 的小场景，按 Alt+C → 应先出现"评估中"→
+     显示判断结果（继续/转场 + 动机）。
+       - 点"继续当前场景" → 续写内容不含新 [SCENE]，停留在同一场景。
+       - 若 AI 建议转场，改一下建议标题后点"采纳转场" → 续写以新场景标题开头。
+       - 强行在 AI 建议转场时点"继续当前场景" →
+     仍能在原场景续写（用户否决权有效）。
+       - 丢弃 → 面板关闭，剧本无变化。
+       - lyrics 模板按 Alt+C → 不走判断步，直接续写。
+       - 切换 mode tab（CONTINUE→IDEAS→CONTINUE）→ decision 被清空，不残留。
+       - autoAcceptAI 开启时 → 判断步不触发自动插入；续写步产出后才自动插入。
+     3. 错误路径：临时断网/无效 key → 判断步降级，用户仍可继续当前场景。
+
+     备注（非本任务，待办）
+
+     两个 README 里"启动开发服务器"仍写 http://localhost:5173，实际端口是
+     3000（vite.config.ts
+     strictPort）。这是既有不一致，本任务不顺带修；如需修可单独提。
+
+● Plan approved. Let me set up tasks and start implementing.
+
+● Now let me implement. Starting with types.ts:
+
+● Update(types.ts)
+  ⎿  Added 12 lines
+      75    aiOutputBlocks: number;
+      76  }
+      77  
+      78 +/** AI's scene-transition judgment for the CONTINUE two-step fl
+         +ow.                                                            
+      79 + *  Produced by `decideSceneTransition` before a continuation i
+         +s written. */                                                  
+      80 +export interface SceneTransitionDecision {                     
+      81 +  action: 'continue' | 'transition';                           
+      82 +  reason: string;                                              
+      83 +  sceneHeading?: string; // only present when action === 'trans
+         +ition'                                                         
+      84 +}                                                              
+      85 +                                                               
+      86  export interface AIState {
+      87    isLoading: boolean;
+      88    suggestion: string | null;
+      89    error: string | null;
+      90 +  /** CONTINUE-only intermediate state: the transition decision
+         + shown to the                                                  
+      91 +   *  user before the continuation is actually generated. Clear
+         +ed once the                                                    
+      92 +   *  continuation runs or the user discards/switches mode. */ 
+      93 +  decision: SceneTransitionDecision | null;                    
+      94  }
+      95  
+      96  export interface PDFOptions {
+● Update(services/geminiService.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+      2 -import { ScriptBlock, ScriptLanguage, AppSettings } from "../typ
+        -es";                                                            
+      2 +import { ScriptBlock, ScriptLanguage, AppSettings, SceneTransiti
+        +onDecision } from "../types";                                   
+      3  
+      4  // Helper to get plain text context from blocks
+      5  const getScriptContext = (blocks: ScriptBlock[], count: number):
+          string => {
+
+● Update(services/geminiService.ts)
+  ⎿  Added 7 lines, removed 5 lines
+      25  
+      26  // Generic AI Call Handler
+      27  const callAIProvider = async (
+      28 -  settings: AppSettings,                                       
+      29 -  messages: { system: string, user: string }                   
+      28 +  settings: AppSettings,                                       
+      29 +  messages: { system: string, user: string },                  
+      30 +  jsonMode = false,                                            
+      31  ): Promise<string> => {
+      31 -                                                               
+      32 +                                                               
+      33    // 1. DeepSeek Provider
+      34    if (settings.provider === 'deepseek') {
+      35      if (!settings.deepseekApiKey) throw new Error("DEEPSEEK_KEY
+          _MISSING");
+      35 -                                                               
+      36 +                                                               
+      37      try {
+      38        const response = await fetch('https://api.deepseek.com/ch
+          at/completions', {
+      39          method: 'POST',
+     ...
+      47              { role: "system", content: messages.system },
+      48              { role: "user", content: messages.user }
+      49            ],
+      49 -          stream: false                                        
+      50 +          stream: false,                                       
+      51 +          ...(jsonMode ? { response_format: { type: 'json_objec
+         +t' } } : {})                                                   
+      52          })
+      53        });
+      54  
+
+● Update(services/geminiService.ts)
+  ⎿  Added 1 line
+       94          config: {
+       95            temperature: 0.9,
+       96            thinkingConfig,
+       97 +          ...(jsonMode ? { responseMimeType: 'application/json
+          +' as const } : {}),                                           
+       98          }
+       99        });
+      100        return response.text || '';
+
+● Now update generateContinuation to accept the directive and add the
+  decideSceneTransition function:
+
+● Update(services/geminiService.ts)
+  ⎿  Added 2 lines, removed 1 line
+      111    systemInstruction: string,
+      112    scriptLanguage: ScriptLanguage,
+      113    settings: AppSettings,
+      114 -  templateId?: string                                         
+      114 +  templateId?: string,                                        
+      115 +  continueDirective?: { allowTransition: boolean; targetSceneH
+          +eading?: string }                                             
+      116  ): Promise<string> => {
+      117    const context = getScriptContext(blocks, settings.aiContextB
+           locks);
+      118    const langInstruction = getLanguageInstruction(scriptLanguag
+           e);
+
+● Now add the directive logic into the screenplay userPrompt (the default
+  non-lyrics branch):
+
+● Update(services/geminiService.ts)
+  ⎿  Added 13 lines
+      123    const isLyrics = templateId === 'lyrics';
+      124    const songInfoContext = isLyrics ? extractSongInfo(blocks) :
+            '';
+      125  
+      126 +  // Scene-transition directive injected by the CONTINUE two-s
+          +tep flow.                                                     
+      127 +  // allowTransition=false forces the model to stay in the cur
+          +rent scene;                                                   
+      128 +  // allowTransition=true + targetSceneHeading makes it open a
+          + new scene.                                                   
+      129 +  let directiveInstruction = '';                              
+      130 +  if (continueDirective && !isLyrics) {                       
+      131 +    if (!continueDirective.allowTransition) {                 
+      132 +      directiveInstruction = `\n\nScene-transition rule: You M
+          +UST stay in the current scene. Do NOT write a new [SCENE] head
+          +ing. Continue the existing scene only.`;                      
+      133 +    } else if (continueDirective.targetSceneHeading) {        
+      134 +      directiveInstruction = `\n\nScene-transition rule: Begin
+          + with a new scene heading [SCENE] ${continueDirective.targetSc
+          +eneHeading}. Then write the new scene's content.`;            
+      135 +    }                                                         
+      136 +  }                                                           
+      137 +                                                              
+      138    const userPrompt = isLyrics ? `
+      139    Analyze the provided song lyrics excerpt.
+      140  
+     ...
+      194       [TRANSITION] CUT TO:
+      195  
+      196       Do not use markdown (no **bold**). Do not provide explana
+           tions. Just the labeled script blocks.
+      197 +  ${directiveInstruction}                                     
+      198    `;
+      199  
+      200    return callAIProvider(settings, { system: systemPrompt, user
+           : userPrompt });
+
+● Now add the decideSceneTransition function. Let me append it after
+  generateImagePrompt at the end of the file.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(services/geminiService.ts)
+  ⎿  Added 67 lines
+      444      });
+      445  
+      446    return lines.join('\n');
+      447 +};                                                            
+      448 +                                                              
+      449 +/**                                                           
+      450 + * Decide whether the CONTINUE flow should stay in the current
+          + scene or                                                     
+      451 + * transition to a new one. Runs as the first (judgment) step 
+          +before the                                                    
+      452 + * continuation is actually written; the user confirms the dec
+          +ision in the UI.                                              
+      453 + *                                                            
+      454 + * Returns a structured decision. On any parse/API failure it 
+          +degrades to                                                   
+      455 + * `{ action: 'continue', reason: <fallback> }` so the user ca
+          +n still continue                                              
+      456 + * the current scene — the judgment step never blocks writing.
+      457 + */                                                           
+      458 +export const decideSceneTransition = async (                  
+      459 +  blocks: ScriptBlock[],                                      
+      460 +  systemInstruction: string,                                  
+      461 +  scriptLanguage: ScriptLanguage,                             
+      462 +  settings: AppSettings,                                      
+      463 +): Promise<SceneTransitionDecision> => {                      
+      464 +  const context = getScriptContext(blocks, settings.aiContextB
+          +locks);                                                       
+      465 +  const langInstruction = getLanguageInstruction(scriptLanguag
+          +e);                                                           
+      466 +                                                              
+      467 +  const systemPrompt = `${systemInstruction}\n${langInstructio
+          +n}                                                            
+      468 +                                                              
+      469 +You are a screenplay structure consultant. Your ONLY job is to
+          + judge whether the current scene has reached a natural point t
+          +o transition to a new scene, or whether the story should conti
+          +nue in the same scene.                                        
+      470 +                                                              
+      471 +Transition is warranted when: the current beat is dramatically
+          + complete, key information has been delivered, the rhythm need
+          +s a shift, or time/location/emotional focus should change. Oth
+          +erwise, continue in the current scene.                        
+      472 +                                                              
+      473 +You do NOT write any screenplay content. You only output a JSO
+          +N decision.                                                   
+      474 +                                                              
+      475 +Respond with STRICT JSON and nothing else, in this exact shape
+          +:                                                             
+      476 +- If a transition is warranted: {"action":"transition","reason
+          +":"one sentence on why this beat is done / what the new scene 
+          +should establish","sceneHeading":"INT./EXT. LOCATION - TIME"} 
+      477 +- If continuing: {"action":"continue","reason":"one sentence o
+          +n why the current scene still has more to give"}              
+      478 +                                                              
+      479 +The "reason" must follow the language instruction above. "scen
+          +eHeading" must be a valid scene heading string. Output ONLY th
+          +e JSON object — no markdown, no commentary.`;                 
+      480 +                                                              
+      481 +  const userPrompt = `Current screenplay context (the most rec
+          +ent blocks):                                                  
+      482 +---                                                           
+      483 +${context}                                                    
+      484 +---                                                           
+      485 +                                                              
+      486 +Judge whether the next continuation should stay in the current
+          + scene or transition to a new one. Output only the JSON decisi
+          +on.`;                                                         
+      487 +                                                              
+      488 +  let raw = '';                                               
+      489 +  try {                                                       
+      490 +    raw = await callAIProvider(settings, { system: systemPromp
+          +t, user: userPrompt }, true);                                 
+      491 +  } catch (err: any) {                                        
+      492 +    // Network/key/API error: degrade gracefully so the user c
+          +an still continue.                                            
+      493 +    return { action: 'continue', reason: (err?.message || 'Ass
+          +essment unavailable — continuing in current scene.') };       
+      494 +  }                                                           
+      495 +                                                              
+      496 +  try {                                                       
+      497 +    // Tolerate surrounding markdown fences / stray text by ex
+          +tracting the first {...} block.                               
+      498 +    const match = raw.match(/\{[\s\S]*\}/);                   
+      499 +    const parsed = JSON.parse(match ? match[0] : raw);        
+      500 +    const action = parsed.action === 'transition' ? 'transitio
+          +n' : 'continue';                                              
+      501 +    const reason = typeof parsed.reason === 'string' && parsed
+          +.reason.trim()                                                
+      502 +      ? parsed.reason.trim()                                  
+      503 +      : (action === 'transition' ? 'Transition to a new scene.
+          +' : 'Continue in the current scene.');                        
+      504 +    const decision: SceneTransitionDecision = { action, reason
+          + };                                                           
+      505 +    if (action === 'transition' && typeof parsed.sceneHeading 
+          +=== 'string' && parsed.sceneHeading.trim()) {                 
+      506 +      decision.sceneHeading = parsed.sceneHeading.trim();     
+      507 +    }                                                         
+      508 +    return decision;                                          
+      509 +  } catch {                                                   
+      510 +    // JSON parse failed: degrade, but surface the raw text as
+          + the reason so the                                            
+      511 +    // user sees something rather than an empty box.          
+      512 +    return { action: 'continue', reason: raw.trim().slice(0, 2
+          +00) || 'Assessment unavailable — continuing in current scene.'
+          + };                                                           
+      513 +  }                                                           
+      514  };
+      515   No newline at end of file
+
+● Update(constants.ts)
+  ⎿  Added 7 lines
+      553      aiInsert: "Insert",
+      554      aiCopyIdeas: "Copy",
+      555      aiIdeasHint: "These are creative directions — copy any you
+            like, or discard.",
+      556 +    transitionAssessing: "Assessing scene rhythm…",           
+      557 +    transitionContinueScene: "Continue current scene",        
+      558 +    transitionAccept: "Accept transition",                    
+      559 +    transitionSuggests: "AI suggests:",                       
+      560 +    transitionSceneLabel: "New scene heading",                
+      561 +    transitionReasonContinue: "Continue in the current scene."
+          +,                                                             
+      562 +    transitionReasonTransition: "Transition to a new scene.", 
+      563      aiSavePrompt: "Save to Storyboard",
+      564      aiCopyPrompt: "Copy Prompt",
+      565      storyboardHint: "Contains only the six visual elements (su
+           bject, environment, composition, lighting, material, mood). Ad
+           d aspect ratio and quality boosters yourself in your image too
+           l.",
+
+● Update(constants.ts)
+  ⎿  Added 7 lines
+      710      aiInsert: "插入",
+      711      aiCopyIdeas: "复制",
+      712      aiIdeasHint: "这些是创意方向——可复制需要的部分，或直接放弃
+           。",
+      713 +    transitionAssessing: "正在评估场景节奏…",                 
+      714 +    transitionContinueScene: "继续当前场景",                  
+      715 +    transitionAccept: "采纳转场",                             
+      716 +    transitionSuggests: "AI 建议：",                          
+      717 +    transitionSceneLabel: "新场景标题",                       
+      718 +    transitionReasonContinue: "继续在当前场景内推进。",       
+      719 +    transitionReasonTransition: "转场到新场景。",             
+      720      aiSavePrompt: "保存到分镜",
+      721      aiCopyPrompt: "复制提示词",
+      722      storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影
+           、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+       5  import { Sidebar } from './components/Sidebar';
+       6  import { Toolbar } from './components/Toolbar';
+       7  import { SettingsModal } from './components/SettingsModal';
+       8 -import { generateContinuation, suggestIdeas, rewriteBlock, gene
+         -rateImagePrompt } from './services/geminiService';             
+       8 +import { generateContinuation, suggestIdeas, rewriteBlock, gene
+         +rateImagePrompt, decideSceneTransition } from './services/gemin
+         +iService';                                                     
+       9  import { paginateBlocks } from './utils/pagination';
+      10  import { exportToPDF } from './utils/pdfExport';
+      11  import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, C
+          heck, Loader2, Wand2, Languages, LayoutTemplate, Eye } from 'lu
+          cide-react';
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+      122    const [lang, setLang] = useState<Language>('en');
+      123    const [sidebarOpen, setSidebarOpen] = useState(true);
+      124    const [saveStatus, setSaveStatus] = useState<'saved' | 'savi
+           ng'>('saved');
+      125 -  const [aiState, setAIState] = useState<AIState>({ isLoading:
+          - false, suggestion: null, error: null });                     
+      125 +  const [aiState, setAIState] = useState<AIState>({ isLoading:
+          + false, suggestion: null, error: null, decision: null });     
+      126    const [showAIModal, setShowAIModal] = useState(false);
+      127    const [showTemplateModal, setShowTemplateModal] = useState(f
+           alse);
+      128    const [showSettingsModal, setShowSettingsModal] = useState(f
+           alse);
+
+● Now the executeAI CONTINUE branch — split into decide step, plus a
+  runContinuation helper:
+
+● Update(App.tsx)
+  ⎿  Added 11 lines, removed 2 lines
+      411          return;
+      412      }
+      413  
+      414 -    setAIState({ isLoading: true, suggestion: null, error: nul
+          -l });                                                         
+      414 +    setAIState({ isLoading: true, suggestion: null, error: nul
+          +l, decision: null });                                         
+      415  
+      416      const currentTemplateId = screenplay.metadata.templateId |
+           | 'standard';
+      417      const activeTemplate = TEMPLATES.find(t => t.id === curren
+           tTemplateId) || TEMPLATES[0];
+     ...
+      421      try {
+      422        let result = '';
+      423        if (effectiveMode === 'CONTINUE') {
+      424 -        result = await generateContinuation(screenplay.blocks,
+          - systemInstruction, scriptLanguage, appSettings, currentTempla
+          -teId);                                                        
+      424 +        // Lyrics has no scene concept — skip the transition-d
+          +ecision step and                                              
+      425 +        // continue directly, preserving the original one-shot
+          + behavior.                                                    
+      426 +        if (currentTemplateId === 'lyrics') {                 
+      427 +          result = await generateContinuation(screenplay.block
+          +s, systemInstruction, scriptLanguage, appSettings, currentTemp
+          +lateId);                                                      
+      428 +          setAIState({ isLoading: false, suggestion: result, e
+          +rror: null, decision: null });                                
+      429 +        } else {                                              
+      430 +          // Two-step CONTINUE: first judge whether to stay or
+          + transition.                                                  
+      431 +          const decision = await decideSceneTransition(screenp
+          +lay.blocks, systemInstruction, scriptLanguage, appSettings);  
+      432 +          setAIState({ isLoading: false, suggestion: null, err
+          +or: null, decision });                                        
+      433 +        }                                                     
+      434        } else if (effectiveMode === 'IDEAS') {
+      435          const ideas = await suggestIdeas(screenplay.blocks, sy
+           stemInstruction, scriptLanguage, appSettings, currentTemplateI
+           d);
+      436          result = ideas.join('\n\n');
+
+● Now I need to view and fix the remaining setAIState calls in executeAI
+  (IDEAS/REWRITE/STORYBOARD branches and success/error) so they all carry
+  decision: null:
+
+  Read 1 file (ctrl+o to expand)
+
+● The CONTINUE branch now has two paths: lyrics sets decision:null suggestion,
+  else sets decision and returns early (no result). But lines 462/469 still set
+  state for the non-lyrics CONTINUE path. I need to make the non-lyrics CONTINUE
+  branch return after setting the decision, so it doesn't fall through to the
+  generic setAIState at 462.
+
+● Update(App.tsx)  ⎿  Added 1 line
+      430            // Two-step CONTINUE: first judge whether to stay or
+            transition.
+      431            const decision = await decideSceneTransition(screenp
+           lay.blocks, systemInstruction, scriptLanguage, appSettings);
+      432            setAIState({ isLoading: false, suggestion: null, err
+           or: null, decision });
+      433 +          return;                                             
+      434          }
+      435        } else if (effectiveMode === 'IDEAS') {
+      436          const ideas = await suggestIdeas(screenplay.blocks, sy
+           stemInstruction, scriptLanguage, appSettings, currentTemplateI
+           d);
+
+● 现在修复剩余的 setAIState 调用，使其包含 decision: null：
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+      445        } else if (effectiveMode === 'STORYBOARD') {
+      446          const currentBlock = screenplay.blocks.find(b => b.id 
+           === selectedBlockId);
+      447          if (!currentBlock || (currentBlock.type !== 'ACTION' &
+           & currentBlock.type !== 'CHARACTER')) {
+      448 -            setAIState({ isLoading: false, suggestion: null, e
+          -rror: t.storyboardWrongBlock });                              
+      448 +            setAIState({ isLoading: false, suggestion: null, e
+          +rror: t.storyboardWrongBlock, decision: null });              
+      449              return;
+      450          }
+      451          // Slice the current scene: from the nearest preceding
+            SCENE_HEADING
+
+● Update(App.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      460          const kind = currentBlock.type === 'CHARACTER' ? 'char
+           acter' : 'action';
+      461          result = await generateImagePrompt(sceneBlocks, select
+           edBlockId, systemInstruction, appSettings, kind);
+      462        }
+      463 -      setAIState({ isLoading: false, suggestion: result, error
+          -: null });                                                    
+      463 +      setAIState({ isLoading: false, suggestion: result, error
+          +: null, decision: null });                                    
+      464      } catch (err: any) {
+      465        const msg = err?.message || '';
+      466        // Map known sentinel errors from the service layer to l
+           ocalized messages
+      467        const friendly = msg === 'GEMINI_KEY_MISSING' || msg ===
+            'DEEPSEEK_KEY_MISSING'
+      468          ? t.aiErrorKeyMissing
+      469          : (err?.message || t.aiErrorGeneric);
+      470 -      setAIState({ isLoading: false, suggestion: null, error: 
+          -friendly });                                                  
+      470 +      setAIState({ isLoading: false, suggestion: null, error: 
+          +friendly, decision: null });                                  
+      471      }
+      472    }, [aiMode, appSettings, screenplay.blocks, screenplay.metad
+           ata.scriptLanguage, screenplay.metadata.templateId, selectedBl
+           ockId, t]);
+      473  
+
+● Now add the runContinuation function. Let me place it right after executeAI:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Removed 1 line
+      476  
+      477      // Check AI Shortcuts - Trigger executeAI immediately
+      478      if (appSettings.shortcuts) {
+      479 -        if (checkShortcut(e, appSettings.shortcuts.aiContinue)
+          -) {                                                           
+      479              e.preventDefault();
+      480              setAIMode('CONTINUE');
+      481              setShowAIModal(true);
+
+  Read 1 file (ctrl+o to expand)
+
+● 我的编辑不小心删除了 if (checkShortcut...) 这一行。让我来修复它。
+
+● Update(App.tsx)
+  ⎿  Added 1 line
+      476  
+      477      // Check AI Shortcuts - Trigger executeAI immediately
+      478      if (appSettings.shortcuts) {
+      479 +        if (checkShortcut(e, appSettings.shortcuts.aiContinue)
+          +) {                                                           
+      480              e.preventDefault();
+      481              setAIMode('CONTINUE');
+      482              setShowAIModal(true);
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 32 lines, removed 3 lines
+      591    const handleAIAction = async () => {
+      592      if (isReadOnly) return;
+      593      setShowAIModal(true);
+      594 -    setAIState({ isLoading: false, suggestion: null, error: nu
+          -ll });                                                        
+      594 +    setAIState({ isLoading: false, suggestion: null, error: nu
+          +ll, decision: null });                                        
+      595    };
+      596  
+      597 +  /**                                                         
+      598 +   * Second step of the CONTINUE flow: actually generate the c
+          +ontinuation,                                                  
+      599 +   * constrained by the user's confirmed transition directive.
+      600 +   *   - allowTransition=false  → stay in the current scene (n
+          +o new [SCENE])                                                
+      601 +   *   - allowTransition=true   → open a new scene with the (e
+          +dited) heading                                                
+      602 +   * Called from the decision card's "Continue current scene" 
+          +/ "Accept transition"                                         
+      603 +   * buttons. Undefined directive (lyrics / fallback) preserve
+          +s the original one-shot.                                      
+      604 +   */                                                         
+      605 +  const runContinuation = useCallback(async (directive?: { all
+          +owTransition: boolean; targetSceneHeading?: string }) => {    
+      606 +    const currentTemplateId = screenplay.metadata.templateId |
+          +| 'standard';                                                 
+      607 +    const activeTemplate = TEMPLATES.find(t => t.id === curren
+          +tTemplateId) || TEMPLATES[0];                                 
+      608 +    const systemInstruction = activeTemplate.systemPrompt;    
+      609 +    const scriptLanguage = screenplay.metadata.scriptLanguage 
+          +|| 'en';                                                      
+      610 +                                                              
+      611 +    setAIState({ isLoading: true, suggestion: null, error: nul
+          +l, decision: null });                                         
+      612 +    try {                                                     
+      613 +      const result = await generateContinuation(              
+      614 +        screenplay.blocks, systemInstruction, scriptLanguage, 
+          +appSettings, currentTemplateId, directive                     
+      615 +      );                                                      
+      616 +      setAIState({ isLoading: false, suggestion: result, error
+          +: null, decision: null });                                    
+      617 +    } catch (err: any) {                                      
+      618 +      const msg = err?.message || '';                         
+      619 +      const friendly = msg === 'GEMINI_KEY_MISSING' || msg ===
+          + 'DEEPSEEK_KEY_MISSING'                                       
+      620 +        ? t.aiErrorKeyMissing                                 
+      621 +        : (err?.message || t.aiErrorGeneric);                 
+      622 +      setAIState({ isLoading: false, suggestion: null, error: 
+          +friendly, decision: null });                                  
+      623 +    }                                                         
+      624 +  }, [screenplay.blocks, screenplay.metadata.scriptLanguage, s
+          +creenplay.metadata.templateId, appSettings, t]);              
+      625 +                                                              
+      626    const acceptAISuggestion = useCallback(() => {
+      627        if (!aiState.suggestion) return;
+      628  
+     ...
+      631        if (aiMode === 'IDEAS') {
+      632            navigator.clipboard?.writeText(aiState.suggestion).c
+           atch(() => {});
+      633            setShowAIModal(false);
+      605 -          setAIState({ isLoading: false, suggestion: null, err
+          -or: null });                                                  
+      634 +          setAIState({ isLoading: false, suggestion: null, err
+          +or: null, decision: null });                                  
+      635            return;
+      636        }
+      637  
+     ...
+      640             const content = aiState.suggestion.replace(/^\[.*?\
+           ]\s*/, '');
+      641             handleBlockChange(selectedBlockId, content);
+      642             setShowAIModal(false);
+      614 -           setAIState({ isLoading: false, suggestion: null, er
+          -ror: null }); // Clear suggestion to prevent re-insertion     
+      643 +           setAIState({ isLoading: false, suggestion: null, er
+          +ror: null, decision: null }); // Clear suggestion to prevent r
+          +e-insertion                                                   
+      644             return;
+      645        }
+      646  
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+      668                lastModified: Date.now()
+      669            }));
+      670            setShowAIModal(false);
+      671 -          setAIState({ isLoading: false, suggestion: null, err
+          -or: null });                                                  
+      671 +          setAIState({ isLoading: false, suggestion: null, err
+          +or: null, decision: null });                                  
+      672            return;
+      673        }
+      674  
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 7 lines, removed 4 lines
+      713        }
+      714  
+      715        setShowAIModal(false);
+      716 -      setAIState({ isLoading: false, suggestion: null, error: 
+          -null }); // Clear suggestion to prevent re-insertion          
+      716 +      setAIState({ isLoading: false, suggestion: null, error: 
+          +null, decision: null }); // Clear suggestion to prevent re-ins
+          +ertion                                                        
+      717    }, [aiState.suggestion, aiMode, selectedBlockId, handleBlock
+           Change]);
+      718  
+      719 -  // Auto-accept AI suggestions when enabled                  
+      719 +  // Auto-accept AI suggestions when enabled.                 
+      720 +  // Gated on !aiState.decision: the CONTINUE judgment step pr
+          +oduces a decision                                             
+      721 +  // (not a suggestion), so it must NOT trigger auto-insert — 
+          +only the actual                                               
+      722 +  // continuation suggestion (decision already consumed) shoul
+          +d auto-accept.                                                
+      723    useEffect(() => {
+      721 -      if (appSettings.autoAcceptAI && aiState.suggestion && !a
+          -iState.isLoading) {                                           
+      724 +      if (appSettings.autoAcceptAI && aiState.suggestion && !a
+          +iState.isLoading && !aiState.decision) {                      
+      725            acceptAISuggestion();
+      726        }
+      724 -  }, [aiState.suggestion, aiState.isLoading, appSettings.autoA
+          -cceptAI, acceptAISuggestion]);                                
+      727 +  }, [aiState.suggestion, aiState.isLoading, aiState.decision,
+          + appSettings.autoAcceptAI, acceptAISuggestion]);              
+      728  
+      729    return (
+      730      <div className="flex h-screen w-screen overflow-hidden bg-
+           desk dark:bg-desk-dark text-gray-900 dark:text-gray-100 font-s
+           ans transition-colors duration-300">
+
+● Now the Modal JSX — the mode tab clear, the empty-state Generate button, and
+  the decision card. Let me read the current modal block:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+      906                              {(['CONTINUE', 'IDEAS', 'REWRITE',
+            'STORYBOARD'] as const).map(m => (
+      907                                  <button
+      908                                      key={m}
+      909 -                                    onClick={() => { setAIMode
+          -(m); setAIState({isLoading:false, suggestion:null, error:null}
+          -)}}                                                           
+      909 +                                    onClick={() => { setAIMode
+          +(m); setAIState({isLoading:false, suggestion:null, error:null,
+          + decision:null})}}                                            
+      910                                      className={clsx(
+      911                                          "flex-1 py-2 text-xs f
+           ont-bold rounded-lg transition-all",
+      912                                          aiMode === m
+
+● Update(App.tsx)
+  ⎿  Added 64 lines, removed 2 lines
+      922                              ))}
+      923                          </div>
+      924  
+      925 -                        {!aiState.suggestion && (             
+      925 +                        {!aiState.suggestion && !aiState.decis
+          +ion && (                                                      
+      926                               <div className="text-center py-6"
+           >
+      927                                  <div className="w-16 h-16 bg-i
+           ndigo-50 dark:bg-indigo-900/20 rounded-full flex items-center 
+           justify-center mx-auto mb-4 text-indigo-500 dark:text-indigo-4
+           00">
+      928                                      <Bot className="w-8 h-8" /
+           >
+     ...
+       939                                      className="w-full py-3 bg
+            -indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bo
+            ld text-sm transition-all shadow-lg shadow-indigo-200 dark:sh
+            adow-none hover:shadow-xl active:scale-[0.98] disabled:opacit
+            y-70 disabled:cursor-not-allowed flex items-center justify-ce
+            nter gap-2"
+       940                                  >
+       941                                      {aiState.isLoading ? <Loa
+            der2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w
+            -4 h-4" />}
+       942 -                                    {aiState.isLoading ? t.ai
+           -Generating : t.aiGenerate}                                   
+       942 +                                    {aiState.isLoading       
+       943 +                                      ? (aiMode === 'CONTINUE
+           +' ? t.transitionAssessing : t.aiGenerating)                  
+       944 +                                      : (aiMode === 'CONTINUE
+           +' ? t.transitionContinueScene : t.aiGenerate)}               
+       945                                  </button>
+       946                               </div>
+       947                          )}
+       948  
+       949 +                        {/* CONTINUE two-step: transition dec
+           +ision card (shown after                                      
+       950 +                            the judgment step, before the con
+           +tinuation is written). */}                                   
+       951 +                        {aiMode === 'CONTINUE' && aiState.dec
+           +ision && !aiState.suggestion && (                            
+       952 +                            <div className="space-y-4 animate
+           +-in fade-in zoom-in-95 duration-200">                        
+       953 +                                <div className="p-4 bg-indigo
+           +-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100
+           + dark:border-indigo-900/50">                                 
+       954 +                                    <div className="flex item
+           +s-center gap-2 mb-2">                                        
+       955 +                                        <span className="text
+           +-[11px] font-bold uppercase tracking-wider text-indigo-600 da
+           +rk:text-indigo-400">{t.transitionSuggests}</span>            
+       956 +                                        <span className={clsx
+           +(                                                            
+       957 +                                            "text-[11px] font
+           +-bold px-2 py-0.5 rounded-full",                             
+       958 +                                            aiState.decision.
+           +action === 'transition'                                      
+       959 +                                                ? "bg-amber-1
+           +00 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"  
+       960 +                                                : "bg-emerald
+           +-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emeral
+           +d-300"                                                       
+       961 +                                        )}>                  
+       962 +                                            {aiState.decision
+           +.action === 'transition' ? t.transitionReasonTransition : t.t
+           +ransitionReasonContinue}                                     
+       963 +                                        </span>              
+       964 +                                    </div>                   
+       965 +                                    <p className="text-sm tex
+           +t-gray-700 dark:text-gray-300">{aiState.decision.reason}</p> 
+       966 +                                    {aiState.decision.action 
+           +=== 'transition' && (                                        
+       967 +                                        <div className="mt-3"
+           +>                                                            
+       968 +                                            <label className=
+           +"block text-[10px] font-bold text-gray-500 dark:text-gray-400
+           + uppercase tracking-wider mb-1.5">                           
+       969 +                                                {t.transition
+           +SceneLabel}                                                  
+       970 +                                            </label>         
+       971 +                                            <input           
+       972 +                                                type="text"  
+       973 +                                                value={transi
+           +tionHeadingDraft}                                            
+       974 +                                                onChange={e =
+           +> setTransitionHeadingDraft(e.target.value)}                 
+       975 +                                                className="w-
+           +full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-2
+           +00 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-in
+           +digo-500 focus:border-transparent outline-none transition-all
+           + text-sm font-mono dark:text-white"                          
+       976 +                                            />               
+       977 +                                        </div>               
+       978 +                                    )}                       
+       979 +                                </div>                       
+       980 +                                <div className="flex gap-3"> 
+       981 +                                    <button                  
+       982 +                                        onClick={() => setAIS
+           +tate({isLoading:false, suggestion:null, error:null, decision:
+           +null})}                                                      
+       983 +                                        className="flex-1 py-
+           +2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 ho
+           +ver:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-
+           +colors"                                                      
+       984 +                                    >                        
+       985 +                                        {t.aiDiscard}        
+       986 +                                    </button>                
+       987 +                                    {aiState.decision.action 
+           +=== 'transition' && (                                        
+       988 +                                        <button              
+       989 +                                            onClick={() => ru
+           +nContinuation({ allowTransition: true, targetSceneHeading: tr
+           +ansitionHeadingDraft.trim() })}                              
+       990 +                                            disabled={aiState
+           +.isLoading || !transitionHeadingDraft.trim()}                
+       991 +                                            className="flex-1
+           + py-2.5 text-sm font-semibold bg-amber-600 hover:bg-amber-700
+           + text-white rounded-xl shadow-lg shadow-amber-100 dark:shadow
+           +-none transition-all disabled:opacity-70 disabled:cursor-not-
+           +allowed"                                                     
+       992 +                                        >                    
+       993 +                                            {aiState.isLoadin
+           +g ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> :
+           + null}                                                       
+       994 +                                            {t.transitionAcce
+           +pt}                                                          
+       995 +                                        </button>            
+       996 +                                    )}                       
+       997 +                                    <button                  
+       998 +                                        onClick={() => runCon
+           +tinuation({ allowTransition: false })}                       
+       999 +                                        disabled={aiState.isL
+           +oading}                                                      
+      1000 +                                        className="flex-1 py-
+           +2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 t
+           +ext-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-
+           +none transition-all disabled:opacity-70 disabled:cursor-not-a
+           +llowed"                                                      
+      1001 +                                    >                        
+      1002 +                                        {aiState.isLoading ? 
+           +<Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : nul
+           +l}                                                           
+      1003 +                                        {t.transitionContinue
+           +Scene}                                                       
+      1004 +                                    </button>                
+      1005 +                                </div>                       
+      1006 +                            </div>                           
+      1007 +                        )}                                   
+      1008 +                                                             
+      1009                          {aiState.error && (
+      1010                              <div className="p-4 bg-red-50 dar
+            k:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounde
+            d-xl border border-red-100 dark:border-red-900/50">
+      1011                                  {aiState.error}
+
+● Now I need to add the transitionHeadingDraft state and sync it when the
+  decision arrives.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 3 lines
+      128    const [showSettingsModal, setShowSettingsModal] = useState(f
+           alse);
+      129    const [aiMode, setAIMode] = useState<AIMode>('CONTINUE');
+      130    const [isReadOnly, setIsReadOnly] = useState(false);
+      131 +  // Editable draft of the AI-suggested transition scene headi
+          +ng, so the user                                               
+      132 +  // can tweak it before accepting a transition in the CONTINU
+          +E two-step flow.                                              
+      133 +  const [transitionHeadingDraft, setTransitionHeadingDraft] = 
+          +useState('');                                                 
+      134    
+      135    // States for title editing
+      136    const [headerTitleEditing, setHeaderTitleEditing] = useState
+           (false);
+
+● Update(App.tsx)
+  ⎿  Added 1 line
+      432          } else {
+      433            // Two-step CONTINUE: first judge whether to stay or
+            transition.
+      434            const decision = await decideSceneTransition(screenp
+           lay.blocks, systemInstruction, scriptLanguage, appSettings);
+      435 +          setTransitionHeadingDraft(decision.sceneHeading || '
+          +');                                                           
+      436            setAIState({ isLoading: false, suggestion: null, err
+           or: null, decision });
+      437            return;
+      438          }
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1029                                  </div>
+      1030                                  <div className="flex gap-3">
+      1031                                      <button
+      1032 -                                        onClick={() => setAIS
+           -tate({isLoading:false, suggestion: null, error: null})}      
+      1032 +                                        onClick={() => setAIS
+           +tate({isLoading:false, suggestion: null, error: null, decisio
+           +n: null})}                                                   
+      1033                                          className="flex-1 py-
+            2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 ho
+            ver:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-
+            colors"
+      1034                                      >
+      1035                                          {t.aiDiscard}
+
+  Read 1 file (ctrl+o to expand)
+
+● Good — the suggestion-state JSX is intact. Now let me verify the build.
+● Bash(npm run typecheck 2>&1 | tail -30; echo "EXIT: ${PIPESTATUS[0]}")
+  ⎿  > storyflow@0.0.0 typecheck
+     > tsc --noEmit
+
+     EXIT: 0
+
+● Bash(npm run build 2>&1 | tail -10; echo "EXIT: ${PIPESTATUS[0]}")
+  ⎿  computing gzip size...
+     dist/index.html                   1.38 kB │ gzip:   0.63 kB
+     dist/assets/index-CCAgWF8I.css   47.92 kB │ gzip:   8.15 kB
+     … +10 lines (ctrl+o to expand)
+
+● Bash(curl -s http://localhost:3000 -o /dev/null -w "%{http_code}" 2>&1 || echo
+      "dev server not running")
+  ⎿  000dev server not running
+
+● Typecheck 和 build 都通过了。场景转换控制功能已实现完成。
+
+  实现总结
+
+  把 CONTINUE 从"一次直出"改成两段式：AI 先判断该继续当前场景还是转场（给标题+动
+  机），用户三选一确认后再续写，把转场决策权交还用户。
+
+  改动文件
+
+  文件: types.ts
+  改动: 新增 SceneTransitionDecision；AIState 加 decision 字段
+  ────────────────────────────────────────
+  文件: services/geminiService.ts
+  改动: callAIProvider 加 jsonMode 参数（Gemini responseMimeType/DeepSeek
+  response_format）；新增 decideSceneTransition（结构化 JSON 判断 +
+  容错降级）；generateContinuation 加 continueDirective 约束（强制留场 /
+  开新场景）
+  ────────────────────────────────────────
+  文件: constants.ts
+  改动: en/zh 各新增 7
+  个翻译键（transitionAssessing/transitionContinueScene/transitionAccept 等）
+  ────────────────────────────────────────
+  文件: App.tsx
+  改动: executeAI CONTINUE 分支拆两步（判断步，lyrics 短路跳过）；新增
+  runContinuation；Modal 新增判断卡 UI（显示建议+可编辑标题+三按钮）；所有
+  setAIState 调用点补 decision；auto-accept effect 加 !decision 门控
+
+  关键设计点
+
+  1. JSON 模式：判断步要求严格 JSON 输出。callAIProvider 的 jsonMode 对 Gemini
+  注入 responseMimeType: 'application/json'、对 DeepSeek 注入 response_format: 
+  {type:'json_object'}。默认 false，不影响现有三个函数。
+  2. 容错降级：判断步失败（API 错误/JSON 解析失败）→ 降级为 {action:'continue', 
+  reason:...}，用户仍可点"继续当前场景"完成续写，不阻塞创作。
+  3. 用户否决权：即便 AI 建议转场，"继续当前场景"按钮始终可见——用户可无视建议强
+  行在原场景续写。转场标题用 <input> 可编辑后再采纳。
+  4. state 同步：用 aiState.decision 而非独立 useState，所有 setAIState({...})
+  调用点统一带 decision，避免切换 mode/丢弃时残留脏状态（上次 EditorBlock
+  回落语义没传导的坑）。
+  5. autoAcceptAI 兼容：effect 条件加 !aiState.decision——判断步产出 decision
+  时不触发自动插入，只有续写步产出 suggestion（decision 已清空）才自动接受。
+  6. lyrics 短路：歌词模板无场景概念，CONTINUE 跳过判断步直接续写，维持原行为。
+
+  验证
+
+  - npm run typecheck ✅ 0 错误
+  - npm run build ✅ 构建成功（仅有既有 chunk 体积告警，未引入）
+
+  dev server 之前停了。需要我重新启动 npm run dev
+  让你在浏览器核实吗？核实时重点看：
+  1. 写 2-3 个 block 的小场景，按 Alt+C → 应先"评估场景节奏"→
+  显示判断卡（继续/转场+动机）
+  2. 点"继续当前场景" → 续写不含新 [SCENE]，停留同场景
+  3. AI 建议转场时，改标题后点"采纳转场" → 续写以新场景标题开头
+  4. lyrics 模板按 Alt+C → 不走判断步，直接续写
+
+  要提交到 main 的话也说一声。另外那两个 README
+  的端口错误（5173→3000）仍待修，要不要一并处理？
+
+✻ Cogitated for 49m 4s
+
+※ recap: Goal: improve StoryFlow editor; just implemented scene-transition control for CONTINUE (two-step decide-then-write flow), typecheck and build passing. Next action: start the dev server so you can verify the new flow in the browser. (disable recaps in /config)
+
+❯ 我们已经基于action和character能生成文生图的prompt了。增加del功能。            
+
+● 我先看一下当前分镜提示词的存储和 UI，确认删除入口应该放哪里、删 CHARACTER
+  时是否要联动同名块。
+
+  Read 2 files (ctrl+o to expand)
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  import React, { useRef, useEffect, useState } from 'react';
+      2  import { ScriptBlock, BlockType, Theme } from '../types';
+      3  import { clsx } from 'clsx';
+      4 -import { Image as ImageIcon, ChevronDown, ChevronRight, Copy } f
+        -rom 'lucide-react';                                             
+      4 +import { Image as ImageIcon, ChevronDown, ChevronRight, Copy, Tr
+        +ash2 } from 'lucide-react';                                     
+      5  import { adaptColorForTheme } from '../utils/color';
+      6  
+      7  interface EditorBlockProps {
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 2 lines
+      18    theme?: Theme;
+      19    imagePromptLabel?: string;
+      20    imagePromptCopyLabel?: string;
+      21 +  imagePromptDeleteLabel?: string;                             
+      22 +  onImagePromptDelete?: (id: string) => void;                  
+      23  }
+      24  
+      25  // Map styles for screenplay formatting with distinct light/dar
+          k themes
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      55    customColor,
+      56    theme = 'light',
+      57    imagePromptLabel = 'Image Prompt',
+      58 -  imagePromptCopyLabel = 'Copy'                                
+      58 +  imagePromptCopyLabel = 'Copy',                               
+      59 +  imagePromptDeleteLabel = 'Delete',                           
+      60 +  onImagePromptDelete                                          
+      61  }: EditorBlockProps) => {
+      62    const textareaRef = useRef<HTMLTextAreaElement>(null);
+      63    const [promptExpanded, setPromptExpanded] = useState(true);
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      153                    setCopied(true);
+      154                    setTimeout(() => setCopied(false), 1500);
+      155                  }}
+      156 -                className="mt-2 inline-flex items-center gap-1
+          - text-[10px] font-semibold text-indigo-600 dark:text-indigo-40
+          -0 hover:text-indigo-800 dark:hover:text-indigo-300 transition-
+          -colors"                                                       
+      156 +                className="inline-flex items-center gap-1 text
+          +-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hov
+          +er:text-indigo-800 dark:hover:text-indigo-300 transition-color
+          +s"                                                            
+      157                >
+      158                  <Copy className="w-3 h-3" />
+      159                  {copied ? '✓' : imagePromptCopyLabel}
+      160                </button>
+      161 +              {!readOnly && onImagePromptDelete && (          
+      162 +                <button                                       
+      163 +                  type="button"                               
+      164 +                  onClick={() => onImagePromptDelete(block.id)
+          +}                                                             
+      165 +                  className="ml-3 inline-flex items-center gap
+          +-1 text-[10px] font-semibold text-gray-400 hover:text-red-500 
+          +dark:text-gray-500 dark:hover:text-red-400 transition-colors" 
+      166 +                >                                             
+      167 +                  <Trash2 className="w-3 h-3" />              
+      168 +                  {imagePromptDeleteLabel}                    
+      169 +                </button>                                     
+      170 +              )}                                              
+      171              </div>
+      172            )}
+      173          </div>
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Error editing file
+
+  Read 1 file (ctrl+o to expand)
+
+● 结构已经正确了（copy + delete 两个按钮并列在 mt-2 flex 容器里）。我把 copy
+  按钮上的 mt-2 去掉，改由外层容器统一控制间距，并确认容器是 flex 布局。
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 20 lines, removed 18 lines
+      146                <pre className="text-[11px] leading-relaxed font
+           -mono whitespace-pre-wrap text-indigo-900/80 dark:text-indigo-
+           200/70 select-text">
+      147                  {block.imagePrompt}
+      148                </pre>
+      149 -              <button                                         
+      150 -                type="button"                                 
+      151 -                onClick={() => {                              
+      152 -                  navigator.clipboard?.writeText(block.imagePr
+          -ompt || '').catch(() => {});                                  
+      153 -                  setCopied(true);                            
+      154 -                  setTimeout(() => setCopied(false), 1500);   
+      155 -                }}                                            
+      156 -                className="inline-flex items-center gap-1 text
+          --[10px] font-semibold text-indigo-600 dark:text-indigo-400 hov
+          -er:text-indigo-800 dark:hover:text-indigo-300 transition-color
+          -s"                                                            
+      157 -              >                                               
+      158 -                <Copy className="w-3 h-3" />                  
+      159 -                {copied ? '✓' : imagePromptCopyLabel}         
+      160 -              </button>                                       
+      161 -              {!readOnly && onImagePromptDelete && (          
+      149 +              <div className="mt-2 flex items-center">        
+      150                  <button
+      151                    type="button"
+      164 -                  onClick={() => onImagePromptDelete(block.id)
+          -}                                                             
+      165 -                  className="ml-3 inline-flex items-center gap
+          --1 text-[10px] font-semibold text-gray-400 hover:text-red-500 
+          -dark:text-gray-500 dark:hover:text-red-400 transition-colors" 
+      152 +                  onClick={() => {                            
+      153 +                    navigator.clipboard?.writeText(block.image
+          +Prompt || '').catch(() => {});                                
+      154 +                    setCopied(true);                          
+      155 +                    setTimeout(() => setCopied(false), 1500); 
+      156 +                  }}                                          
+      157 +                  className="inline-flex items-center gap-1 te
+          +xt-[10px] font-semibold text-indigo-600 dark:text-indigo-400 h
+          +over:text-indigo-800 dark:hover:text-indigo-300 transition-col
+          +ors"                                                          
+      158                  >
+      167 -                  <Trash2 className="w-3 h-3" />              
+      168 -                  {imagePromptDeleteLabel}                    
+      159 +                  <Copy className="w-3 h-3" />                
+      160 +                  {copied ? '✓' : imagePromptCopyLabel}       
+      161                  </button>
+      170 -              )}                                              
+      162 +                {!readOnly && onImagePromptDelete && (        
+      163 +                  <button                                     
+      164 +                    type="button"                             
+      165 +                    onClick={() => onImagePromptDelete(block.i
+          +d)}                                                           
+      166 +                    className="ml-3 inline-flex items-center g
+          +ap-1 text-[10px] font-semibold text-gray-400 hover:text-red-50
+          +0 dark:text-gray-500 dark:hover:text-red-400 transition-colors
+          +"                                                             
+      167 +                  >                                           
+      168 +                    <Trash2 className="w-3 h-3" />            
+      169 +                    {imagePromptDeleteLabel}                  
+      170 +                  </button>                                   
+      171 +                )}                                            
+      172 +              </div>                                          
+      173              </div>
+      174            )}
+      175          </div>
+
+● 现在在 App.tsx 中添加 delete handler 和翻译键：
+
+● Update(App.tsx)
+  ⎿  Added 28 lines
+      219      }));
+      220    }, [isReadOnly]);
+      221  
+      222 +  // Delete a block's storyboard image prompt. For CHARACTER b
+          +locks, the same                                               
+      223 +  // character may appear in multiple blocks sharing one promp
+          +t — deleting on                                               
+      224 +  // one occurrence clears the prompt from ALL same-name CHARA
+          +CTER blocks, so                                               
+      225 +  // "one prompt per character" stays consistent (mirrors the 
+          +save propagation).                                            
+      226 +  const handleDeleteImagePrompt = useCallback((id: string) => 
+          +{                                                             
+      227 +    if (isReadOnly) return;                                   
+      228 +    setScreenplay(prev => {                                   
+      229 +      const target = prev.blocks.find(b => b.id === id);      
+      230 +      const isCharacter = target?.type === 'CHARACTER';       
+      231 +      const charName = isCharacter ? target!.content.trim() : 
+          +'';                                                           
+      232 +      return {                                                
+      233 +        ...prev,                                              
+      234 +        blocks: prev.blocks.map(b => {                        
+      235 +          if (b.id === id) {                                  
+      236 +            const { imagePrompt, ...rest } = b;               
+      237 +            return imagePrompt ? rest : b;                    
+      238 +          }                                                   
+      239 +          if (isCharacter && b.type === 'CHARACTER' && b.conte
+          +nt.trim() === charName && b.imagePrompt) {                    
+      240 +            const { imagePrompt, ...rest } = b;               
+      241 +            return rest;                                      
+      242 +          }                                                   
+      243 +          return b;                                           
+      244 +        }),                                                   
+      245 +        lastModified: Date.now()                              
+      246 +      };                                                      
+      247 +    });                                                       
+      248 +  }, [isReadOnly]);                                           
+      249 +                                                              
+      250    const handleCreateFromTemplate = (templateId: string) => {
+      251      const template = TEMPLATES.find(t => t.id === templateId) 
+           || TEMPLATES[0];
+      252      
+
+● Update(App.tsx)
+  ⎿  Added 2 lines
+      900                                  theme={theme}
+      901                                  imagePromptLabel={t.storyboard
+           PromptLabel}
+      902                                  imagePromptCopyLabel={t.aiCopy
+           Prompt}
+      903 +                                imagePromptDeleteLabel={t.aiDe
+          +letePrompt}                                                   
+      904 +                                onImagePromptDelete={handleDel
+          +eteImagePrompt}                                               
+      905                              />
+      906                          </div>
+      907                      ))}
+
+● Update(constants.ts)
+  ⎿  Added 1 line
+      562      transitionReasonTransition: "Transition to a new scene.",
+      563      aiSavePrompt: "Save to Storyboard",
+      564      aiCopyPrompt: "Copy Prompt",
+      565 +    aiDeletePrompt: "Delete",                                 
+      566      storyboardHint: "Contains only the six visual elements (su
+           bject, environment, composition, lighting, material, mood). Ad
+           d aspect ratio and quality boosters yourself in your image too
+           l.",
+      567      storyboardWrongBlock: "Select an ACTION or CHARACTER block
+            to generate a storyboard prompt.",
+      568      storyboardPromptLabel: "Image Prompt",
+● Update(constants.ts)
+  ⎿  Added 1 line
+      720      transitionReasonTransition: "转场到新场景。",
+      721      aiSavePrompt: "保存到分镜",
+      722      aiCopyPrompt: "复制提示词",
+      723 +    aiDeletePrompt: "删除",                                   
+      724      storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影
+           、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
+      725      storyboardWrongBlock: "请选中一个动作块或角色块再生成分镜
+           提示词。",
+      726      storyboardPromptLabel: "文生图提示词",
+
+● Bash(npm run typecheck 2>&1 | tail -20; echo "EXIT: ${PIPESTATUS[0]}")
+  ⎿  > storyflow@0.0.0 typecheck
+     > tsc --noEmit
+
+     EXIT: 0
+
+● Bash(npm run build 2>&1 | tail -6; echo "EXIT: ${PIPESTATUS[0]}")
+  ⎿  (!) Some chunks are larger than 500 kB after minification. Consider:
+     - Using dynamic import() to code-split the application
+     - Use build.rollupOptions.output.manualChunks to improve chunking: htt
+     … +5 lines (ctrl+o to expand)
+
+● Typecheck + build 通过。已为分镜提示词卡片加上删除功能。
+
+  改动
+
+  ┌──────────────────────┬──────────────────────────────────────────────────┐
+  │         文件         │                       改动                       │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ components/EditorBlo │ 引入 Trash2 图标；新增 imagePromptDeleteLabel 和 │
+  │ ck.tsx               │  onImagePromptDelete props；提示词卡片底部在"复  │
+  │                      │ 制"旁加"删除"按钮（仅非只读模式显示）            │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │                      │ 新增 handleDeleteImagePrompt(id)——删除指定 block │
+  │ App.tsx              │  的 imagePrompt 字段；CHARACTER                  │
+  │                      │ 块沿用"一份/角色"语义：删除时同步清掉所有同名    │
+  │                      │ CHARACTER 块的提示词，与保存时的传播逻辑对称     │
+  ├──────────────────────┼──────────────────────────────────────────────────┤
+  │ constants.ts         │ en/zh 新增 aiDeletePrompt（"Delete" / "删除"）   │
+  └──────────────────────┴──────────────────────────────────────────────────┘
+
+  关键点
+
+  - CHARACTER 同步删除：保存时同名角色共享一份提示词，删除时也一并清除全部同名块
+  ——保持"一份/角色"的一致性，不会出现"删了 A 处的 HERO、B 处的 HERO
+  还留着"的脏状态。
+  - 只读保护：只读模式下不显示删除按钮（与现有复制按钮的可见性逻辑一致，复制按钮
+  始终显示，删除按钮 !readOnly 才显示）。
+  - 字段清理方式：用对象解构 const { imagePrompt, ...rest } = b
+  真正移除字段（而非设为空字符串），让 imagePrompt 回到 undefined，卡片的
+  block.imagePrompt && block.imagePrompt.trim() 条件自然失效，整张卡片消失。
+
+  dev server 没在跑。需要我启动 npm run dev 让你核实，或者直接提交到 main 吗？
+
+✻ Sautéed for 13m 53s
+
+※ recap: 完善 StoryFlow 剧本编辑器，已完成 CONTINUE 场景转换两段式控制和分镜提示词删除功能。下一步：启动 dev server 核实效果或提交到 main。 (disable recaps in /config)
+
+❯ 192.168.8.181 拒绝了我们的连接请求。 n                                        
+  服务crash了？                                                                 
+
+● Bash(echo "=== node/npm 进程 ==="; ps aux | grep -E "vite|npm run
+      dev|node.*dev" | grep -v grep || echo "无 dev 进程在跑"; echo "=== 端口
+      3000 ==="; ss -tlnp 2>/dev/null | gr…)
+  ⎿  === node/npm 进程 ===
+     bird      153885  0.0  0.6 46393552 101968 ?     Sl   8月01  41:18 /ho
+     me/bird/.nvm/versions/node/v24.13.1/bin/node /home/bird/jimo/jimo/node
+     … +20 lines (ctrl+o to expand)
+
+● StoryFlow 的 dev server 确实没在跑——端口 3000 没监听，进程列表里也没有
+  StoryFlow 的 vite 进程（那些都是别的项目 jimo / skill-platform 在 4321
+  端口）。所以是 dev server 停了，不是服务 crash。上次会话退出 /exit
+  时它就停了。
+
+  我重新启动它：
+
+● Bash(npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Bash(sleep 4; cat /tmp/claude-1002/-home-bird-StoryFlow/48d0aa11-403e-4e15-b9b
+      f-54a2497b2571/tasks/beajtuwx9.output 2>/dev/null; echo "=== 端口检查
+      ==="; ss -tlnp 2>/dev…)
+  ⎿  > storyflow@0.0.0 dev
+     > vite
+     … +12 lines (ctrl+o to expand)
+
+● 服务没 crash，是之前的 dev server 
+  已经停了（上一个会话退出时关掉就没重启），所以浏览器连不上 192.168.8.181:3000
+  被拒绝。
+
+  现在已重新启动，端口 3000 在监听：
+
+  - 本地: http://localhost:3000/
+  - 局域网: http://192.168.8.181:3000/
+
+  刚才确认过：之前的进程列表里那些 vite/node 都是别的项目（jimo、skill-platform
+  在 4321 端口），StoryFlow 的 dev server
+  当时不在运行。现在跑起来了，刷新浏览器即可。
+
+  这次可以一并核实刚才新增的删除按钮：给某个 ACTION/CHARACTER 块生成过分镜提示词
+  后，卡片底部"复制"旁边应有灰色的"删除"按钮，点击后整张卡片消失；CHARACTER
+  块删除会同步清掉所有同名角色的提示词。
+
+✻ Cooked for 2m 25s
+
+※ recap: 完善 StoryFlow 剧本编辑器：已实现 CONTINUE 续写两段式场景转换控制、分镜提示词删除功能，typecheck 和 build 通过。dev server 已重启在 localhost:3000。下一步由你刷新浏览器核实删除按钮与场景转换判断卡的效果。
+
+❯ 我测试了del功能。没有问题。我有一个优化要求，                                 
+  prompt插入到我们的页面中，点击后展开，这个展开占据了我们的编辑页面不少空间，  
+  我希望多一个层的设计，点击后开一个新层，进行展示。可以向右边区域延申。        
+
+  Read 1 file (ctrl+o to expand)
+
+● 我现在已经理解了该布局。让我来着手实现这个右侧侧滑面板。我会添加一个新的状态来
+  追踪要预览哪个 block 的 prompt，并将其渲染为编辑器画布右侧的悬浮覆盖层。
+
+  Read 1 file (ctrl+o to expand)
+
+● 我理解了——现在提示词卡片在 block
+  下方展开，占用编辑页空间。改成右侧悬浮面板（侧抽屉），点击 block
+  上的提示词标记后在右侧开一层展示，不挤压编辑区。
+
+  让我先把当前提示词卡片在 block
+  内的展示改为一个紧凑标记（只占一行，不展开内容），点击标记打开右侧面板。
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+       8  import { generateContinuation, suggestIdeas, rewriteBlock, gene
+          rateImagePrompt, decideSceneTransition } from './services/gemin
+          iService';
+       9  import { paginateBlocks } from './utils/pagination';
+      10  import { exportToPDF } from './utils/pdfExport';
+      11 -import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, C
+         -heck, Loader2, Wand2, Languages, LayoutTemplate, Eye } from 'lu
+         -cide-react';                                                   
+      11 +import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, C
+         +heck, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLe
+         +ft } from 'lucide-react';                                      
+      12  import { clsx } from 'clsx';
+      13  
+      14  // Helper to generate IDs
+
+● 现在添加一个状态来追踪侧边栏面板中当前展开提示词的 block，并添加一个 handler
+  prop。让我把它添加到其他 UI 状态附近：
+
+● Update(App.tsx)
+  ⎿  Added 4 lines
+      131    // Editable draft of the AI-suggested transition scene headi
+           ng, so the user
+      132    // can tweak it before accepting a transition in the CONTINU
+           E two-step flow.
+      133    const [transitionHeadingDraft, setTransitionHeadingDraft] = 
+           useState('');
+      134 +  // Storyboard prompt side-panel: when a block's prompt chip 
+          +is clicked, its                                               
+      135 +  // full content is shown in a right-side drawer instead of e
+          +xpanding inline                                               
+      136 +  // (which ate editor space). Holds the block id whose prompt
+          + is open, or null.                                            
+      137 +  const [promptPanelBlockId, setPromptPanelBlockId] = useState
+          +<string | null>(null);                                        
+      138    
+      139    // States for title editing
+      140    const [headerTitleEditing, setHeaderTitleEditing] = useState
+           (false);
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(App.tsx)
+  ⎿  Added 58 lines
+      913                   {pageIndex === pages.length - 1 && <div class
+           Name="h-48" />}
+      914               </div>
+      915            ))}
+      916 +                                                              
+      917 +          {/* Storyboard prompt side-panel.                   
+      918 +              Instead of expanding the prompt inline (which co
+          +nsumed editor                                                 
+      919 +              vertical space), clicking a block's prompt chip 
+          +opens this                                                    
+      920 +              right-side drawer. It extends into the right mar
+          +gin area. */}                                                 
+      921 +          {(() => {                                           
+      922 +            const panelBlock = promptPanelBlockId             
+      923 +              ? screenplay.blocks.find(b => b.id === promptPan
+          +elBlockId)                                                    
+      924 +              : null;                                         
+      925 +            if (!panelBlock || !panelBlock.imagePrompt?.trim()
+          +) return null;                                                
+      926 +            return (                                          
+      927 +              <div className="fixed top-0 right-0 h-full w-ful
+          +l max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l
+          + border-gray-200 dark:border-zinc-800 flex flex-col animate-in
+          + slide-in-from-right duration-200">                           
+      928 +                <div className="p-4 border-b border-gray-100 d
+          +ark:border-zinc-800 flex items-center justify-between">       
+      929 +                  <div className="flex items-center gap-2 text
+          +-indigo-600 dark:text-indigo-400 font-bold text-sm">          
+      930 +                    <ImageIcon className="w-4 h-4" />         
+      931 +                    <span>{t.storyboardPromptLabel}</span>    
+      932 +                  </div>                                      
+      933 +                  <button                                     
+      934 +                    onClick={() => setPromptPanelBlockId(null)
+          +}                                                             
+      935 +                    className="text-gray-400 hover:text-gray-6
+          +00 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark
+          +:hover:bg-zinc-800 transition-colors"                         
+      936 +                  >                                           
+      937 +                    <X className="w-4 h-4" />                 
+      938 +                  </button>                                   
+      939 +                </div>                                        
+      940 +                <div className="px-4 py-2 text-[11px] font-mon
+          +o text-gray-400 dark:text-gray-500 border-b border-gray-100 da
+          +rk:border-zinc-800 truncate">                                 
+      941 +                  {panelBlock.type} · {panelBlock.content.slic
+          +e(0, 40) || '(empty)'}                                        
+      942 +                </div>                                        
+      943 +                <div className="flex-1 overflow-y-auto p-4">  
+      944 +                  <pre className="text-xs leading-relaxed font
+          +-mono whitespace-pre-wrap text-indigo-900/80 dark:text-indigo-
+          +200/70 select-text">                                          
+      945 +                    {panelBlock.imagePrompt}                  
+      946 +                  </pre>                                      
+      947 +                </div>                                        
+      948 +                <div className="p-4 border-t border-gray-100 d
+          +ark:border-zinc-800 flex items-center gap-2">                 
+      949 +                  <button                                     
+      950 +                    onClick={() => {                          
+      951 +                      navigator.clipboard?.writeText(panelBloc
+          +k.imagePrompt || '').catch(() => {});                         
+      952 +                    }}                                        
+      953 +                    className="flex-1 py-2 text-xs font-semibo
+          +ld text-gray-700 dark:text-gray-200 border border-gray-300 dar
+          +k:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rou
+          +nded-lg transition-colors flex items-center justify-center gap
+          +-1.5"                                                         
+      954 +                  >                                           
+      955 +                    <Cloud className="w-3.5 h-3.5" />         
+      956 +                    {t.aiCopyPrompt}                          
+      957 +                  </button>                                   
+      958 +                  {!isReadOnly && (                           
+      959 +                    <button                                   
+      960 +                      onClick={() => {                        
+      961 +                        handleDeleteImagePrompt(panelBlock.id)
+          +;                                                             
+      962 +                        setPromptPanelBlockId(null);          
+      963 +                      }}                                      
+      964 +                      className="flex-1 py-2 text-xs font-semi
+          +bold text-red-600 dark:text-red-400 border border-red-200 dark
+          +:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 ro
+          +unded-lg transition-colors flex items-center justify-center ga
+          +p-1.5"                                                        
+      965 +                    >                                         
+      966 +                      <Trash2 className="w-3.5 h-3.5" />      
+      967 +                      {t.aiDeletePrompt}                      
+      968 +                    </button>                                 
+      969 +                  )}                                          
+      970 +                </div>                                        
+      971 +              </div>                                          
+      972 +            );                                                
+      973 +          })()}                                               
+      974          </div>
+      975  
+      976          <Toolbar 
+
+● Update(App.tsx)
+  ⎿  Added 1 line, removed 1 line
+       8  import { generateContinuation, suggestIdeas, rewriteBlock, gene
+          rateImagePrompt, decideSceneTransition } from './services/gemin
+          iService';
+       9  import { paginateBlocks } from './utils/pagination';
+      10  import { exportToPDF } from './utils/pdfExport';
+      11 -import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, C
+         -heck, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLe
+         -ft } from 'lucide-react';                                      
+      11 +import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, C
+         +heck, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLe
+         +ft, Image as ImageIcon, Trash2 } from 'lucide-react';          
+      12  import { clsx } from 'clsx';
+      13  
+      14  // Helper to generate IDs
+
+● 现在改 EditorBlock：去掉行内展开的卡片，改成一行紧凑的
+  chip（带提示词标记），点击后通过新回调打开右侧面板。
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Added 4 lines, removed 4 lines
+      1  import React, { useRef, useEffect, useState } from 'react';
+      2  import { ScriptBlock, BlockType, Theme } from '../types';
+      3  import { clsx } from 'clsx';
+      4 -import { Image as ImageIcon, ChevronDown, ChevronRight, Copy, Tr
+        -ash2 } from 'lucide-react';                                     
+      4 +import { Image as ImageIcon } from 'lucide-react';              
+      5  import { adaptColorForTheme } from '../utils/color';
+      6  
+      7  interface EditorBlockProps {
+     ...
+      17    customColor?: string;
+      18    theme?: Theme;
+      19    imagePromptLabel?: string;
+      20 -  imagePromptCopyLabel?: string;                               
+      21 -  imagePromptDeleteLabel?: string;                             
+      22 -  onImagePromptDelete?: (id: string) => void;                  
+      20 +  imagePromptOpenLabel?: string;                               
+      21 +  onOpenImagePrompt?: (id: string) => void;                    
+      22 +  isImagePromptPanelOpen?: boolean;                            
+      23  }
+      24  
+      25  // Map styles for screenplay formatting with distinct light/dar
+          k themes
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(components/EditorBlock.tsx)  ⎿  Added 3 lines, removed 3 lines
+      55    customColor,
+      56    theme = 'light',
+      57    imagePromptLabel = 'Image Prompt',
+      58 -  imagePromptCopyLabel = 'Copy',                               
+      59 -  imagePromptDeleteLabel = 'Delete',                           
+      60 -  onImagePromptDelete                                          
+      58 +  imagePromptOpenLabel = 'View',                               
+      59 +  onOpenImagePrompt,                                           
+      60 +  isImagePromptPanelOpen = false                               
+      61  }: EditorBlockProps) => {
+      62    const textareaRef = useRef<HTMLTextAreaElement>(null);
+      63    const [promptExpanded, setPromptExpanded] = useState(true);
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(components/EditorBlock.tsx)
+  ⎿  Removed 2 lines
+      60    isImagePromptPanelOpen = false
+      61  }: EditorBlockProps) => {
+      62    const textareaRef = useRef<HTMLTextAreaElement>(null);
+      63 -  const [promptExpanded, setPromptExpanded] = useState(true);  
+      64 -  const [copied, setCopied] = useState(false);                 
+      63  
+      64    // Auto-resize textarea
+      65    useEffect(() => {
+
+  Read 1 file (ctrl+o to expand)
+
+● API Error: 400 context length 200336 exceeds limit 200000 (request id:
+  202608301023201529477408268d9d6VArAfrMd)
+
+✻ Sautéed for 6m 38s
+
+※ recap: We're improving StoryFlow, an AI screenplay editor. Done this session: scene-transition control for CONTINUE (AI judges stay/transition, user confirms) and a delete button for storyboard image prompts. Dev server is running at localhost:3000 for you to verify. Next: confirm both work in the browser, then commit to main.

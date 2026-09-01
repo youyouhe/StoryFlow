@@ -86,20 +86,23 @@ Defined in `appSettings.shortcuts` (defaults in `constants.ts`). Editing keys (T
 StoryFlow exposes its capabilities as WebMCP tools inside the running app
 (`services/webmcp.ts` registers `storyflow_*` tools on `document.modelContext`).
 
-**Primary path — the `storyflow` stdio MCP bridge** (`mcp-bridge/index.mjs`):
-proxies the page's WebMCP registry natively, so `storyflow_*` tools appear
-directly in tools/list with their schemas. It never hardcodes a tool
-inventory — when the page adds tools, the next list reflects it.
+**Primary path — the `storyflow` stdio MCP bridge**: proxies the page's WebMCP
+registry natively, so `storyflow_*` tools appear directly in tools/list with
+their schemas. It never hardcodes a tool inventory — when the page adds tools,
+the next list reflects it. The bridge and browser launcher live in the
+standalone toolkit repo (StoryFlow stays focused on the product):
+**https://github.com/youyouhe/webmcp-retrofit** — on this dev box, clone at
+`~/webmcp-retrofit` (bridge: `~/webmcp-retrofit/mcp-bridge/index.mjs`).
 
-1. Ensure the WebMCP browser is up: `bash scripts/webmcp-chromium.sh`
+1. Ensure the WebMCP browser is up: `bash ~/webmcp-retrofit/scripts/webmcp-chromium.sh`
    (headless Chromium with `--enable-features=WebMCP`, CDP on 127.0.0.1:9222,
    opens http://localhost:5173/). Keep it running — the page is the tool host.
 2. Use the `storyflow_*` tools directly (read scripts, append blocks, graybox
    health checks, Seedance/H3 prompt generation). `storyflow_append_blocks`
    is the only write surface and is append-only by design.
 3. If tools error with "No StoryFlow page open" / "WebMCP unavailable":
-   relaunch `scripts/webmcp-chromium.sh` (secure context = localhost, not a
-   LAN IP). Regression test: `cd mcp-bridge && node test-client.mjs`.
+   relaunch the launcher (secure context = localhost, not a LAN IP).
+   Bridge regression test: `cd ~/webmcp-retrofit/mcp-bridge && node test-client.mjs`.
 
 **Fallback path — `chrome-devtools` MCP**: its `evaluate_script` tool can call
 the same registry manually (`document.modelContext.getTools()` /
