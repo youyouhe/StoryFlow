@@ -125,6 +125,14 @@ StoryFlow/
 
 前往 [Releases](https://github.com/youyouhe/StoryFlow/releases) 页面下载 Windows 桌面版安装包。
 
+## 联系作者
+
+如有问题、反馈或功能建议，欢迎微信扫码联系作者：
+
+<p align="left">
+  <img src="docs/wechat-qrcode.jpg" width="280" alt="微信二维码"/>
+</p>
+
 ## 许可证
 
 MIT

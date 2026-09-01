@@ -121,6 +121,14 @@ Scripts are stored locally in your browser using localStorage:
 - `script_index`: List of all scripts
 - `script_{id}`: Full screenplay data
 
+## Contact
+
+Questions, feedback, or feature requests are welcome — scan the WeChat QR code to reach the author:
+
+<p align="left">
+  <img src="docs/wechat-qrcode.jpg" width="280" alt="WeChat QR code"/>
+</p>
+
 ## License
 
 MIT
