@@ -152,6 +152,11 @@ export interface AppSettings {
   geminiApiKey: string;
   geminiModel: string;
   geminiThinkingLevel: GeminiThinkingLevel;
+  /** MiniMax H3 video-generation BYOK (white-model submission). Empty until
+   *  the user fills it; the H3 submit flow gates on it. */
+  minimaxApiKey: string;
+  /** MiniMax endpoint: CN 'https://api.minimaxi.com' | intl 'https://api.minimax.io'. */
+  minimaxBaseUrl: string;
   colorSettings: ColorSettings;
   shortcuts: KeyboardShortcuts;
   autoAcceptAI: boolean;
@@ -220,6 +225,26 @@ export interface RefImage {
 export interface RefBindings {
   characters: Record<string, string>;
   environment?: string;
+}
+
+/** An in-app MiniMax H3 generation task — the browser-BYOK white-model
+ *  submission pipeline (upload video → create task → poll → download).
+ *  Persisted in localStorage `h3_tasks`; polling resumes on reload for
+ *  tasks still queued/running. */
+export interface H3Task {
+  id: string;                     // local id
+  taskId?: string;                // MiniMax task_id once created
+  blockId: string;                // originating shot block id
+  blockContent: string;           // beat text snapshot (identification in lists)
+  status: 'uploading' | 'submitting' | 'queued' | 'running' | 'succeeded' | 'failed';
+  error?: string;
+  prompt: string;                 // submitted prompt (audit/retry)
+  resolution: '768P' | '2K';
+  videoSeconds: number;           // input white-model length (billed!)
+  outputSeconds: number;
+  estimatedCost: number;          // CNY, pre-submit estimate
+  resultUrl?: string;             // signed video URL when succeeded
+  createdAt: number;
 }
 
 /** Options shared across the non-PDF exporters. Controls which AI payloads

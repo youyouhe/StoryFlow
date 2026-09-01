@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings } from './types';
+import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings, H3Task } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS } from './constants';
 import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
@@ -14,6 +14,7 @@ import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './service
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { listRefImages, addRefImage, removeRefImage as removeStoredRefImage } from './services/refImageStore';
+import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage } from './services/minimaxService';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -152,6 +153,16 @@ function App() {
   // the screenplay JSON so exports remain clean; object URLs are session-only.
   const [refImages, setRefImages] = useState<RefImage[]>([]);
   const [refBindings, setRefBindings] = useState<RefBindings>({ characters: {} });
+  // MiniMax H3 generation tasks (white-model submission pipeline)
+  const [h3Tasks, setH3Tasks] = useState<H3Task[]>(() => {
+    try {
+      const raw = localStorage.getItem('h3_tasks');
+      return raw ? (JSON.parse(raw) as H3Task[]) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('h3_tasks', JSON.stringify(h3Tasks.slice(0, 50))); } catch { /* ignore */ }
+  }, [h3Tasks]);
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -286,6 +297,78 @@ function App() {
         lang,
       );
     },
+    continueScript: async ({ hint }) => {
+      try {
+        const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
+        const raw = await generateContinuation(
+          screenplay.blocks,
+          activeTemplate.systemPrompt + (hint ? `\nAdditional directive for this continuation: ${hint}` : ''),
+          screenplay.metadata.scriptLanguage,
+          appSettings,
+          screenplay.metadata.templateId,
+        );
+        // Parse the [TYPE]-prefixed draft into blocks (same classification
+        // rules as the in-app suggestion parser, simplified for the tool).
+        const blocks: Array<{ type: BlockType; content: string }> = [];
+        for (const line of raw.split('\n')) {
+          const t = line.trim();
+          if (!t) continue;
+          const m = t.match(/^\[?([A-Za-z-]+)\]?\s*[:：]?\s*(.*)$/);
+          const tag = (m?.[1] ?? '').toUpperCase().replace(/-/g, '_');
+          const rest = (m?.[2] ?? t).trim();
+          if (tag === 'SCENE' || /^(INT\.|EXT\.|内\.|外\.|内景|外景)/.test(t)) {
+            blocks.push({ type: 'SCENE_HEADING', content: rest || t });
+          } else if (tag === 'ACTION') {
+            blocks.push({ type: 'ACTION', content: rest || t });
+          } else if (tag === 'CHARACTER' || (/^[A-Z一-龥 ]{1,20}$/.test(t) && !t.includes('.'))) {
+            blocks.push({ type: 'CHARACTER', content: rest || t });
+          } else if (tag === 'DIALOGUE') {
+            blocks.push({ type: 'DIALOGUE', content: rest || t });
+          } else if (tag === 'PARENTHETICAL' || /^\(.*\)$/.test(t)) {
+            blocks.push({ type: 'PARENTHETICAL', content: rest || t });
+          } else if (tag === 'TRANSITION') {
+            blocks.push({ type: 'TRANSITION', content: rest || t });
+          } else {
+            blocks.push({ type: 'ACTION', content: t });
+          }
+        }
+        return { ok: true, raw, blocks };
+      } catch (e: any) {
+        return { ok: false, error: String(e?.message || e) };
+      }
+    },
+    importScript: ({ json }) => {
+      try {
+        const parsed = JSON.parse(json);
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.blocks) || !parsed.metadata) {
+          return { ok: false, error: 'Invalid screenplay JSON: expected { metadata: {...}, blocks: [{ type, content }] }.' };
+        }
+        const validTypes: BlockType[] = ['SCENE_HEADING', 'ACTION', 'CHARACTER', 'DIALOGUE', 'PARENTHETICAL', 'TRANSITION'];
+        const blocks: ScriptBlock[] = parsed.blocks
+          .filter((b: any) => b && typeof b === 'object' && typeof b.content === 'string' && validTypes.includes(b.type))
+          .slice(0, 5000)
+          .map((b: any) => ({ id: generateId(), type: b.type as BlockType, content: b.content.slice(0, 5000) }));
+        if (!blocks.length) return { ok: false, error: 'No valid blocks found (each needs type + content).' };
+        const next: Screenplay = {
+          id: generateId(),
+          metadata: {
+            title: String(parsed.metadata.title || 'Imported Screenplay').slice(0, 120),
+            author: String(parsed.metadata.author || ''),
+            draft: String(parsed.metadata.draft || 'Draft 1'),
+            templateId: typeof parsed.metadata.templateId === 'string' ? parsed.metadata.templateId : undefined,
+            scriptLanguage: ['en', 'zh', 'dual'].includes(parsed.metadata.scriptLanguage) ? parsed.metadata.scriptLanguage : 'en',
+          },
+          blocks,
+          lastModified: Date.now(),
+        };
+        setSelectedBlockId(blocks[0].id);
+        setScreenplay(next); // autosave persists script + index
+        return { ok: true, title: next.metadata.title, blockCount: blocks.length };
+      } catch (e: any) {
+        return { ok: false, error: `JSON parse failed: ${String(e?.message || e)}` };
+      }
+    },
+    exportScript: () => ({ ok: true, json: JSON.stringify(screenplay) }),
   };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
@@ -339,6 +422,119 @@ function App() {
       return { characters, environment };
     });
   }, []);
+
+  // ---- MiniMax H3 submission (white-model → generated video, BYOK) --------
+  const h3Ready = !!appSettings.minimaxApiKey.trim();
+
+  /** Submit a recorded white-model video to H3. The view records first, then
+   *  hands the blob here; App owns IO, keys, and the task record. */
+  const handleSubmitH3 = useCallback(async (payload: {
+    blockId: string;
+    blockContent: string;
+    videoBlob: Blob;
+    videoSeconds: number;
+    prompt: string;
+    resolution: '768P' | '2K';
+    outputSeconds: number;
+    referenceImageUrls: string[];
+  }): Promise<{ ok: true; taskId: string } | { ok: false; error: string }> => {
+    if (!appSettings.minimaxApiKey.trim()) {
+      return { ok: false, error: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。' };
+    }
+    // resolve bound reference images (object URLs → blobs)
+    const images: H3ReferenceImage[] = [];
+    for (const url of payload.referenceImageUrls.slice(0, 9)) {
+      try {
+        const blob = await (await fetch(url)).blob();
+        images.push({ name: `ref-${images.length + 1}`, blob });
+      } catch { /* skip unreadable */ }
+    }
+    const invalid = validateH3Submission({
+      prompt: payload.prompt,
+      videoBlob: payload.videoBlob,
+      videoSeconds: payload.videoSeconds,
+      referenceImages: images,
+      resolution: payload.resolution,
+      outputSeconds: payload.outputSeconds,
+    });
+    if (invalid) return { ok: false, error: invalid };
+
+    const localId = generateId();
+    const estimatedCost = estimateH3Cost({
+      videoSeconds: payload.videoSeconds,
+      outputSeconds: payload.outputSeconds,
+      referenceImages: images,
+      resolution: payload.resolution,
+    });
+    const baseTask: H3Task = {
+      id: localId,
+      blockId: payload.blockId,
+      blockContent: payload.blockContent.slice(0, 60),
+      status: 'uploading',
+      prompt: payload.prompt,
+      resolution: payload.resolution,
+      videoSeconds: payload.videoSeconds,
+      outputSeconds: payload.outputSeconds,
+      estimatedCost,
+      createdAt: Date.now(),
+    };
+    setH3Tasks(prev => [baseTask, ...prev].slice(0, 50));
+
+    const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
+    try {
+      const fileUri = await uploadH3Video(cfg, payload.videoBlob);
+      setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, status: 'submitting' } : t));
+      const taskId = await createH3Task(cfg, {
+        prompt: payload.prompt,
+        videoBlob: payload.videoBlob,
+        videoSeconds: payload.videoSeconds,
+        referenceImages: images,
+        resolution: payload.resolution,
+        outputSeconds: payload.outputSeconds,
+      }, fileUri);
+      setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, taskId, status: 'queued' } : t));
+      return { ok: true, taskId };
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, status: 'failed', error: msg } : t));
+      return { ok: false, error: msg };
+    }
+  }, [appSettings.minimaxApiKey, appSettings.minimaxBaseUrl]);
+
+  // Poll active tasks every 10s while the app is open (official cadence).
+  const h3PollInFlight = useRef(false);
+  useEffect(() => {
+    const active = h3Tasks.filter(t => (t.status === 'queued' || t.status === 'running') && t.taskId);
+    if (!active.length || !h3Ready) return;
+    const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
+    const timer = window.setInterval(async () => {
+      if (h3PollInFlight.current) return;
+      h3PollInFlight.current = true;
+      try {
+        for (const t of active) {
+          // stale guard: give up after 30 minutes
+          if (Date.now() - t.createdAt > 30 * 60 * 1000) {
+            setH3Tasks(prev => prev.map(x => x.id === t.id ? { ...x, status: 'failed', error: '轮询超时（30 分钟）——任务可能仍在 MiniMax 控制台完成，可手动查看。' } : x));
+            continue;
+          }
+          try {
+            const s = await queryH3Task(cfg, t.taskId!);
+            setH3Tasks(prev => prev.map(x => x.id === t.id
+              ? {
+                  ...x,
+                  status: s.status === 'cancelled' ? 'failed' as const : s.status,
+                  resultUrl: s.videoUrl ?? x.resultUrl,
+                  error: s.errorMessage || (s.status === 'cancelled' ? '任务已取消' : x.error),
+                }
+              : x));
+          } catch { /* transient network error — retry next tick */ }
+        }
+      } finally {
+        h3PollInFlight.current = false;
+      }
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [h3Tasks, h3Ready, appSettings.minimaxApiKey, appSettings.minimaxBaseUrl]);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
   const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);
@@ -1532,6 +1728,10 @@ function App() {
                           onRefBindingsChange={setRefBindings}
                           onUploadRefImage={handleUploadRefImage}
                           onRemoveRefImage={handleRemoveRefImage}
+                          blockId={panelBlock.id}
+                          onSubmitH3={handleSubmitH3}
+                          h3Tasks={h3Tasks}
+                          h3Ready={h3Ready}
                         />
                       </div>
                     );

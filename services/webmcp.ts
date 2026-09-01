@@ -87,6 +87,14 @@ export interface StoryflowWebMcpAccessor {
     counts: { pass: number; warn: number; fail: number };
     items: Array<{ code: string; status: 'pass' | 'warn' | 'fail'; message: string }>;
   } | { error: string };
+  /** Continue the current script with the app's OWN AI (provider/key from
+   *  Settings; BYOK — the key never leaves the page). Returns a DRAFT,
+   *  never inserts; the agent decides via append_blocks. */
+  continueScript(opts: { hint?: string }): Promise<{ ok: boolean; raw?: string; blocks?: Array<{ type: BlockType; content: string }>; error?: string }>;
+  /** Adopt a screenplay JSON (Screenplay shape) as the current script. */
+  importScript(payload: { json: string }): { ok: boolean; title?: string; blockCount?: number; error?: string };
+  /** Full current screenplay as JSON. */
+  exportScript(): { ok: boolean; json?: string; error?: string };
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -250,6 +258,46 @@ export const registerStoryflowWebMcpTools = (
         const r = A().checkGrayboxHealth({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
         return 'error' in r ? err(r.error) : ok(r);
       },
+    },
+    {
+      name: 'storyflow_continue_script',
+      description: 'Continue the current screenplay using StoryFlow\'s built-in AI (the provider/model/key configured in Settings — BYOK, consumes that account\'s API quota, same prompt pipeline as the in-app Alt+C). Returns a DRAFT as parsed blocks — it does NOT insert anything. Review the draft, then write it with storyflow_append_blocks. Alternatively the agent can write continuation itself and append directly.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          hint: { type: 'string', description: 'Optional one-line direction for the continuation, e.g. "add a plot twist before the duel".' },
+        },
+      },
+      annotations: RO, // produces a draft only — no state change
+      execute: async (args) => {
+        const r = await A().continueScript({ hint: asString(args.hint) });
+        return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_import_script',
+      description: 'Import a screenplay JSON (the Screenplay shape StoryFlow exports: { id?, metadata: { title, author, draft, templateId?, scriptLanguage }, blocks: [{ type, content }] }) and make it the currently open script. Autosave persists it and adds it to the script index. The previous current script stays saved in the index.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          json: { type: 'string', description: 'The screenplay JSON string (as produced by storyflow_export_script or the app\'s JSON export).' },
+        },
+        required: ['json'],
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const json = asString(args.json);
+        if (!json) return err('Missing "json" string.');
+        const r = A().importScript({ json });
+        return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_export_script',
+      description: 'Export the currently open screenplay as full JSON (metadata + every block with its id, type, content, and any graybox/imagePrompt payloads). Round-trips with storyflow_import_script and the app\'s JSON import/export.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: RO,
+      execute: async () => ok(A().exportScript()),
     },
   ];
 

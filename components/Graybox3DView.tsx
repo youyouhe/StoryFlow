@@ -2,10 +2,11 @@ import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Line, Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, RefImage, RefBindings } from '../types';
+import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, RefImage, RefBindings, H3Task } from '../types';
 import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClipboard, WHITE_MODEL_STYLE_TEMPLATES } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth, HealthReport } from '../utils/grayboxHealth';
 import { ReferenceBindingPanel, REF_BINDING_LABELS } from './ReferenceBindingPanel';
+import { estimateH3Cost } from '../services/minimaxService';
 
 /**
  * Graybox3DView — renders a GrayboxData payload as an interactive 3D previs.
@@ -68,6 +69,23 @@ interface Graybox3DViewProps {
   onRefBindingsChange?: (next: RefBindings) => void;
   onUploadRefImage?: (file: File) => void;
   onRemoveRefImage?: (id: string) => void;
+  /** Originating block id — scopes H3 task records to this shot. */
+  blockId?: string;
+  /** Submit the recorded white-model video to MiniMax H3 (App owns IO/keys). */
+  onSubmitH3?: (payload: {
+    blockId: string;
+    blockContent: string;
+    videoBlob: Blob;
+    videoSeconds: number;
+    prompt: string;
+    resolution: '768P' | '2K';
+    outputSeconds: number;
+    referenceImageUrls: string[];
+  }) => Promise<{ ok: boolean; taskId?: string; error?: string }>;
+  /** H3 task records (all blocks; filtered to this blockId for display). */
+  h3Tasks?: H3Task[];
+  /** True when a MiniMax API key is configured. */
+  h3Ready?: boolean;
 }
 
 // ---- semantic default colors per layout role (used when obj.color omitted) ----
@@ -780,6 +798,12 @@ const UI_LABELS = {
     health: 'Health check', healthOpen: 'Checks', healthPass: 'all clear', healthWarn: 'n warnings', healthFail: 'blocked',
     healthExportBlocked: 'Export blocked — fix the failing checks (❌) first.',
     style: 'Style',
+    h3Submit: 'Submit to H3', h3NeedKey: 'No MiniMax API key — add it in Settings → Video Generation.',
+    h3Tasks: 'Generation tasks', h3Download: 'Download video', h3Res: 'Resolution',
+    h3Confirm: (cost: number, inS: number, outS: number, imgs: number) =>
+      `Submit to MiniMax H3?\nEstimated cost ≈ ¥${cost.toFixed(2)} (input ${inS.toFixed(1)}s + output ${outS}s, ${imgs} ref image(s) — input video is billed too).\nThe white model will be recorded first (~${inS.toFixed(0)}s).`,
+    h3Status: { uploading: 'Uploading video…', submitting: 'Creating task…', queued: 'Queued', running: 'Generating…', succeeded: 'Done', failed: 'Failed' } as Record<string, string>,
+    promptLen: (n: number) => `${n} chars${n > 7000 ? ' — over the H3 7000-char limit!' : ''}`,
   },
   zh: {
     pov: '镜头视角', orbit: '轨道视角', exportBtn: '导出白模视频', recording: '录制中…',
@@ -792,10 +816,16 @@ const UI_LABELS = {
     health: '体检', healthOpen: '检查项', healthPass: '全部通过', healthWarn: 'n 项警告', healthFail: '已拦截',
     healthExportBlocked: '导出已拦截——请先修复 ❌ 未通过项。',
     style: '风格',
+    h3Submit: '提交 H3 生成', h3NeedKey: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。',
+    h3Tasks: '生成任务', h3Download: '下载成片', h3Res: '分辨率',
+    h3Confirm: (cost: number, inS: number, outS: number, imgs: number) =>
+      `提交到 MiniMax H3？\n预估费用 ≈ ¥${cost.toFixed(2)}（输入 ${inS.toFixed(1)}s + 输出 ${outS}s，参考图 ${imgs} 张——输入视频同样计费）。\n将先录制白模视频（约 ${inS.toFixed(0)} 秒）。`,
+    h3Status: { uploading: '上传视频中…', submitting: '创建任务…', queued: '排队中', running: '生成中…', succeeded: '已完成', failed: '失败' } as Record<string, string>,
+    promptLen: (n: number) => `${n} 字符${n > 7000 ? '——超出 H3 7000 字符上限！' : ''}`,
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, uiLang = 'en' }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en' }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -816,6 +846,9 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   const [styleId, setStyleId] = useState<string>(WHITE_MODEL_STYLE_TEMPLATES[0].id);
   // health-check checklist collapsed by default; the summary is always visible
   const [healthOpen, setHealthOpen] = useState(false);
+  // H3 submission state
+  const [h3Resolution, setH3Resolution] = useState<'768P' | '2K'>('768P');
+  const [h3Error, setH3Error] = useState<string | null>(null);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -881,8 +914,45 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     }
   }, []);
 
+  // ---- prompt builder ----
+  // Shared input builder so the modal preview and the H3 submission always
+  // agree (submission forces the H3 dialect regardless of the open tab).
+  // Declared before startH3Submit to keep TDZ order valid.
+  const promptInputFor = useCallback((target: 'seedance' | 'h3') => {
+    const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
+    const imageById = (id?: string) => refImages.find((img) => img.id === id);
+    const boundChars = refBindings && refImages.length
+      ? Object.fromEntries(
+          Object.entries(refBindings.characters)
+            .filter(([, id]) => !!imageById(id))
+            .map(([name, id]) => [name, imageById(id)!.name]),
+        )
+      : undefined;
+    const hasAnyBinding = boundChars && Object.keys(boundChars).length > 0;
+    const envImage = refBindings && refImages.length && imageById(refBindings.environment)?.name;
+    return {
+      beatContent: beat?.content ?? '',
+      camera: graybox.camera!,
+      characters: sceneChars,
+      sceneHeading,
+      styleHint,
+      target,
+      ...(hasAnyBinding ? { characterImages: boundChars } : {}),
+      ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
+    };
+  }, [styleId, refImages, refBindings, beat, sceneChars, sceneHeading, graybox.camera]);
+
   // ---- white-model export: record the POV playback as a reference video ----
-  const startExport = useCallback(() => {
+  // `h3Payload` switches the tail from "download the file" to "hand the blob
+  // to App's H3 submission pipeline" (upload → create task → poll).
+  const startExport = useCallback((h3Payload?: {
+    blockId: string;
+    blockContent: string;
+    prompt: string;
+    resolution: '768P' | '2K';
+    outputSeconds: number;
+    referenceImageUrls: string[];
+  }) => {
     if (exporting || !isShot || !graybox.camera || !wrapRef.current) return;
     if (!exportSupported) return;
     if (healthBlocksExport) return; // failing checks (❌) gate the export
@@ -915,14 +985,20 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
         stream.getTracks().forEach((tr) => tr.stop());
         const ext = mime.includes('mp4') ? 'mp4' : 'webm';
         const blob = new Blob(chunks, { type: mime.split(';')[0] });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `whitemodel-shot-${Date.now()}.${ext}`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
         recorderRef.current = null;
         setExporting(false);
+        if (h3Payload && onSubmitH3) {
+          onSubmitH3({ ...h3Payload, videoBlob: blob, videoSeconds: durSec })
+            .then((r) => { if (r.ok) setH3Error(null); else setH3Error(r.error ?? 'unknown error'); })
+            .catch((e) => setH3Error(String(e?.message || e)));
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `whitemodel-shot-${Date.now()}.${ext}`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
       };
 
       rec.start(250);
@@ -950,38 +1026,51 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       };
       exportRafRef.current = requestAnimationFrame(tick);
     }, 450);
-  }, [exporting, isShot, graybox, exportSupported, healthBlocksExport]);
+  }, [exporting, isShot, graybox, exportSupported, healthBlocksExport, onSubmitH3]);
 
-  // ---- prompt builder + modal ----
+  // ---- H3 submission: confirm cost → record white model → submit ----
+  const startH3Submit = useCallback(() => {
+    if (!onSubmitH3 || !isShot || !graybox.camera || !blockId) return;
+    if (!h3Ready) { setH3Error(L.h3NeedKey); return; }
+    const cam = graybox.camera;
+    const durSec = (cam.movement?.duration ?? 0) > 0 ? cam.movement.duration : EXPORT_FALLBACK_SECONDS;
+    if (durSec > 15) {
+      setH3Error(`H3 参考视频上限 15s——当前 ${durSec.toFixed(1)}s，请先缩短镜头 duration。`);
+      return;
+    }
+    const outputSeconds = Math.max(4, Math.min(15, Math.round(durSec)));
+    // bound reference images in scene order + env last (matches the prompt mapping)
+    const refImageUrls: string[] = [];
+    for (const c of sceneChars) {
+      const img = refImages.find((i) => i.id === refBindings?.characters[c.name]);
+      if (img) refImageUrls.push(img.url);
+    }
+    const envImg = refImages.find((i) => i.id === refBindings?.environment);
+    if (envImg) refImageUrls.push(envImg.url);
+
+    const cost = estimateH3Cost({
+      videoSeconds: durSec,
+      outputSeconds,
+      referenceImages: refImageUrls.map((_, i) => ({ name: `ref-${i}`, blob: new Blob() })),
+      resolution: h3Resolution,
+    });
+    if (!window.confirm(L.h3Confirm(cost, durSec, outputSeconds, refImageUrls.length))) return;
+
+    setH3Error(null);
+    startExport({
+      blockId,
+      blockContent: beat?.content ?? '',
+      prompt: buildH3Prompt(promptInputFor('h3')),
+      resolution: h3Resolution,
+      outputSeconds,
+      referenceImageUrls: refImageUrls,
+    });
+  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, sceneChars, refImages, refBindings, h3Resolution, beat, L, startExport, promptInputFor]);
+
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';
-    const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
-
-    // Resolve bindings → real image file names. Only pass them when at least
-    // one character or the env slot is bound — otherwise keep the legacy
-    // generic numbering so pre-binding prompts stay unchanged.
-    const imageById = (id?: string) => refImages.find((img) => img.id === id);
-    const boundChars = refBindings && refImages.length
-      ? Object.fromEntries(
-          Object.entries(refBindings.characters)
-            .filter(([, id]) => !!imageById(id))
-            .map(([name, id]) => [name, imageById(id)!.name]),
-        )
-      : undefined;
-    const hasAnyBinding = boundChars && Object.keys(boundChars).length > 0;
-    const envImage = refBindings && refImages.length && imageById(refBindings.environment)?.name;
-
-    const input = {
-      beatContent: beat?.content ?? '',
-      camera: graybox.camera,
-      characters: sceneChars,
-      sceneHeading,
-      styleHint,
-      ...(hasAnyBinding ? { characterImages: boundChars } : {}),
-      ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
-    };
-    return promptTarget === 'seedance' ? buildSeedancePrompt(input) : buildH3Prompt(input);
-  }, [promptTarget, graybox.camera, beat, sceneChars, sceneHeading, styleId, refImages, refBindings]);
+    return promptTarget === 'seedance' ? buildSeedancePrompt(promptInputFor('seedance')) : buildH3Prompt(promptInputFor('h3'));
+  }, [promptTarget, graybox.camera, promptInputFor]);
 
   // error state
   if (graybox.error) {
@@ -1134,6 +1223,75 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                   ? '上传顺序：@视频1 = 导出的白模视频；@图片1..N = 各角色参考图（按映射表顺序）；最后一张 = 场景风格图。'
                   : 'Upload order: @视频1 = the exported white-model video; @图片1..N = character reference images (in mapping-table order); last image = scene style.'}
               </p>
+              <p className="mt-1 text-right text-[10px] tabular-nums text-gray-400 dark:text-gray-500">{L.promptLen(promptText.length)}</p>
+
+              {/* H3 direct submission (browser BYOK) + this shot's task list */}
+              {onSubmitH3 && blockId && (
+                <div className="mt-3 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.h3Res}</span>
+                    <select
+                      value={h3Resolution}
+                      onChange={(e) => setH3Resolution(e.target.value as '768P' | '2K')}
+                      className="rounded-md border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200"
+                    >
+                      <option value="768P">768P（¥0.50/s）</option>
+                      <option value="2K">2K（¥0.80/s）</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={startH3Submit}
+                      disabled={exporting || !h3Ready}
+                      title={!h3Ready ? L.h3NeedKey : undefined}
+                      className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+                    >
+                      {exporting ? L.recording : L.h3Submit}
+                    </button>
+                  </div>
+                  {h3Error && (
+                    <p className="mt-1.5 text-[10px] leading-snug text-red-500 dark:text-red-400 break-words">{h3Error}</p>
+                  )}
+                  {(() => {
+                    const blockTasks = h3Tasks.filter(t => t.blockId === blockId).slice(0, 5);
+                    if (!blockTasks.length) return null;
+                    return (
+                      <div className="mt-2">
+                        <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1">{L.h3Tasks}</p>
+                        <ul className="space-y-1">
+                          {blockTasks.map(t => (
+                            <li key={t.id} className="flex items-center gap-1.5 text-[10px]">
+                              <span className={
+                                t.status === 'succeeded' ? 'text-emerald-600 dark:text-emerald-400'
+                                  : t.status === 'failed' ? 'text-red-500'
+                                  : 'text-amber-600 dark:text-amber-400 animate-pulse'
+                              }>
+                                {['uploading', 'submitting', 'queued', 'running'].includes(t.status) ? '⏳' : t.status === 'succeeded' ? '✅' : '❌'}
+                              </span>
+                              <span className="text-gray-600 dark:text-gray-300 truncate flex-1">
+                                {L.h3Status[t.status] ?? t.status} · {t.resolution} · ¥{t.estimatedCost.toFixed(2)}
+                              </span>
+                              {t.status === 'succeeded' && t.resultUrl && (
+                                <a
+                                  href={t.resultUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  download
+                                  className="shrink-0 px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-semibold hover:bg-emerald-200 dark:hover:bg-emerald-900/50"
+                                >
+                                  {L.h3Download}
+                                </a>
+                              )}
+                              {t.status === 'failed' && t.error && (
+                                <span className="shrink-0 max-w-[45%] truncate text-red-400" title={t.error}>?</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
             <div className="px-4 py-3 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
               <button

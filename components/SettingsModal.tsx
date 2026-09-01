@@ -386,6 +386,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         </div>
                     </div>
                  )}
+
+                 {/* Video generation — MiniMax H3 BYOK (white-model submission) */}
+                 <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                            {t.videoGenLabel || 'Video Generation · MiniMax H3'}
+                        </label>
+                        <input
+                            type="password"
+                            value={appSettingsForm.minimaxApiKey}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, minimaxApiKey: e.target.value})}
+                            placeholder="MiniMax API Key..."
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                        />
+                        <p className="mt-1 text-[10px] text-gray-400">
+                            {t.videoGenHint || 'Used only when submitting white-model generation tasks (billed per second: output + input reference video). Get a key at platform.minimaxi.com → 账户管理 → 接口密钥.'}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                            {t.videoGenRegionLabel || 'Endpoint'}
+                        </label>
+                        <select
+                            value={appSettingsForm.minimaxBaseUrl}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, minimaxBaseUrl: e.target.value})}
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                        >
+                            <option value="https://api.minimaxi.com">api.minimaxi.com（中国区）</option>
+                            <option value="https://api.minimax.io">api.minimax.io（International）</option>
+                        </select>
+                    </div>
+                 </div>
               </div>
             )}
 
