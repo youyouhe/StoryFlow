@@ -436,8 +436,10 @@ function App() {
     } catch { /* malformed legacy entry — drop */ }
   }, [screenplay.id, screenplay.referenceBindings]);
 
-  const handleUploadRefImage = useCallback(async (file: File, subject?: string) => {
-    const meta = subject ? { subject, source: 'upload' as const } : undefined;
+  const handleUploadRefImage = useCallback(async (file: File, subject?: string, sourcePrompt?: string) => {
+    const meta = subject || sourcePrompt
+      ? { ...(subject ? { subject } : {}), source: 'upload' as const, ...(sourcePrompt ? { sourcePrompt } : {}) }
+      : undefined;
     try {
       if (assetDir) {
         const a = await addAssetToDir(assetDir, file, meta);
@@ -1843,6 +1845,40 @@ function App() {
                   </div>
                 )}
                 <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
+                  {!showingGraybox && panelBlock.imagePrompt && (
+                    <>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="sf-prompt-asset-file"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!f) return;
+                          // subject from the block itself: CHARACTER -> the
+                          // character name, ACTION -> 环境. The block's
+                          // imagePrompt rides along as provenance.
+                          const subject = panelBlock.type === 'CHARACTER'
+                            ? panelBlock.content.trim().slice(0, 40)
+                            : '环境';
+                          handleUploadRefImage(f, subject || '环境', panelBlock.imagePrompt);
+                        }}
+                      />
+                      <button
+                        onClick={() => document.getElementById('sf-prompt-asset-file')?.click()}
+                        className="flex-1 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                        title={lang === 'zh'
+                          ? '外部出图后回传：自动打 subject 并记录生成提示词（溯源）'
+                          : 'Import the externally-generated image: auto-tags subject and records the source prompt'}
+                      >
+                        <span className="text-sm leading-none">📥</span>
+                        {panelBlock.type === 'CHARACTER'
+                          ? (lang === 'zh' ? `存为「${panelBlock.content.trim().slice(0, 8)}」资产` : `Save as "${panelBlock.content.trim().slice(0, 12)}" asset`)
+                          : (lang === 'zh' ? '存为环境资产' : 'Save as env asset')}
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => {
                       navigator.clipboard?.writeText(copyText).catch(() => {});
