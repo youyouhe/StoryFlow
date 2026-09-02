@@ -13,6 +13,7 @@ import { exportToPDF } from './utils/pdfExport';
 import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
+import { resolveRefBindings } from './utils/refBindings';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -1364,9 +1365,10 @@ function App() {
             return;
         }
         if (checkShortcut(e, appSettings.shortcuts.aiStoryboard)) {
-            // Trigger on ACTION (scene illustration) or CHARACTER (design sheet) blocks.
+            // Trigger on SCENE_HEADING (environment sheet), ACTION (storyboard
+            // frame), or CHARACTER (design sheet) blocks.
             const currentBlock = screenplay.blocks.find(b => b.id === id);
-            if (currentBlock?.type === 'ACTION' || currentBlock?.type === 'CHARACTER') {
+            if (currentBlock?.type === 'ACTION' || currentBlock?.type === 'CHARACTER' || currentBlock?.type === 'SCENE_HEADING') {
                 e.preventDefault();
                 setAIMode('STORYBOARD');
                 setShowAIModal(true);
@@ -2002,10 +2004,34 @@ function App() {
                             const subject = panelBlock.type === 'CHARACTER'
                               ? panelBlock.content.trim().slice(0, 40)
                               : '环境';
+                            // ACTION frames: visual identity lock — pass the
+                            // nearest preceding bound character's sheet as the
+                            // image-to-image subject reference.
+                            let subjectRef: Blob | undefined;
+                            if (panelBlock.type === 'ACTION') {
+                              const pIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
+                              let sceneHead = '';
+                              for (let i = pIdx; i >= 0; i--) {
+                                if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
+                              }
+                              const eff = resolveRefBindings(screenplay.referenceBindings, sceneHead);
+                              for (let i = pIdx; i >= 0; i--) {
+                                const b = screenplay.blocks[i];
+                                if (b.type === 'SCENE_HEADING' && i !== pIdx) break;
+                                if (b.type === 'CHARACTER') {
+                                  const boundId = eff.characters[b.content.trim()];
+                                  const img = boundId && refImages.find(r => r.id === boundId);
+                                  if (img) {
+                                    subjectRef = await (await fetch(img.url)).blob().catch(() => undefined);
+                                    break;
+                                  }
+                                }
+                              }
+                            }
                             const imgs = await generateImages(
                               { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl },
                               panelBlock.imagePrompt!,
-                              { n: 1, aspectRatio: '16:9' },
+                              { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
                             );
                             const stamp = Date.now().toString(36);
                             const name = panelBlock.type === 'CHARACTER'

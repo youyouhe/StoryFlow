@@ -189,9 +189,9 @@ const clampImagePrompt = (prompt: string): string => {
 export const generateImages = async (
   cfg: MiniMaxConfig,
   prompt: string,
-  opts?: { n?: number; aspectRatio?: string },
+  opts?: { n?: number; aspectRatio?: string; subjectReference?: Blob },
 ): Promise<GeneratedImage[]> => {
-  const body = {
+  const body: Record<string, unknown> = {
     model: 'image-01',
     prompt: clampImagePrompt(prompt),
     aspect_ratio: opts?.aspectRatio ?? '16:9',
@@ -199,6 +199,12 @@ export const generateImages = async (
     n: opts?.n ?? 1,
     prompt_optimizer: true,
   };
+  // Subject reference (图生图 identity lock): the bound character sheet,
+  // passed as a data URI — base64 natively supported, single front-facing
+  // subject works best (exactly what our turnaround sheets are).
+  if (opts?.subjectReference) {
+    body.subject_reference = await asBase64DataUri(opts.subjectReference);
+  }
   const res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
     method: 'POST',
     headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
