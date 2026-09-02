@@ -14,6 +14,11 @@ import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './service
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage } from './services/refImageStore';
+import {
+  isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
+  queryDirPermission, requestDirPermission, listDirAssets, addAssetToDir,
+  updateAssetMetaInDir, removeAssetFromDir,
+} from './services/assetDirStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage } from './services/minimaxService';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
@@ -153,7 +158,15 @@ function App() {
   // per-screenplay capsule→image bindings (localStorage). Blobs stay out of
   // the screenplay JSON so exports remain clean; object URLs are session-only.
   const [refImages, setRefImages] = useState<RefImage[]>([]);
-  const [refBindings, setRefBindings] = useState<RefBindings>({ characters: {} });
+  // Directory-backed asset backend (File System Access API). Null = IndexedDB
+  // fallback (LAN-IP context / Firefox / Safari / not picked yet).
+  const [assetDir, setAssetDir] = useState<FileSystemDirectoryHandle | null>(null);
+  // Bindings now live INSIDE the screenplay (travel with export/import);
+  // localStorage `ref_bindings_*` is migrated once below.
+  const refBindings: RefBindings = screenplay.referenceBindings ?? { characters: {} };
+  const handleRefBindingsChange = useCallback((next: RefBindings) => {
+    setScreenplay(prev => ({ ...prev, referenceBindings: next, lastModified: Date.now() }));
+  }, []);
   // MiniMax H3 generation tasks (white-model submission pipeline)
   const [h3Tasks, setH3Tasks] = useState<H3Task[]>(() => {
     try {
@@ -361,6 +374,10 @@ function App() {
           },
           blocks,
           lastModified: Date.now(),
+          // bindings travel with the script (asset ids refer to the shared library)
+          referenceBindings: parsed.referenceBindings?.characters
+            ? { characters: parsed.referenceBindings.characters, environment: parsed.referenceBindings.environment }
+            : undefined,
         };
         setSelectedBlockId(blocks[0].id);
         setScreenplay(next); // autosave persists script + index
@@ -374,63 +391,120 @@ function App() {
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
   // ---- white-model reference images + bindings ------------------------------
-  // Library: load once from IndexedDB, expose blobs as session object URLs.
+  // Library load: prefer the persisted asset FOLDER (cross-device "backend"),
+  // fall back to IndexedDB. Object URLs are session-scoped.
   useEffect(() => {
     let urls: string[] = [];
-    listRefImages().then((stored) => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const h = await loadPersistedDirHandle();
+        if (h && (await queryDirPermission(h)) === 'granted') {
+          const assets = await listDirAssets(h);
+          if (cancelled) return;
+          setAssetDir(h);
+          setRefImages(assets.map((a) => ({
+            id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
+            url: a.url, subject: a.subject, source: a.source ?? 'upload',
+          })));
+          return;
+        }
+      } catch { /* dir unreadable — fall through */ }
+      const stored = await listRefImages().catch(() => []);
+      if (cancelled) return;
       setRefImages(stored.map((s) => {
         const url = URL.createObjectURL(s.blob);
         urls.push(url);
         return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url, subject: s.subject, source: s.source ?? 'upload' };
       }));
-    }).catch((e) => console.warn('Failed to load reference library', e));
-    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); };
+    })();
+    return () => { cancelled = true; urls.forEach((u) => URL.revokeObjectURL(u)); };
   }, []);
 
-  // Bindings: per-screenplay, persisted in localStorage next to the script.
+  // One-time migration: old per-script localStorage bindings → screenplay.
   useEffect(() => {
+    const key = `ref_bindings_${screenplay.id}`;
     try {
-      const raw = localStorage.getItem(`ref_bindings_${screenplay.id}`);
-      setRefBindings(raw ? { characters: {}, ...(JSON.parse(raw) as RefBindings) } : { characters: {} });
-    } catch { setRefBindings({ characters: {} }); }
-  }, [screenplay.id]);
-  useEffect(() => {
-    try { localStorage.setItem(`ref_bindings_${screenplay.id}`, JSON.stringify(refBindings)); } catch { /* quota — bindings are tiny; ignore */ }
-  }, [refBindings, screenplay.id]);
+      const raw = localStorage.getItem(key);
+      if (raw && !screenplay.referenceBindings) {
+        const parsed = JSON.parse(raw) as RefBindings;
+        setScreenplay(prev => prev.id === screenplay.id
+          ? { ...prev, referenceBindings: { characters: {}, ...parsed }, lastModified: Date.now() }
+          : prev);
+        localStorage.removeItem(key);
+      }
+    } catch { /* malformed legacy entry — drop */ }
+  }, [screenplay.id, screenplay.referenceBindings]);
 
   const handleUploadRefImage = useCallback(async (file: File, subject?: string) => {
+    const meta = subject ? { subject, source: 'upload' as const } : undefined;
     try {
-      const stored = await addRefImage(file, subject ? { subject, source: 'upload' } : undefined);
-      setRefImages((prev) => [...prev, {
-        id: stored.id, name: stored.name, type: stored.type, size: stored.size, createdAt: stored.createdAt,
-        url: URL.createObjectURL(stored.blob),
-        subject: stored.subject, source: stored.source ?? 'upload',
-      }]);
+      if (assetDir) {
+        const a = await addAssetToDir(assetDir, file, meta);
+        setRefImages((prev) => [...prev, {
+          id: a.id, name: a.name, type: file.type || 'image/*', size: a.size, createdAt: a.createdAt,
+          url: a.url, subject: a.subject, source: a.source ?? 'upload',
+        }]);
+      } else {
+        const stored = await addRefImage(file, meta);
+        setRefImages((prev) => [...prev, {
+          id: stored.id, name: stored.name, type: stored.type, size: stored.size, createdAt: stored.createdAt,
+          url: URL.createObjectURL(stored.blob),
+          subject: stored.subject, source: stored.source ?? 'upload',
+        }]);
+      }
     } catch (e) {
       console.warn('Failed to store reference image', e);
     }
-  }, []);
+  }, [assetDir]);
 
   /** Library metadata edits (rename / re-tag subject) — persisted, UI state synced. */
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const handleUpdateRefImageMeta = useCallback((id: string, patch: { name?: string; subject?: string }) => {
     setRefImages((prev) => prev.map((im) => im.id === id ? { ...im, ...patch, subject: patch.subject || undefined } : im));
-    updateRefImageMeta(id, patch).catch((e) => console.warn('Failed to update asset meta', e));
-  }, []);
+    if (assetDir) updateAssetMetaInDir(assetDir, id, patch).catch((e) => console.warn('Failed to update asset meta', e));
+    else updateRefImageMeta(id, patch).catch((e) => console.warn('Failed to update asset meta', e));
+  }, [assetDir]);
+
+  /** User gesture: pick/restore the asset folder (the disk "backend"). */
+  const handleOpenAssetDir = useCallback(async () => {
+    if (!isDirStoreAvailable()) {
+      alert('当前环境不支持文件夹资产库（需要 Chrome/Edge + localhost 或 HTTPS）。已使用浏览器本地存储。');
+      return;
+    }
+    const h = assetDir ?? await pickAssetDir();
+    if (!h) return;
+    if ((await queryDirPermission(h)) !== 'granted') {
+      if (!(await requestDirPermission(h))) return;
+    }
+    try {
+      await persistDirHandle(h);
+      const assets = await listDirAssets(h);
+      setAssetDir(h);
+      setRefImages(assets.map((a) => ({
+        id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
+        url: a.url, subject: a.subject, source: a.source ?? 'upload',
+      })));
+    } catch (e) {
+      console.warn('Failed to open asset folder', e);
+    }
+  }, [assetDir]);
   const handleRemoveRefImage = useCallback((id: string) => {
-    removeStoredRefImage(id).catch((e) => console.warn('Failed to delete reference image', e));
+    if (assetDir) removeAssetFromDir(assetDir, id).catch((e) => console.warn('Failed to delete asset file', e));
+    else removeStoredRefImage(id).catch((e) => console.warn('Failed to delete reference image', e));
     setRefImages((prev) => {
       const gone = prev.find((p) => p.id === id);
       if (gone) URL.revokeObjectURL(gone.url);
       return prev.filter((p) => p.id !== id);
     });
     // scrub bindings pointing at the removed image
-    setRefBindings((prev) => {
+    if (screenplay.referenceBindings) {
+      const prev = screenplay.referenceBindings;
       const characters = Object.fromEntries(Object.entries(prev.characters).filter(([, v]) => v !== id));
       const environment = prev.environment === id ? undefined : prev.environment;
-      return { characters, environment };
-    });
-  }, []);
+      handleRefBindingsChange({ characters, environment });
+    }
+  }, [assetDir, screenplay.referenceBindings, handleRefBindingsChange]);
 
   // ---- MiniMax H3 submission (white-model → generated video, BYOK) --------
   const h3Ready = !!appSettings.minimaxApiKey.trim();
@@ -1734,7 +1808,7 @@ function App() {
                           sceneShotTypes={panelSceneShotTypes}
                           refImages={refImages}
                           refBindings={refBindings}
-                          onRefBindingsChange={setRefBindings}
+                          onRefBindingsChange={handleRefBindingsChange}
                           onUploadRefImage={handleUploadRefImage}
                           onRemoveRefImage={handleRemoveRefImage}
                           onOpenAssetLibrary={() => setShowAssetLibrary(true)}
@@ -2016,6 +2090,10 @@ function App() {
                 onDelete={handleRemoveRefImage}
                 onClose={() => setShowAssetLibrary(false)}
                 labels={REF_LIBRARY_LABELS[lang]}
+                backend={assetDir ? 'dir' : 'idb'}
+                backendName={assetDir?.name}
+                dirAvailable={isDirStoreAvailable()}
+                onOpenDir={handleOpenAssetDir}
             />
         )}
 

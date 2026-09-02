@@ -21,6 +21,10 @@ interface Labels {
   close: string;
   sourceBadge: Record<string, string>;
   count: (n: number) => string;
+  folderMode: string;
+  localMode: string;
+  useFolder: string;
+  folderHint: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -36,6 +40,10 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     close: 'Close',
     sourceBadge: { upload: 'upload', 'ai-generate': 'AI', 'video-frame': 'frame' },
     count: (n) => `${n} asset${n === 1 ? '' : 's'}`,
+    folderMode: 'Folder',
+    localMode: 'Browser storage',
+    useFolder: 'Use folder…',
+    folderHint: 'Point at a synced folder (OneDrive/坚果云/Syncthing) — assets become plain files shared across devices. Requires Chrome/Edge on localhost/HTTPS.',
   },
   zh: {
     title: '参考资产库',
@@ -49,6 +57,10 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     close: '关闭',
     sourceBadge: { upload: '上传', 'ai-generate': 'AI', 'video-frame': '抽帧' },
     count: (n) => `${n} 个资产`,
+    folderMode: '文件夹',
+    localMode: '浏览器存储',
+    useFolder: '使用文件夹…',
+    folderHint: '指向一个同步盘目录（OneDrive/坚果云/Syncthing）——资产变成普通文件、跨设备共享。需 Chrome/Edge + localhost/HTTPS。',
   },
 };
 
@@ -58,6 +70,11 @@ interface Props {
   onDelete: (id: string) => void;
   onClose: () => void;
   labels: Labels;
+  /** Where assets live: 'dir' = user-chosen folder on disk, 'idb' = browser. */
+  backend: 'dir' | 'idb';
+  backendName?: string;
+  dirAvailable: boolean;
+  onOpenDir: () => void;
 }
 
 /** Inline-editable text field: click to edit, Enter/blur to commit, Esc to cancel. */
@@ -97,7 +114,7 @@ const EditableText: React.FC<{
   );
 };
 
-export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels }) => {
+export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir }) => {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -115,6 +132,20 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
           <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{labels.title}</span>
           <span className="text-[10px] text-gray-400">{labels.count(images.length)}</span>
+          <button
+            type="button"
+            onClick={onOpenDir}
+            title={labels.folderHint}
+            className={`px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-colors ${
+              backend === 'dir'
+                ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                : 'border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+            }`}
+          >
+            {backend === 'dir'
+              ? `📁 ${backendName ?? ''}`
+              : `💾 ${labels.localMode} · ${dirAvailable ? labels.useFolder : '—'}`}
+          </button>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

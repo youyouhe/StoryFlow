@@ -109,6 +109,10 @@ export interface Screenplay {
   metadata: ScriptMetadata;
   blocks: ScriptBlock[];
   lastModified: number;
+  /** White-model reference bindings (capsule → asset id). Lives INSIDE the
+   *  screenplay so exports/imports carry it — assets stay in the shared
+   *  library (folder or IndexedDB), bindings travel with the script. */
+  referenceBindings?: RefBindings;
 }
 
 export interface ScriptTemplate {
