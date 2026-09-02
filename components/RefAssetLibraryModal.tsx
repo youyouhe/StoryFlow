@@ -283,9 +283,15 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
               {filtered.map((im) => (
                 <div key={im.id} className="rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden">
                   <div className="relative aspect-square bg-gray-100 dark:bg-zinc-800">
-                    <img src={im.url} alt={im.name} className="w-full h-full object-cover" />
+                    <img
+                      src={im.url}
+                      alt={im.name}
+                      title={im.sourcePrompt ? `${im.sourcePrompt.slice(0, 200)}` : im.name}
+                      className="w-full h-full object-cover"
+                    />
                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px]">
                       {labels.sourceBadge[im.source ?? 'upload'] ?? im.source}
+                      {im.sourcePrompt ? ' ⁺' : ''}
                     </span>
                     <button
                       type="button"

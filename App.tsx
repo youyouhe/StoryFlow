@@ -20,7 +20,7 @@ import {
   updateAssetMetaInDir, removeAssetFromDir,
 } from './services/assetDirStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
-import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage } from './services/minimaxService';
+import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -168,6 +168,8 @@ function App() {
     setScreenplay(prev => ({ ...prev, referenceBindings: next, lastModified: Date.now() }));
   }, []);
   // MiniMax H3 generation tasks (white-model submission pipeline)
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [imageGenError, setImageGenError] = useState<string | null>(null);
   const [h3Tasks, setH3Tasks] = useState<H3Task[]>(() => {
     try {
       const raw = localStorage.getItem('h3_tasks');
@@ -387,6 +389,94 @@ function App() {
       }
     },
     exportScript: () => ({ ok: true, json: JSON.stringify(screenplay) }),
+    updateBlock: ({ blockIndex, blockId }, patch, expectedContent) => {
+      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (b.content !== expectedContent) {
+        return { ok: false, error: 'Content drifted — the block changed since you last read it (a human may have edited). Re-read with storyflow_get_blocks, then retry with the fresh content.' };
+      }
+      setScreenplay(prev => ({
+        ...prev,
+        blocks: prev.blocks.map(x => x.id === b.id
+          ? { ...x, ...(patch.content != null ? { content: patch.content } : {}), ...(patch.type ? { type: patch.type } : {}) }
+          : x),
+        lastModified: Date.now(),
+      }));
+      return { ok: true };
+    },
+    deleteBlock: ({ blockIndex, blockId }, expectedContent) => {
+      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (screenplay.blocks.length <= 1) return { ok: false, error: 'Refusing to delete the last remaining block.' };
+      if (b.content !== expectedContent) {
+        return { ok: false, error: 'Content drifted — the block changed since you last read it. Re-read with storyflow_get_blocks, then retry.' };
+      }
+      setScreenplay(prev => ({ ...prev, blocks: prev.blocks.filter(x => x.id !== b.id), lastModified: Date.now() }));
+      return { ok: true };
+    },
+    insertBlocks: (atIndex, blocks) => {
+      const firstIndex = Math.max(0, Math.min(atIndex, screenplay.blocks.length));
+      setScreenplay(prev => ({
+        ...prev,
+        blocks: [
+          ...prev.blocks.slice(0, firstIndex),
+          ...blocks.map(nb => ({ id: generateId(), type: nb.type, content: nb.content })),
+          ...prev.blocks.slice(firstIndex),
+        ],
+        lastModified: Date.now(),
+      }));
+      return { ok: true, firstIndex, total: screenplay.blocks.length + blocks.length };
+    },
+    generateGraybox: async ({ blockIndex, blockId }) => {
+      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (b.type !== 'SCENE_HEADING' && b.type !== 'ACTION' && b.type !== 'DIALOGUE') {
+        return { ok: false, error: `Block ${idx} (${b.type}) cannot hold a graybox. Target a SCENE_HEADING, ACTION, or DIALOGUE.` };
+      }
+      const kind: 'scene' | 'shot' = b.type === 'SCENE_HEADING' ? 'scene' : 'shot';
+      let sceneStart = idx;
+      for (let i = idx; i >= 0; i--) {
+        if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
+      }
+      const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
+      try {
+        let result: GrayboxData;
+        let ctxBlocks: ScriptBlock[];
+        let shotContext: { sceneLayout?: GrayboxData | null; priorShots?: GrayboxData[] } | undefined;
+        if (kind === 'scene') {
+          let sceneEnd = screenplay.blocks.length;
+          for (let i = idx + 1; i < screenplay.blocks.length; i++) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneEnd = i; break; }
+          }
+          ctxBlocks = screenplay.blocks.slice(sceneStart, sceneEnd); // whole scene — characters need the beats
+        } else {
+          ctxBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
+          const sceneHeading = screenplay.blocks[sceneStart];
+          const sceneLayout = sceneHeading?.graybox?.kind === 'scene' && !sceneHeading.graybox.error
+            ? sceneHeading.graybox : null;
+          const priorShots: GrayboxData[] = [];
+          for (let i = sceneStart + 1; i < idx; i++) {
+            const pb = screenplay.blocks[i];
+            if (pb.type === 'SCENE_HEADING') break;
+            if (pb.graybox?.kind === 'shot' && !pb.graybox.error) priorShots.push(pb.graybox);
+          }
+          shotContext = { sceneLayout, priorShots };
+        }
+        result = await generateGraybox(ctxBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, shotContext);
+        if (result.error) return { ok: false, error: result.error };
+        setScreenplay(prev => ({
+          ...prev,
+          blocks: prev.blocks.map(x => x.id === b.id ? { ...x, graybox: result } : x),
+          lastModified: Date.now(),
+        }));
+        return { ok: true, kind };
+      } catch (e: any) {
+        return { ok: false, error: String(e?.message || e) };
+      }
+    },
   };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
@@ -405,7 +495,7 @@ function App() {
           setAssetDir(h);
           setRefImages(assets.map((a) => ({
             id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-            url: a.url, subject: a.subject, source: a.source ?? 'upload',
+            url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
           })));
           return;
         }
@@ -415,7 +505,7 @@ function App() {
       setRefImages(stored.map((s) => {
         const url = URL.createObjectURL(s.blob);
         urls.push(url);
-        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url, subject: s.subject, source: s.source ?? 'upload' };
+        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url, subject: s.subject, source: s.source ?? 'upload', sourcePrompt: s.sourcePrompt };
       }));
     })();
     return () => { cancelled = true; urls.forEach((u) => URL.revokeObjectURL(u)); };
@@ -436,16 +526,21 @@ function App() {
     } catch { /* malformed legacy entry — drop */ }
   }, [screenplay.id, screenplay.referenceBindings]);
 
-  const handleUploadRefImage = useCallback(async (file: File, subject?: string, sourcePrompt?: string) => {
-    const meta = subject || sourcePrompt
-      ? { ...(subject ? { subject } : {}), source: 'upload' as const, ...(sourcePrompt ? { sourcePrompt } : {}) }
+  const handleUploadRefImage = useCallback(async (
+    file: File,
+    subject?: string,
+    sourcePrompt?: string,
+    source: 'upload' | 'ai-generate' | 'video-frame' = 'upload',
+  ) => {
+    const meta = subject || sourcePrompt || source !== 'upload'
+      ? { ...(subject ? { subject } : {}), source, ...(sourcePrompt ? { sourcePrompt } : {}) }
       : undefined;
     try {
       if (assetDir) {
         const a = await addAssetToDir(assetDir, file, meta);
         setRefImages((prev) => [...prev, {
           id: a.id, name: a.name, type: file.type || 'image/*', size: a.size, createdAt: a.createdAt,
-          url: a.url, subject: a.subject, source: a.source ?? 'upload',
+          url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
         }]);
       } else {
         const stored = await addRefImage(file, meta);
@@ -485,7 +580,7 @@ function App() {
       setAssetDir(h);
       setRefImages(assets.map((a) => ({
         id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-        url: a.url, subject: a.subject, source: a.source ?? 'upload',
+        url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
       })));
     } catch (e) {
       console.warn('Failed to open asset folder', e);
@@ -500,7 +595,7 @@ function App() {
       const assets = await listDirAssets(assetDir);
       setRefImages(assets.map((a) => ({
         id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-        url: a.url, subject: a.subject, source: a.source ?? 'upload',
+        url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
       })));
     } catch (e) {
       console.warn('Failed to rescan asset folder', e);
@@ -1844,7 +1939,7 @@ function App() {
                     </pre>
                   </div>
                 )}
-                <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
+                <div className="relative p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
                   {!showingGraybox && panelBlock.imagePrompt && (
                     <>
                       <input
@@ -1877,6 +1972,56 @@ function App() {
                           ? (lang === 'zh' ? `存为「${panelBlock.content.trim().slice(0, 8)}」资产` : `Save as "${panelBlock.content.trim().slice(0, 12)}" asset`)
                           : (lang === 'zh' ? '存为环境资产' : 'Save as env asset')}
                       </button>
+                      <button
+                        onClick={async () => {
+                          if (imageGenerating || !h3Ready) return;
+                          setImageGenerating(true);
+                          setImageGenError(null);
+                          try {
+                            const subject = panelBlock.type === 'CHARACTER'
+                              ? panelBlock.content.trim().slice(0, 40)
+                              : '环境';
+                            const imgs = await generateImages(
+                              { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl },
+                              panelBlock.imagePrompt!,
+                              { n: 1, aspectRatio: '16:9' },
+                            );
+                            const stamp = Date.now().toString(36);
+                            const name = panelBlock.type === 'CHARACTER'
+                              ? `${subject}-gen-${stamp}.png`
+                              : `scene-gen-${stamp}.png`;
+                            for (const im of imgs) {
+                              // route through the active asset backend with
+                              // full provenance (subject + source + prompt)
+                              await handleUploadRefImage(
+                                new File([im.blob], name, { type: im.blob.type || 'image/png' }),
+                                subject || '环境',
+                                panelBlock.imagePrompt,
+                                'ai-generate',
+                              );
+                            }
+                          } catch (e: any) {
+                            setImageGenError(String(e?.message || e));
+                          } finally {
+                            setImageGenerating(false);
+                          }
+                        }}
+                        disabled={imageGenerating || !h3Ready}
+                        title={!h3Ready
+                          ? (lang === 'zh' ? '未配置 MiniMax API Key（Settings → 视频生成）' : 'No MiniMax API key (Settings → Video Generation)')
+                          : (lang === 'zh'
+                              ? '用 MiniMax image-01 直接生图入库（消耗该账号配额，按图计费）'
+                              : 'Generate via MiniMax image-01 straight into the library (billed per image)')}
+                        className="flex-1 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <span className="text-sm leading-none">🎨</span>
+                        {imageGenerating
+                          ? (lang === 'zh' ? '生成中…' : 'Generating…')
+                          : (lang === 'zh' ? '生成图片' : 'Generate')}
+                      </button>
+                      {imageGenError && (
+                        <p className="text-[10px] text-red-500 absolute bottom-0.5 left-4 right-4 truncate" title={imageGenError}>{imageGenError}</p>
+                      )}
                     </>
                   )}
                   <button

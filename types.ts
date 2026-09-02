@@ -225,6 +225,8 @@ export interface RefImage {
   url: string; // object URL, valid for the session
   subject?: string;
   source?: 'upload' | 'ai-generate' | 'video-frame';
+  /** For AI-generated assets: the prompt that produced them. */
+  sourcePrompt?: string;
 }
 
 /** White-model reference bindings, persisted per screenplay in localStorage

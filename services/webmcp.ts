@@ -95,6 +95,19 @@ export interface StoryflowWebMcpAccessor {
   importScript(payload: { json: string }): { ok: boolean; title?: string; blockCount?: number; error?: string };
   /** Full current screenplay as JSON. */
   exportScript(): { ok: boolean; json?: string; error?: string };
+  /** Edit a block's content/type. Optimistic-concurrency guarded: the call
+   *  must echo the block's CURRENT content — mismatch means it drifted
+   *  (human edited since the agent last read) and the edit is refused. */
+  updateBlock(ref: { blockIndex?: number; blockId?: string }, patch: { content?: string; type?: BlockType }, expectedContent: string): { ok: boolean; error?: string };
+  /** Delete one block (refuses the last remaining block). Same content-match
+   *  guard as updateBlock. */
+  deleteBlock(ref: { blockIndex?: number; blockId?: string }, expectedContent: string): { ok: boolean; error?: string };
+  /** Insert blocks at a position (0 = start; clamped to length = append). */
+  insertBlocks(atIndex: number, blocks: Array<{ type: BlockType; content: string }>): { ok: boolean; firstIndex?: number; total?: number; error?: string };
+  /** Trigger graybox AI generation on a block (scene heading -> scene layout;
+   *  ACTION/DIALOGUE -> shot camera with owning-scene context). Consumes the
+   *  user's configured AI quota; result is written straight onto the block. */
+  generateGraybox(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; kind?: 'scene' | 'shot'; error?: string }>;
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -298,6 +311,109 @@ export const registerStoryflowWebMcpTools = (
       inputSchema: { type: 'object', properties: {} },
       annotations: RO,
       execute: async () => ok(A().exportScript()),
+    },
+    {
+      name: 'storyflow_update_block',
+      description: 'Edit one block\'s content (and optionally its type). GUARDED: you must pass expectedContent = the block\'s CURRENT content verbatim — if the text drifted (a human edited it since you last read), the edit is refused; re-read via storyflow_get_blocks and retry. This protects human writing from blind overwrites.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          blockIndex: { type: 'integer', description: '0-based block index.' },
+          blockId: { type: 'string', description: 'Block id (alternative to blockIndex).' },
+          expectedContent: { type: 'string', description: 'The block\'s current content, verbatim (optimistic-concurrency guard).' },
+          content: { type: 'string', description: 'New content (max 2000 chars).' },
+          type: { type: 'string', enum: BLOCK_TYPE_ENUM, description: 'Optional new block type.' },
+        },
+        required: ['expectedContent', 'content'],
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const r = A().updateBlock(
+          { blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) },
+          {
+            ...(typeof args.content === 'string' ? { content: args.content.slice(0, 2000) } : {}),
+            ...(BLOCK_TYPE_ENUM.includes(args.type as BlockType) ? { type: args.type as BlockType } : {}),
+          },
+          typeof args.expectedContent === 'string' ? args.expectedContent : '',
+        );
+        return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_delete_block',
+      description: 'Delete ONE block. DESTRUCTIVE and guarded: requires expectedContent = the block\'s current content verbatim (refuses on drift); refuses to delete the last remaining block of the script. Prefer narrowing scope with the agent\'s own appended blocks.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          blockIndex: { type: 'integer', description: '0-based block index.' },
+          blockId: { type: 'string', description: 'Block id (alternative to blockIndex).' },
+          expectedContent: { type: 'string', description: 'The block\'s current content, verbatim (optimistic-concurrency guard).' },
+        },
+        required: ['expectedContent'],
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+      execute: async (args) => {
+        const r = A().deleteBlock(
+          { blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) },
+          typeof args.expectedContent === 'string' ? args.expectedContent : '',
+        );
+        return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_insert_blocks',
+      description: 'Insert screenplay blocks AT a position (0 = script start; clamped to length = append). Same block shape as storyflow_append_blocks. Use when new content belongs mid-script rather than at the end.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          atIndex: { type: 'integer', description: 'Insertion index (0-based, clamped to current length).' },
+          blocks: {
+            type: 'array',
+            description: 'Blocks to insert, in order (max 50).',
+            items: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: BLOCK_TYPE_ENUM },
+                content: { type: 'string' },
+              },
+              required: ['type', 'content'],
+            },
+          },
+        },
+        required: ['atIndex', 'blocks'],
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const raw = Array.isArray(args.blocks) ? args.blocks : [];
+        const blocks: Array<{ type: BlockType; content: string }> = [];
+        for (const b of raw.slice(0, 50)) {
+          if (!b || typeof b !== 'object') continue;
+          const type = (b as Record<string, unknown>).type;
+          const rawContent = (b as Record<string, unknown>).content;
+          if (!BLOCK_TYPE_ENUM.includes(type as BlockType) || typeof rawContent !== 'string' || !rawContent.trim()) continue;
+          blocks.push({ type: type as BlockType, content: rawContent.slice(0, 2000) });
+        }
+        const at = asInt(args.atIndex);
+        if (at == null) return err('atIndex must be an integer.');
+        if (!blocks.length) return err('No valid blocks supplied.');
+        return ok(A().insertBlocks(at, blocks));
+      },
+    },
+    {
+      name: 'storyflow_generate_graybox',
+      description: 'Trigger StoryFlow\'s graybox (3D previs) AI generation on one block — a SCENE_HEADING produces the scene layout + character blocking; an ACTION/DIALOGUE produces the shot camera (with owning-scene context and prior shots for rhythm). Result is written straight onto the block. CONSUMES the user\'s configured AI quota (BYOK provider from Settings). Use storyflow_get_graybox to read the result.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          blockIndex: { type: 'integer', description: '0-based index of the target block.' },
+          blockId: { type: 'string', description: 'Block id (alternative to blockIndex).' },
+        },
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const r = await A().generateGraybox({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
+        return ok(r);
+      },
     },
   ];
 

@@ -161,3 +161,46 @@ export const validateH3Submission = (p: H3SubmitParams): string | null => {
   }
   return null;
 };
+
+// ---- image generation (image-01, same BYOK key as H3) -----------------------
+
+export interface GeneratedImage {
+  url: string;
+  blob: Blob;
+}
+
+/** Generate images from a prompt. Returns downloaded blobs (the API returns
+ *  short-lived hosted URLs — we materialize them immediately so assets are
+ *  durable in the library). */
+export const generateImages = async (
+  cfg: MiniMaxConfig,
+  prompt: string,
+  opts?: { n?: number; aspectRatio?: string },
+): Promise<GeneratedImage[]> => {
+  const body = {
+    model: 'image-01',
+    prompt,
+    aspect_ratio: opts?.aspectRatio ?? '16:9',
+    response_format: 'url',
+    n: opts?.n ?? 1,
+    prompt_optimizer: true,
+  };
+  const res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
+    method: 'POST',
+    headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`图像生成失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  const urls: string[] = data?.data?.image_urls ?? [];
+  if (!urls.length) throw new Error(`未返回图片: ${JSON.stringify(data).slice(0, 300)}`);
+  const out: GeneratedImage[] = [];
+  for (const u of urls.slice(0, opts?.n ?? 1)) {
+    const imgRes = await fetch(u);
+    if (!imgRes.ok) throw new Error(`图片下载失败 (HTTP ${imgRes.status})`);
+    out.push({ url: u, blob: await imgRes.blob() });
+  }
+  return out;
+};
