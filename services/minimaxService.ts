@@ -209,10 +209,12 @@ export const generateImages = async (
     throw new Error(`图像生成失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
   }
   const d = data?.data ?? {};
-  // Collect payloads defensively: data URIs, raw base64, or hosted URLs.
+  // Collect payloads defensively: data URIs, raw base64 (single or array),
+  // or hosted URLs. Live testing showed image_base64 arrives as an ARRAY.
   const entries: string[] = [
     ...(Array.isArray(d.image_urls) ? d.image_urls : []),
     ...(Array.isArray(d.image_base64_list) ? d.image_base64_list : []),
+    ...(Array.isArray(d.image_base64) ? d.image_base64 : []),
     ...(typeof d.image_base64 === 'string' ? [d.image_base64] : []),
   ].filter((x) => typeof x === 'string' && x.length > 0);
   if (!entries.length) throw new Error(`未返回图片: ${JSON.stringify(data).slice(0, 300)}`);
