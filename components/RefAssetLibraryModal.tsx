@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import qrcode from 'qrcode-generator';
 import { RefImage } from '../types';
 
 /**
@@ -32,6 +33,7 @@ interface Labels {
   phoneHint: string;
   phoneCount: (n: number) => string;
   rescan: string;
+  qrHint: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -58,6 +60,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     phoneHint: 'Install the LocalSend app on your phone (same Wi-Fi), pick this device, send — photos/videos land straight in the asset folder and auto-import.',
     phoneCount: (n) => `received ${n}`,
     rescan: 'Rescan',
+    qrHint: 'Scan on the phone to open the upload page — no app needed.',
   },
   zh: {
     title: '参考资产库',
@@ -82,6 +85,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     phoneHint: '手机安装 LocalSend App（同一 Wi-Fi）→ 搜到本设备 → 发送，照片/视频直接落进资产文件夹并自动入库。',
     phoneCount: (n) => `已收 ${n} 个`,
     rescan: '重新扫描',
+    qrHint: '手机扫码打开上传页——无需安装任何 App。',
   },
 };
 
@@ -145,7 +149,7 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
   // Polls http://<this-host>:53317/status while the modal is open; when the
   // received count grows, rescans the folder so new files appear immediately.
   const [ls, setLs] = useState<{
-    running: boolean; alias: string; my_ip?: string;
+    running: boolean; alias: string; my_ip?: string; port?: number;
     received_count: number; pending_files: number;
     received: Array<{ fileName: string; time: number }>;
   } | null>(null);
@@ -241,11 +245,32 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
               )}
             </div>
             {backend === 'dir' && ls?.running && (
-              <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500">
-                {labels.phoneCount(ls.received_count)}
-                {ls.received?.length ? ` · ${ls.received.slice(-3).map(r => r.fileName).join('、')}` : ''}
-                {' — '}{labels.phoneHint}
-              </p>
+              <div className="mt-1.5 flex items-start gap-3">
+                {(() => {
+                  const port = ls.port ?? 53317;
+                  const url = `http://${ls.my_ip ?? location.hostname}:${port}/`;
+                  try {
+                    const qr = qrcode(0, 'M');
+                    qr.addData(url);
+                    qr.make();
+                    return (
+                      <div
+                        className="shrink-0 bg-white rounded-md p-1 leading-none"
+                        title={labels.qrHint}
+                        dangerouslySetInnerHTML={{ __html: qr.createSvgTag({ cellSize: 3, margin: 1 }) }}
+                      />
+                    );
+                  } catch { return null; }
+                })()}
+                <div className="min-w-0">
+                  <p className="text-[10px] leading-snug text-gray-400 dark:text-gray-500">
+                    {labels.phoneCount(ls.received_count)}
+                    {ls.received?.length ? ` · ${ls.received.slice(-3).map(r => r.fileName).join('、')}` : ''}
+                    {' — '}{labels.phoneHint}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{labels.qrHint}</p>
+                </div>
+              </div>
             )}
           </div>
 

@@ -4,7 +4,8 @@
 #
 # 协议: UDP 多播发现 (224.0.0.167:53317) + 明文 HTTP API (:53317)
 # 端点: /api/localsend/v2/{register, prepare-upload, upload, cancel, info}
-# 附加: GET /status (供 StoryFlow 前端轮询, 带 CORS)
+# 附加: GET /          极简网页上传页 (手机扫码即传, 无需 LocalSend App)
+#       GET /status    供 StoryFlow 前端轮询 (带 CORS)
 # 参考: https://github.com/localsend/protocol/blob/main/README.md
 #
 # 用法:
@@ -291,7 +292,69 @@ class LSHandler(BaseHTTPRequestHandler):
             return self._json(200, _device_info())
         if self.path.split('?')[0] == '/status':
             return self._json(200, status())
+        if self.path.split('?')[0] == '/':
+            return self._upload_page()
         return self._empty(404)
+
+    # ---------- 极简网页上传页 (手机浏览器, 同源无 CORS 问题) ----------
+    def _upload_page(self):
+        html = '''<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>StoryFlow 素材投递</title>
+<style>
+ body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;
+      margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px}
+ h1{font-size:18px;margin:0 0 4px} p{font-size:12px;color:#94a3b8;margin:0 0 20px;text-align:center}
+ label.pick{display:block;width:100%%;max-width:420px;padding:44px 16px;border:2px dashed #475569;
+      border-radius:16px;text-align:center;font-size:15px;cursor:pointer;background:#1e293b}
+ label.pick:active{background:#334155}
+ #list{width:100%%;max-width:420px;margin-top:16px;font-size:13px}
+ .row{display:flex;justify-content:space-between;padding:8px 12px;background:#1e293b;
+      border-radius:8px;margin-bottom:6px;overflow:hidden}
+ .ok{color:#34d399}.err{color:#f87171}.ing{color:#fbbf24}
+ #done{margin-top:18px;font-size:13px;color:#34d399;min-height:20px}
+</style></head><body>
+<h1>📱 StoryFlow 素材投递</h1><p>选择照片/视频，直接送进资产文件夹</p>
+<label class="pick">📷 点此选择文件（可多选）<input id="f" type="file" multiple
+  accept="image/*,video/*" style="display:none"></label>
+<div id="list"></div><div id="done"></div>
+<script>
+const $=id=>document.getElementById(id);
+async function sha(b){const h=await crypto.subtle.digest('SHA-256',b);
+ return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+$('f').onchange=async e=>{
+ const files=[...e.target.files]; if(!files.length)return;
+ // 与 LocalSend App 同一协议: prepare-upload 拿 token, 逐个 upload
+ const dto={}; files.forEach((f,i)=>dto['web-'+i]={fileName:f.name,size:f.size,fileType:f.type});
+ const pr=await fetch('/api/localsend/v2/prepare-upload',{method:'POST',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({files:dto,info:{deviceType:'browser'}})});
+ if(!pr.ok){alert('接收端忙/拒绝 (HTTP '+pr.status+')');return}
+ const {sessionId,files:tokens}=await pr.json();
+ let ok=0;
+ for(let i=0;i<files.length;i++){
+   const fid='web-'+i, row=document.createElement('div'); row.className='row';
+   row.innerHTML='<span class="ing"></span><span></span>';
+   $('list').appendChild(row);
+   try{
+     const buf=await files[i].arrayBuffer();
+     const up=await fetch('/api/localsend/v2/upload?sessionId='+sessionId+'&fileId='+fid+
+       '&token='+tokens[fid]+'&name='+encodeURIComponent(files[i].name),
+       {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:buf});
+     if(!up.ok)throw 0; ok++;
+   }catch{}
+ }
+ $('done').textContent=ok===files.length?'✅ 全部送达 ('+ok+'/'+files.length+')，可在资产库中查看':
+   ('⚠️ '+ok+'/'+files.length+' 成功，失败的可重选重传');
+ $('f').value='';
+};
+</script></body></html>'''
+        body = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):
         path = self.path.split('?')[0]
