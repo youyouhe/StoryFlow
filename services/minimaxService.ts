@@ -169,6 +169,18 @@ export interface GeneratedImage {
   blob: Blob;
 }
 
+/** image-01 rejects prompts over 1500 chars (status 2013). Our six-element
+ *  storyboard prompts can exceed that. Trim at the last complete line that
+ *  fits so whole elements survive (Subject-first ordering means the tail
+ *  Material/Mood lines are what gets dropped, never the identity core). */
+const clampImagePrompt = (prompt: string): string => {
+  const MAX = 1450; // safety margin under the 1500 cap
+  const p = prompt.trim();
+  if (p.length <= MAX) return p;
+  const cut = p.lastIndexOf('\n', MAX);
+  return cut > 0 ? p.slice(0, cut) : p.slice(0, MAX);
+};
+
 /** Generate images from a prompt. Returns downloaded blobs (the API returns
  *  short-lived hosted URLs — we materialize them immediately so assets are
  *  durable in the library). */
@@ -179,7 +191,7 @@ export const generateImages = async (
 ): Promise<GeneratedImage[]> => {
   const body = {
     model: 'image-01',
-    prompt,
+    prompt: clampImagePrompt(prompt),
     aspect_ratio: opts?.aspectRatio ?? '16:9',
     response_format: 'url',
     n: opts?.n ?? 1,
