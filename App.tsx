@@ -170,6 +170,9 @@ function App() {
   // MiniMax H3 generation tasks (white-model submission pipeline)
   const [imageGenerating, setImageGenerating] = useState(false);
   const [imageGenError, setImageGenError] = useState<string | null>(null);
+  // Inline success preview at the click site (the image is already in the
+  // library; this just shows it where the user generated it).
+  const [imageGenPreview, setImageGenPreview] = useState<{ blockId: string; url: string; subject: string } | null>(null);
   const [h3Tasks, setH3Tasks] = useState<H3Task[]>(() => {
     try {
       const raw = localStorage.getItem('h3_tasks');
@@ -1942,6 +1945,24 @@ function App() {
                 <div className="relative p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
                   {!showingGraybox && panelBlock.imagePrompt && (
                     <>
+                      {imageGenPreview?.blockId === panelBlock.id && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAssetLibrary(true)}
+                          title={lang === 'zh' ? '已入库——点击打开资产库' : 'Saved to library — click to open'}
+                          className="flex items-center gap-1.5 shrink-0 group"
+                        >
+                          <img
+                            src={imageGenPreview.url}
+                            alt={imageGenPreview.subject}
+                            className="w-9 h-9 rounded-md object-cover border border-emerald-400 group-hover:border-emerald-500"
+                          />
+                          <span className="hidden sm:inline text-[10px] text-emerald-600 dark:text-emerald-400 leading-tight">
+                            {lang === 'zh' ? '已入库' : 'saved'}<br />
+                            <span className="text-gray-400">{imageGenPreview.subject}</span>
+                          </span>
+                        </button>
+                      )}
                       <input
                         type="file"
                         accept="image/*"
@@ -1990,6 +2011,11 @@ function App() {
                             const name = panelBlock.type === 'CHARACTER'
                               ? `${subject}-gen-${stamp}.png`
                               : `scene-gen-${stamp}.png`;
+                            setImageGenPreview({
+                              blockId: panelBlock.id,
+                              url: URL.createObjectURL(new Blob([imgs[0].blob], { type: imgs[0].blob.type || 'image/png' })),
+                              subject: subject || '环境',
+                            });
                             for (const im of imgs) {
                               // route through the active asset backend with
                               // full provenance (subject + source + prompt)
