@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RefImage } from '../types';
 
 /**
@@ -25,6 +25,13 @@ interface Labels {
   localMode: string;
   useFolder: string;
   folderHint: string;
+  phone: string;
+  phoneNeedDir: string;
+  phoneOffline: string;
+  phoneOnline: (alias: string, ip: string) => string;
+  phoneHint: string;
+  phoneCount: (n: number) => string;
+  rescan: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -44,6 +51,13 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     localMode: 'Browser storage',
     useFolder: 'Use folder…',
     folderHint: 'Point at a synced folder (OneDrive/坚果云/Syncthing) — assets become plain files shared across devices. Requires Chrome/Edge on localhost/HTTPS.',
+    phone: 'Phone drop · LocalSend',
+    phoneNeedDir: 'Phone drop needs the folder backend (files land in the folder, then auto-import).',
+    phoneOffline: 'Receiver not running — start scripts/localsend-assets.sh <folder>',
+    phoneOnline: (alias, ip) => `Online · ${alias} @ ${ip}`,
+    phoneHint: 'Install the LocalSend app on your phone (same Wi-Fi), pick this device, send — photos/videos land straight in the asset folder and auto-import.',
+    phoneCount: (n) => `received ${n}`,
+    rescan: 'Rescan',
   },
   zh: {
     title: '参考资产库',
@@ -61,6 +75,13 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     localMode: '浏览器存储',
     useFolder: '使用文件夹…',
     folderHint: '指向一个同步盘目录（OneDrive/坚果云/Syncthing）——资产变成普通文件、跨设备共享。需 Chrome/Edge + localhost/HTTPS。',
+    phone: '手机投递 · LocalSend',
+    phoneNeedDir: '手机投递需要文件夹后端（文件落盘到文件夹后自动入库）。',
+    phoneOffline: '接收端未运行——在资产文件夹所在的机器上执行 scripts/localsend-assets.sh <文件夹>',
+    phoneOnline: (alias, ip) => `在线 · ${alias} @ ${ip}`,
+    phoneHint: '手机安装 LocalSend App（同一 Wi-Fi）→ 搜到本设备 → 发送，照片/视频直接落进资产文件夹并自动入库。',
+    phoneCount: (n) => `已收 ${n} 个`,
+    rescan: '重新扫描',
   },
 };
 
@@ -75,6 +96,8 @@ interface Props {
   backendName?: string;
   dirAvailable: boolean;
   onOpenDir: () => void;
+  /** Re-scan the asset folder (called automatically when phone drops arrive). */
+  onRescan: () => void;
 }
 
 /** Inline-editable text field: click to edit, Enter/blur to commit, Esc to cancel. */
@@ -114,9 +137,42 @@ const EditableText: React.FC<{
   );
 };
 
-export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir }) => {
+export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan }) => {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
+
+  // ---- LocalSend receiver status (phone drop) -------------------------------
+  // Polls http://<this-host>:53317/status while the modal is open; when the
+  // received count grows, rescans the folder so new files appear immediately.
+  const [ls, setLs] = useState<{
+    running: boolean; alias: string; my_ip?: string;
+    received_count: number; pending_files: number;
+    received: Array<{ fileName: string; time: number }>;
+  } | null>(null);
+  const lastCountRef = useRef(-1);
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`http://${location.hostname}:53317/status`, { signal: AbortSignal.timeout(2500) });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (stopped) return;
+        setLs(data);
+        if (lastCountRef.current >= 0 && data.received_count > lastCountRef.current) {
+          onRescan(); // fresh file landed in the folder — pull it into the library
+        }
+        lastCountRef.current = data.received_count;
+      } catch {
+        if (!stopped) setLs(null);
+      }
+    };
+    if (backend === 'dir') {
+      tick();
+      const t = window.setInterval(tick, 4000);
+      return () => { stopped = true; window.clearInterval(t); };
+    }
+  }, [backend, onRescan]);
   const filtered = useMemo(() => {
     if (!q) return images;
     return images.filter((im) =>
@@ -163,6 +219,36 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          {/* Phone drop (LocalSend) — files land in the asset folder */}
+          <div className="mb-3 rounded-lg border border-gray-200 dark:border-zinc-700 px-2.5 py-2 bg-gray-50/60 dark:bg-zinc-800/40">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">📱 {labels.phone}</span>
+              <span className={`text-[10px] font-semibold ${ls?.running ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                {backend !== 'dir'
+                  ? labels.phoneNeedDir
+                  : ls?.running
+                    ? labels.phoneOnline(ls.alias, ls.my_ip ?? '?')
+                    : labels.phoneOffline}
+              </span>
+              {backend === 'dir' && (
+                <button
+                  type="button"
+                  onClick={onRescan}
+                  className="ml-auto px-2 py-0.5 rounded text-[9px] font-semibold border border-gray-300 dark:border-zinc-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                >
+                  ⟳ {labels.rescan}
+                </button>
+              )}
+            </div>
+            {backend === 'dir' && ls?.running && (
+              <p className="mt-1 text-[10px] leading-snug text-gray-400 dark:text-gray-500">
+                {labels.phoneCount(ls.received_count)}
+                {ls.received?.length ? ` · ${ls.received.slice(-3).map(r => r.fileName).join('、')}` : ''}
+                {' — '}{labels.phoneHint}
+              </p>
+            )}
+          </div>
+
           {images.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-10">{labels.empty}</p>
           ) : filtered.length === 0 ? (

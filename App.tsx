@@ -489,6 +489,21 @@ function App() {
       console.warn('Failed to open asset folder', e);
     }
   }, [assetDir]);
+
+  /** Re-scan the asset folder — manual button + auto-triggered when a phone
+   *  drop (LocalSend) lands new files. */
+  const reloadAssets = useCallback(async () => {
+    if (!assetDir) return;
+    try {
+      const assets = await listDirAssets(assetDir);
+      setRefImages(assets.map((a) => ({
+        id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
+        url: a.url, subject: a.subject, source: a.source ?? 'upload',
+      })));
+    } catch (e) {
+      console.warn('Failed to rescan asset folder', e);
+    }
+  }, [assetDir]);
   const handleRemoveRefImage = useCallback((id: string) => {
     if (assetDir) removeAssetFromDir(assetDir, id).catch((e) => console.warn('Failed to delete asset file', e));
     else removeStoredRefImage(id).catch((e) => console.warn('Failed to delete reference image', e));
@@ -2094,6 +2109,7 @@ function App() {
                 backendName={assetDir?.name}
                 dirAvailable={isDirStoreAvailable()}
                 onOpenDir={handleOpenAssetDir}
+                onRescan={reloadAssets}
             />
         )}
 
