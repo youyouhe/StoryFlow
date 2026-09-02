@@ -139,7 +139,7 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
       {/* Storyboard image prompt chip (ACTION / CHARACTER blocks).
           Clicking it opens the prompt in a right-side drawer (handled in App)
           instead of expanding inline, so it costs only one line of editor space. */}
-      {block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER') && (
+      {block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER' || block.type === 'SCENE_HEADING') && (
         <button
           type="button"
           onClick={() => onOpenImagePrompt?.(block.id)}
