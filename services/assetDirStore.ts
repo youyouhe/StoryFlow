@@ -18,7 +18,7 @@
  * empty — tag them in the library UI).
  */
 
-import { RefImageMetaPatch } from './refImageStore';
+import { RefImageMetaPatch, openRefsDB } from './refImageStore';
 
 export interface DirAssetMeta {
   id: string;
@@ -56,57 +56,38 @@ const HANDLE_DB = 'storyflow-refs';
 const HANDLE_STORE = 'meta';
 const HANDLE_KEY = 'assetDir';
 
-export const persistDirHandle = (h: FileSystemDirectoryHandle): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const req = indexedDB.open(HANDLE_DB, 2);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(HANDLE_STORE)) db.createObjectStore(HANDLE_STORE);
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      const tx = db.transaction(HANDLE_STORE, 'readwrite');
-      tx.objectStore(HANDLE_STORE).put(h, HANDLE_KEY);
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = () => { db.close(); reject(tx.error); };
-    };
-    req.onerror = () => reject(req.error);
+export const persistDirHandle = async (h: FileSystemDirectoryHandle): Promise<void> => {
+  const db = await openRefsDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).put(h, HANDLE_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
+};
 
-export const loadPersistedDirHandle = (): Promise<FileSystemDirectoryHandle | null> =>
-  new Promise((resolve) => {
-    const req = indexedDB.open(HANDLE_DB, 2);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(HANDLE_STORE)) db.createObjectStore(HANDLE_STORE);
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(HANDLE_STORE)) { db.close(); resolve(null); return; }
-      const tx = db.transaction(HANDLE_STORE, 'readonly');
-      const get = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY);
-      get.onsuccess = () => { db.close(); resolve((get.result as FileSystemDirectoryHandle) ?? null); };
-      get.onerror = () => { db.close(); resolve(null); };
-    };
-    req.onerror = () => resolve(null);
-  });
+export const loadPersistedDirHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
+  try {
+    const db = await openRefsDB();
+    return await new Promise((resolve) => {
+      const get = db.transaction(HANDLE_STORE, 'readonly').objectStore(HANDLE_STORE).get(HANDLE_KEY);
+      get.onsuccess = () => resolve((get.result as FileSystemDirectoryHandle) ?? null);
+      get.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+};
 
-export const forgetDirHandle = (): Promise<void> =>
-  new Promise((resolve) => {
-    const req = indexedDB.open(HANDLE_DB, 2);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(HANDLE_STORE)) db.createObjectStore(HANDLE_STORE);
-    };
-    req.onsuccess = () => {
-      const db = req.result;
+export const forgetDirHandle = async (): Promise<void> => {
+  try {
+    const db = await openRefsDB();
+    await new Promise<void>((resolve) => {
       const tx = db.transaction(HANDLE_STORE, 'readwrite');
       tx.objectStore(HANDLE_STORE).delete(HANDLE_KEY);
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = () => { db.close(); resolve(); };
-    };
-    req.onerror = () => resolve();
-  });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* nothing to forget */ }
+};
 
 // ---- permissions -----------------------------------------------------------
 

@@ -11,11 +11,12 @@
  */
 
 const DB_NAME = 'storyflow-refs';
-// v2: the 'meta' store (asset-dir handle persistence, assetDirStore.ts)
-// upgraded this DB in-place. Opening with v1 after that is a VersionError —
-// which silently killed every IndexedDB-path asset write (found live).
-// Both stores are created idempotently on upgrade, whichever opens first.
-const DB_VERSION = 2;
+// v3 history: v2 added the 'meta' store (asset-dir handle persistence) — but
+// a DB upgraded 0->2 by assetDirStore first never runs refImageStore's
+// upgrade, so 'images' was never created and every asset write died with
+// NotFoundError (found live). v3 forces one more upgrade pass; both stores
+// are created idempotently, whichever module opens first.
+const DB_VERSION = 3;
 const STORE = 'images';
 
 export interface StoredRefImage {
@@ -41,6 +42,9 @@ export interface RefImageMetaPatch {
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+
+/** Shared opener — assetDirStore uses the same DB for its 'meta' store. */
+export const openRefsDB = (): Promise<IDBDatabase> => openDB();
 
 const openDB = (): Promise<IDBDatabase> => {
   if (dbPromise) return dbPromise;
