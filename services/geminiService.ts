@@ -422,7 +422,7 @@ ${matGuidance}
 6. Mood — emotional tone, atmosphere, color palette leaning.
 
 STRICT RULES:
-- ERA & GENRE LOCK — before writing, derive the story's era and genre from the system persona, the scene heading, and the surrounding beats. Costume, hair, props, architecture, and technology MUST be period/genre accurate: a period/xianxia/wuxia piece means period-accurate attire and artifacts; NO anachronisms (modern clothing, watches, zippers, sneakers, phones, cars) unless the script explicitly places them. Fold era cues into the Subject/Environment/Material lines.
+- ERA INTENT — the script is the authority on its visual world. Derive the era/genre the script actually depicts (from the persona, scene heading, and beats) and follow its INTENT: period worlds get period-accurate costume, props, and architecture; but when the script deliberately mixes eras or breaks convention (time-travel 穿越, dreams, otherworldly intrusion, genre parody), preserve and emphasize that deliberate contrast — a modern-dressed protagonist in an ancient court should read instantly as intentional. The only failure is UNINTENDED drift: era-inappropriate details nobody wrote (a period warrior casually wearing a wristwatch). When genre convention and the beats disagree, follow the beats.
 - Output EXACTLY six lines, one per element, in this exact format:
   Subject: ...
   Environment: ...
@@ -745,7 +745,7 @@ Output STRICT JSON and nothing else, in this exact shape:
 
 Rules:
 - layout: include a ground plane. Add enclosing walls only for interiors or where the scene names a boundary. Include only the most important props/furniture/terrain features (<=12 objects). Outdoors, prefer a few large environment-role shapes over many small ones. Within layout entries, you may omit rotation/color when they add nothing.
-- era & genre: derive the story's era/genre from the scene heading and beats; furniture, props, and structures must fit it — a period hall gets long tables and floor seats (长案/坐席), not sofas, shop counters, or other anachronistic objects. Prefer the script's own object names for labels.
+- era intent: derive the era the heading and beats ACTUALLY depict and furnish accordingly — a period hall gets 长案/坐席; but if the script deliberately mixes eras (穿越: a smartphone on an ancient desk), place BOTH faithfully — the juxtaposition is the design. Avoid only unintended drift (objects nobody wrote). Prefer the script's own object names for labels.
 - characters: REQUIRED whenever the scene has any speaking/acting character — output the "characters" array with one entry per distinct named character who appears (via a CHARACTER cue, or clearly acting/speaking in a beat). <=8 entries. Position each on the x/z ground plane, with facing + pose that reflect their relationship and power this scene. Infer reasonable positions/facings from the script's staging cues (who faces whom, who is seated, who confronts whom) — inference is expected and welcome; omitting the whole array is only correct for a scene with no acting characters at all (a pure landscape/establishing shot). An empty "characters": [] is NOT acceptable for a scene with dialogue or action involving named characters.
 - Do NOT include markdown, commentary, or any text outside the JSON.`;
 
