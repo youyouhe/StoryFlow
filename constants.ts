@@ -587,7 +587,7 @@ export const TRANSLATIONS = {
     aiDeletePrompt: "Delete",
     imagePromptOpen: "View",
     storyboardHint: "Contains only the six visual elements (subject, environment, composition, lighting, material, mood). Add aspect ratio and quality boosters yourself in your image tool.",
-    storyboardWrongBlock: "Select an ACTION or CHARACTER block to generate a storyboard prompt.",
+    storyboardWrongBlock: "Select a SCENE_HEADING (environment), ACTION (storyboard frame), or CHARACTER (design sheet) block to generate an image prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
       subject: "Subject",
@@ -778,7 +778,7 @@ export const TRANSLATIONS = {
     aiDeletePrompt: "删除",
     imagePromptOpen: "查看",
     storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
-    storyboardWrongBlock: "请选中一个动作块或角色块再生成分镜提示词。",
+    storyboardWrongBlock: "请选中场景标题（环境图）、动作块（分镜画面）或角色块（设定表）再生成提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {
       subject: "主体",

@@ -377,19 +377,24 @@ export const generateImagePrompt = async (
   targetBlockId: string,
   systemInstruction: string,
   settings: AppSettings,
-  kind: 'action' | 'character' = 'action',
+  kind: 'action' | 'character' | 'environment' = 'action',
 ): Promise<string> => {
   // Image prompts are always English, independent of scriptLanguage.
   const langInstruction = 'Respond in English only.';
 
   const isCharacter = kind === 'character';
+  const isEnvironment = kind === 'environment';
 
   const roleLine = isCharacter
     ? 'Your job: turn a screenplay CHARACTER into a single character-design image prompt.'
+    : isEnvironment
+    ? 'Your job: turn a screenplay SCENE HEADING into a single environment-establishing image prompt (a set "定妆照" for the space).'
     : 'Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.';
 
   const subjectGuidance = isCharacter
     ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description, with costume and hair styled to the story\'s era and genre (period-accurate when the setting is period). If the surrounding beats imply a specific outfit state for THIS moment (battle-worn, formal court dress, travel gear, injured), describe that outfit — it defines this design sheet\'s costume variant.'
+    : isEnvironment
+    ? '1. Subject — the SPACE itself: location type, architecture/terrain, key furnishings or landmarks, era/genre styling, atmosphere. No characters (or tiny silhouettes for scale only).'
     : '1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.';
 
   const envGuidance = isCharacter
@@ -398,13 +403,15 @@ export const generateImagePrompt = async (
 
   const compGuidance = isCharacter
     ? '3. Composition — character turnaround sheet: the SAME character in three views side by side (front / side / back), full-body, consistent scale and spacing, neutral standing pose — an animation model sheet. The three views must be identical in styling so the sheet locks the character\'s identity.'
+    : isEnvironment
+    ? '3. Composition — wide establishing frame of the whole space, eye level, full depth readable.'
     : '3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.';
 
   const matGuidance = isCharacter
     ? '5. Material — clothing fabric, accessories, armor/prop materials, surface textures of garments.'
     : '5. Material — textures, fabrics, surfaces, finishes that sell realism or style.';
 
-  const targetTag = isCharacter ? ' [TARGET CHARACTER TO DESIGN]' : ' [TARGET ACTION TO ILLUSTRATE]';
+  const targetTag = isCharacter ? ' [TARGET CHARACTER TO DESIGN]' : isEnvironment ? ' [TARGET SCENE TO ESTABLISH]' : ' [TARGET ACTION TO ILLUSTRATE]';
 
   const systemPrompt = `You are a Storyboard Artist and expert Text-to-Image Prompt Engineer.
 ${roleLine}
@@ -443,7 +450,7 @@ STRICT RULES:
     return `${b.type}:${tag} ${b.content}`;
   }).join('\n');
 
-  const targetNoun = isCharacter ? 'TARGET CHARACTER' : 'TARGET ACTION';
+  const targetNoun = isCharacter ? 'TARGET CHARACTER' : isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';
   const userPrompt = `Scene context (the marked ${targetNoun.toLowerCase()} is the one to turn into an image prompt):
 ---
 ${context}

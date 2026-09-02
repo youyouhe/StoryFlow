@@ -1108,7 +1108,7 @@ function App() {
         }
       } else if (effectiveMode === 'STORYBOARD') {
         const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
-        if (!currentBlock || (currentBlock.type !== 'ACTION' && currentBlock.type !== 'CHARACTER')) {
+        if (!currentBlock || (currentBlock.type !== 'ACTION' && currentBlock.type !== 'CHARACTER' && currentBlock.type !== 'SCENE_HEADING')) {
             setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock, decision: null, grayboxDraft: null, batchProgress: null });
             return;
         }
@@ -1121,7 +1121,7 @@ function App() {
             if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
         }
         const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
-        const kind = currentBlock.type === 'CHARACTER' ? 'character' : 'action';
+        const kind = currentBlock.type === 'CHARACTER' ? 'character' : currentBlock.type === 'SCENE_HEADING' ? 'environment' : 'action';
         result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind);
       } else if (effectiveMode === 'GRAYBOX') {
         // Graybox: structured 3D previs JSON (scene layout or shot camera).
