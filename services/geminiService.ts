@@ -433,6 +433,7 @@ STRICT RULES:
 - Do NOT include aspect ratio, resolution, or quality-booster terms (no 8k, no "high detail", no "professional photography"). The user adds those separately.
 - Do NOT use markdown, headings, bullet points, code blocks, or any preamble/explanation.
 - Each line must be a single concrete phrase. Be specific and visual (show, don't tell).
+- Keep the TOTAL prompt under 1200 characters — the image API caps input length and the tail lines get trimmed first, so front-load the essentials (identity in Subject, era in Environment/Material) and keep later lines tight.
 - Translate any non-English source content into English for the prompt.`;
 
   // Render the scene context, highlighting the target block.
