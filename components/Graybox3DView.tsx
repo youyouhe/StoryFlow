@@ -944,6 +944,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     const envImage = effBindings && refImages.length && imageById(effBindings.environment)?.name;
     return {
       beatContent: beat?.content ?? '',
+      beatType: beat?.type,
       camera: graybox.camera!,
       characters: sceneChars,
       sceneHeading,

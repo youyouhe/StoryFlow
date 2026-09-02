@@ -38,6 +38,9 @@ export const whiteModelCharColor = (i: number): { hex: string; zh: string } =>
 export interface WhiteModelPromptInput {
   /** The beat's block content (the ACTION / DIALOGUE text). */
   beatContent: string;
+  /** The beat's block type — DIALOGUE beats get spoken-line framing so H3's
+   *  native audio voices them with lip sync. */
+  beatType?: string;
   /** The shot camera (shotType, shotDescription, movement duration). */
   camera: GrayboxCamera;
   /** The scene's character blocking — drives the capsule→image mapping. */
@@ -77,14 +80,26 @@ const fmtSeconds = (s: number): string => {
   return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}s`;
 };
 
-/** One timestamped action line shared by both templates. */
+/** One timestamped action line shared by both templates. DIALOGUE beats are
+ *  framed as SPOKEN lines — H3 generates native audio with lip sync, so the
+ *  verbatim line + delivery intent is what voices the character. */
 const beatLine = (input: WhiteModelPromptInput): string => {
   const dur = Math.max(0.5, input.camera.movement?.duration ?? 0);
   const desc = input.camera.shotDescription?.trim();
   const beat = input.beatContent.trim();
+  if (input.beatType === 'DIALOGUE') {
+    const delivery = desc ? `（${desc}）` : '';
+    return `0-${fmtSeconds(dur)}：画面中角色开口说出这句对白（原声人声、口型同步、对白逐字一致）：「${beat}」${delivery}`;
+  }
   const core = desc ? `${beat}（镜头意图：${desc}）` : beat;
   return `0-${fmtSeconds(dur)}：${core}`;
 };
+
+/** H3 renders native stereo audio — one guiding soundscape line. */
+const soundscapeLine = (input: WhiteModelPromptInput): string =>
+  input.beatType === 'DIALOGUE'
+    ? '音景：环境声贴合场景氛围，对白为清晰近讲人声并口型同步，声画同步收束。'
+    : '音景：环境声与动作音效贴合画面（风沙/马蹄/金属等按场景），无对白。';
 
 /** Capsule → reference-image mapping lines (shared shape, target-specific
  *  reference syntax). Character images are numbered 1..N in binding order;
@@ -174,6 +189,7 @@ export const buildH3Prompt = (input: WhiteModelPromptInput): string => {
       : ['视频1 白模中无角色，仅场景空镜；灰色几何体为场景陈设。']),
     '',
     beatLine(input),
+    soundscapeLine(input),
     '',
     `请严格保持参考视频的运镜轨迹、机位节奏与角色站位；场景风格参考图片${envNo}${envName}${input.sceneHeading?.trim() ? `（${input.sceneHeading.trim()}）` : ''}。`,
     `全程保持角色形象、服装与比例一致，输出${styleOf(input)}；画面中不出现网格、轨迹线或任何辅助元素。`,

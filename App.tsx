@@ -278,6 +278,7 @@ function App() {
       }
       const input = {
         beatContent: b.content,
+        beatType: b.type,
         camera: b.graybox.camera,
         characters: sceneG?.characters ?? [],
         sceneHeading: sceneHead,
