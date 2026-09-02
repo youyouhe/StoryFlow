@@ -21,6 +21,19 @@ export interface StoredRefImage {
   size: number;
   createdAt: number;
   blob: Blob;
+  /** Global identity axis for smart binding: character name / "环境" / "道具:X". */
+  subject?: string;
+  /** Provenance: how the asset entered the library. */
+  source?: 'upload' | 'ai-generate' | 'video-frame';
+  /** For AI-generated assets: the prompt that produced them (traceability). */
+  sourcePrompt?: string;
+}
+
+export interface RefImageMetaPatch {
+  name?: string;
+  subject?: string;
+  source?: StoredRefImage['source'];
+  sourcePrompt?: string;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -53,7 +66,7 @@ const tx = async (mode: IDBTransactionMode) => {
 const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
 
 /** Store an uploaded file. Returns the stored record. */
-export const addRefImage = async (file: File): Promise<StoredRefImage> => {
+export const addRefImage = async (file: File, meta?: RefImageMetaPatch): Promise<StoredRefImage> => {
   const store = await tx('readwrite');
   const record: StoredRefImage = {
     id: generateId(),
@@ -62,6 +75,7 @@ export const addRefImage = async (file: File): Promise<StoredRefImage> => {
     size: file.size,
     createdAt: Date.now(),
     blob: file,
+    ...meta,
   };
   await new Promise<void>((resolve, reject) => {
     const req = store.put(record);
@@ -71,12 +85,42 @@ export const addRefImage = async (file: File): Promise<StoredRefImage> => {
   return record;
 };
 
-/** List all images, oldest first (stable upload-order numbering). */
+/** Update an image's metadata (name/subject/source) without touching the
+ *  blob — reads the existing record, merges, puts it back. */
+export const updateRefImageMeta = async (id: string, patch: RefImageMetaPatch): Promise<StoredRefImage | null> => {
+  const store = await tx('readwrite');
+  const existing: StoredRefImage | undefined = await new Promise((resolve, reject) => {
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result as StoredRefImage | undefined);
+    req.onerror = () => reject(req.error ?? new Error('get failed'));
+  });
+  if (!existing) return null;
+  const next: StoredRefImage = {
+    ...existing,
+    ...('name' in patch ? { name: patch.name! } : {}),
+    ...('subject' in patch ? { subject: patch.subject || undefined } : {}),
+    ...('source' in patch ? { source: patch.source } : {}),
+    ...('sourcePrompt' in patch ? { sourcePrompt: patch.sourcePrompt || undefined } : {}),
+  };
+  await new Promise<void>((resolve, reject) => {
+    const req = store.put(next);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error ?? new Error('put failed'));
+  });
+  return next;
+};
+
+/** List all images, oldest first (stable upload-order numbering). Records
+ *  written before the subject/source fields existed normalize to 'upload'. */
 export const listRefImages = async (): Promise<StoredRefImage[]> => {
   const store = await tx('readonly');
   return new Promise((resolve, reject) => {
     const req = store.getAll();
-    req.onsuccess = () => resolve((req.result as StoredRefImage[]).sort((a, b) => a.createdAt - b.createdAt));
+    req.onsuccess = () => resolve(
+      (req.result as StoredRefImage[])
+        .map((r) => ({ ...r, source: r.source ?? 'upload' as const }))
+        .sort((a, b) => a.createdAt - b.createdAt),
+    );
     req.onerror = () => reject(req.error ?? new Error('getAll failed'));
   });
 };

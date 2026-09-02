@@ -13,7 +13,8 @@ import { exportToPDF } from './utils/pdfExport';
 import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
-import { listRefImages, addRefImage, removeRefImage as removeStoredRefImage } from './services/refImageStore';
+import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage } from './services/refImageStore';
+import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage } from './services/minimaxService';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
@@ -380,7 +381,7 @@ function App() {
       setRefImages(stored.map((s) => {
         const url = URL.createObjectURL(s.blob);
         urls.push(url);
-        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url };
+        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url, subject: s.subject, source: s.source ?? 'upload' };
       }));
     }).catch((e) => console.warn('Failed to load reference library', e));
     return () => { urls.forEach((u) => URL.revokeObjectURL(u)); };
@@ -397,16 +398,24 @@ function App() {
     try { localStorage.setItem(`ref_bindings_${screenplay.id}`, JSON.stringify(refBindings)); } catch { /* quota — bindings are tiny; ignore */ }
   }, [refBindings, screenplay.id]);
 
-  const handleUploadRefImage = useCallback(async (file: File) => {
+  const handleUploadRefImage = useCallback(async (file: File, subject?: string) => {
     try {
-      const stored = await addRefImage(file);
+      const stored = await addRefImage(file, subject ? { subject, source: 'upload' } : undefined);
       setRefImages((prev) => [...prev, {
         id: stored.id, name: stored.name, type: stored.type, size: stored.size, createdAt: stored.createdAt,
         url: URL.createObjectURL(stored.blob),
+        subject: stored.subject, source: stored.source ?? 'upload',
       }]);
     } catch (e) {
       console.warn('Failed to store reference image', e);
     }
+  }, []);
+
+  /** Library metadata edits (rename / re-tag subject) — persisted, UI state synced. */
+  const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+  const handleUpdateRefImageMeta = useCallback((id: string, patch: { name?: string; subject?: string }) => {
+    setRefImages((prev) => prev.map((im) => im.id === id ? { ...im, ...patch, subject: patch.subject || undefined } : im));
+    updateRefImageMeta(id, patch).catch((e) => console.warn('Failed to update asset meta', e));
   }, []);
   const handleRemoveRefImage = useCallback((id: string) => {
     removeStoredRefImage(id).catch((e) => console.warn('Failed to delete reference image', e));
@@ -1728,6 +1737,7 @@ function App() {
                           onRefBindingsChange={setRefBindings}
                           onUploadRefImage={handleUploadRefImage}
                           onRemoveRefImage={handleRemoveRefImage}
+                          onOpenAssetLibrary={() => setShowAssetLibrary(true)}
                           blockId={panelBlock.id}
                           onSubmitH3={handleSubmitH3}
                           h3Tasks={h3Tasks}
@@ -1995,6 +2005,17 @@ function App() {
                 onSave={handleUpdateSettings}
                 onClose={() => setShowSettingsModal(false)}
                 t={t}
+            />
+        )}
+
+        {/* Reference Asset Library (white-model digital assets) */}
+        {showAssetLibrary && (
+            <RefAssetLibraryModal
+                images={refImages}
+                onUpdateMeta={handleUpdateRefImageMeta}
+                onDelete={handleRemoveRefImage}
+                onClose={() => setShowAssetLibrary(false)}
+                labels={REF_LIBRARY_LABELS[lang]}
             />
         )}
 

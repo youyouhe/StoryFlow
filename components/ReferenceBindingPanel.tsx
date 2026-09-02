@@ -23,6 +23,10 @@ interface Labels {
   clear: string;
   emptyLibrary: string;
   removeImage: string;
+  smartBind: string;
+  manageLibrary: string;
+  recommended: string;
+  smartBindNone: string;
 }
 
 export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
@@ -35,6 +39,10 @@ export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
     clear: 'Clear',
     emptyLibrary: 'Library is empty — upload an image first.',
     removeImage: 'Remove from library',
+    smartBind: 'Smart bind',
+    manageLibrary: 'Manage library',
+    recommended: 'subject match',
+    smartBindNone: 'No subject-matched images to auto-bind — tag assets with character names in the library.',
   },
   zh: {
     title: '角色 → 参考图绑定',
@@ -45,6 +53,10 @@ export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
     clear: '清除',
     emptyLibrary: '图库为空——请先上传图片。',
     removeImage: '从图库删除',
+    smartBind: '智能绑定',
+    manageLibrary: '管理图库',
+    recommended: 'subject 匹配',
+    smartBindNone: '没有可自动绑定的 subject 匹配——请在图库里给资产打上角色名标签。',
   },
 };
 
@@ -53,8 +65,10 @@ interface Props {
   images: RefImage[];
   bindings: RefBindings;
   onChange: (next: RefBindings) => void;
-  onUpload: (file: File) => void;
+  /** subject = slot identity (character name or '环境') when uploading from a slot. */
+  onUpload: (file: File, subject?: string) => void;
   onRemoveImage: (id: string) => void;
+  onOpenLibrary?: () => void;
   labels: Labels;
 }
 
@@ -62,7 +76,7 @@ interface Props {
 type PickerTarget = string | null;
 
 export const ReferenceBindingPanel: React.FC<Props> = ({
-  characters, images, bindings, onChange, onUpload, onRemoveImage, labels,
+  characters, images, bindings, onChange, onUpload, onRemoveImage, onOpenLibrary, labels,
 }) => {
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +84,14 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
   const [uploadForSlot, setUploadForSlot] = useState<PickerTarget>(null);
 
   const imageById = (id?: string) => images.find((img) => img.id === id);
+
+  /** Does this image's subject identify the given slot (character name / 环境)? */
+  const subjectMatches = (img: RefImage, target: PickerTarget): boolean => {
+    if (!target || !img.subject) return false;
+    const s = img.subject.trim();
+    if (target === 'env') return s === '环境' || s.includes('环境');
+    return s === target || s.includes(`:${target}`) || s.includes(target);
+  };
 
   const bind = (target: PickerTarget, imageId: string) => {
     if (!target) return;
@@ -92,14 +114,32 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
     }
   };
 
+  /** One-click: fill every unbound slot whose name has a subject-matched
+   *  image in the library (deterministic — no AI involved). */
+  const smartBind = () => {
+    const characters2 = { ...bindings.characters };
+    let n = 0;
+    for (const c of characters.slice(0, 8)) {
+      if (characters2[c.name]) continue;
+      const match = images.find((img) => subjectMatches(img, c.name));
+      if (match) { characters2[c.name] = match.id; n++; }
+    }
+    let environment = bindings.environment;
+    if (!environment) {
+      const env = images.find((img) => subjectMatches(img, 'env'));
+      if (env) { environment = env.id; n++; }
+    }
+    if (n > 0) onChange({ characters: characters2, environment });
+    else alert(labels.smartBindNone);
+  };
+
   const handleFileChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-choosing the same file
     if (file && uploadForSlot !== null) {
-      onUpload(file); // App adds to library; binding happens on next open
-      // Optimistically bind by pending file name? IDs are unknown until the
-      // store resolves — App re-renders with the new image, and the user
-      // clicks it. Keep simple: just upload; user picks it from the grid.
+      // Upload from a slot auto-tags the asset with the slot identity, so
+      // smart binding and future scripts pick it up automatically.
+      onUpload(file, uploadForSlot === 'env' ? '环境' : uploadForSlot);
       setUploadForSlot(null);
     }
   };
@@ -153,12 +193,22 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
               <p className="text-[10px] text-gray-400 py-2 text-center">{labels.emptyLibrary}</p>
             ) : (
               <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto">
-                {images.map((im) => (
+                {[...images]
+                  .sort((a, b) => Number(subjectMatches(b, target)) - Number(subjectMatches(a, target)))
+                  .map((im) => (
                   <div key={im.id} className="relative group">
+                    {subjectMatches(im, target) && (
+                      <span
+                        title={labels.recommended}
+                        className="absolute -top-1 -left-1 z-10 px-1 rounded bg-emerald-500 text-white text-[8px] leading-tight"
+                      >
+                        ★
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => bind(target, im.id)}
-                      title={im.name}
+                      title={`${im.name}${im.subject ? ` · ${im.subject}` : ''}`}
                       className="w-full aspect-square rounded-md overflow-hidden border border-gray-200 dark:border-zinc-700 hover:border-emerald-500 transition-colors"
                     >
                       <img src={im.url} alt={im.name} className="w-full h-full object-cover" />
@@ -183,7 +233,25 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
 
   return (
     <div className="rounded-lg border border-gray-200 dark:border-zinc-700 p-2 mb-2">
-      <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1">{labels.title}</p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{labels.title}</p>
+        <button
+          type="button"
+          onClick={smartBind}
+          className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-semibold border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+        >
+          {labels.smartBind}
+        </button>
+        {onOpenLibrary && (
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className="px-1.5 py-0.5 rounded text-[9px] font-semibold border border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            {labels.manageLibrary}
+          </button>
+        )}
+      </div>
       {characters.slice(0, 8).map((c, i) =>
         slotRow(c.name, whiteModelCharColor(i).hex, `${c.name}`, bindings.characters[c.name]))}
       {slotRow('env', null, labels.env, bindings.environment)}

@@ -209,7 +209,9 @@ export interface PDFOptions {
 export type ExportFormat = 'pdf' | 'markdown' | 'json';
 
 /** A reference image resolved for UI display — the IndexedDB record's blob
- *  turned into an object URL. Managed in App state, not persisted here. */
+ *  turned into an object URL. Managed in App state, not persisted here.
+ *  `subject` is the global identity axis ("林枫" / "环境" / "道具:古镜") that
+ *  makes smart binding work across scripts. */
 export interface RefImage {
   id: string;
   name: string;
@@ -217,6 +219,8 @@ export interface RefImage {
   size: number;
   createdAt: number;
   url: string; // object URL, valid for the session
+  subject?: string;
+  source?: 'upload' | 'ai-generate' | 'video-frame';
 }
 
 /** White-model reference bindings, persisted per screenplay in localStorage

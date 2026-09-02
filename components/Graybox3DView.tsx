@@ -67,8 +67,10 @@ interface Graybox3DViewProps {
   /** Per-screenplay capsule→image bindings, persisted by App. */
   refBindings?: RefBindings;
   onRefBindingsChange?: (next: RefBindings) => void;
-  onUploadRefImage?: (file: File) => void;
+  onUploadRefImage?: (file: File, subject?: string) => void;
   onRemoveRefImage?: (id: string) => void;
+  /** Opens the global asset-library management modal. */
+  onOpenAssetLibrary?: () => void;
   /** Originating block id — scopes H3 task records to this shot. */
   blockId?: string;
   /** Submit the recorded white-model video to MiniMax H3 (App owns IO/keys). */
@@ -825,7 +827,7 @@ const UI_LABELS = {
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en' }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en' }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -1197,6 +1199,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                   onChange={onRefBindingsChange}
                   onUpload={onUploadRefImage ?? (() => {})}
                   onRemoveImage={onRemoveRefImage ?? (() => {})}
+                  onOpenLibrary={onOpenAssetLibrary}
                   labels={REF_BINDING_LABELS[uiLang]}
                 />
               )}
