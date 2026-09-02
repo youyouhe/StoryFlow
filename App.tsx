@@ -560,12 +560,13 @@ function App() {
         const name = b.type === 'CHARACTER'
           ? `${subject}-gen-${stamp}.png`
           : `scene-gen-${stamp}.png`;
-        await handleUploadRefImage(
+        const stored = await handleUploadRefImage(
           new File([imgs[0].blob], name, { type: imgs[0].blob.type || 'image/png' }),
           subject || '环境',
           b.imagePrompt,
           'ai-generate',
         );
+        if (!stored) return { ok: false, error: '图片已生成但入库失败（存储后端异常）——详见控制台。' };
         return { ok: true, subject, ...(lockName ? { characterLock: lockName } : {}) };
       } catch (e: any) {
         return { ok: false, error: String(e?.message || e) };
@@ -625,7 +626,7 @@ function App() {
     subject?: string,
     sourcePrompt?: string,
     source: 'upload' | 'ai-generate' | 'video-frame' = 'upload',
-  ) => {
+  ): Promise<boolean> => {
     const meta = subject || sourcePrompt || source !== 'upload'
       ? { ...(subject ? { subject } : {}), source, ...(sourcePrompt ? { sourcePrompt } : {}) }
       : undefined;
@@ -644,8 +645,10 @@ function App() {
           subject: stored.subject, source: stored.source ?? 'upload',
         }]);
       }
+      return true;
     } catch (e) {
       console.warn('Failed to store reference image', e);
+      return false;
     }
   }, [assetDir]);
 

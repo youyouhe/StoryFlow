@@ -11,7 +11,11 @@
  */
 
 const DB_NAME = 'storyflow-refs';
-const DB_VERSION = 1;
+// v2: the 'meta' store (asset-dir handle persistence, assetDirStore.ts)
+// upgraded this DB in-place. Opening with v1 after that is a VersionError —
+// which silently killed every IndexedDB-path asset write (found live).
+// Both stores are created idempotently on upgrade, whichever opens first.
+const DB_VERSION = 2;
 const STORE = 'images';
 
 export interface StoredRefImage {
@@ -50,6 +54,9 @@ const openDB = (): Promise<IDBDatabase> => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta')) {
+        db.createObjectStore('meta');
       }
     };
     req.onsuccess = () => resolve(req.result);
