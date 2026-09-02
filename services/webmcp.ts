@@ -108,6 +108,10 @@ export interface StoryflowWebMcpAccessor {
    *  ACTION/DIALOGUE -> shot camera with owning-scene context). Consumes the
    *  user's configured AI quota; result is written straight onto the block. */
   generateGraybox(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; kind?: 'scene' | 'shot'; error?: string }>;
+  /** Generate the storyboard image prompt for a block (SCENE_HEADING ->
+   *  environment sheet, CHARACTER -> design sheet w/ same-name propagation,
+   *  ACTION -> storyboard frame). Consumes AI quota; saved to block.imagePrompt. */
+  generateImagePrompt(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; kind?: 'environment' | 'character' | 'action'; error?: string }>;
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -397,6 +401,22 @@ export const registerStoryflowWebMcpTools = (
         if (at == null) return err('atIndex must be an integer.');
         if (!blocks.length) return err('No valid blocks supplied.');
         return ok(A().insertBlocks(at, blocks));
+      },
+    },
+    {
+      name: 'storyflow_generate_image_prompt',
+      description: 'Generate the storyboard IMAGE PROMPT for one block — SCENE_HEADING -> environment-establishing sheet, CHARACTER -> character design sheet (turnaround, propagated to same-name CHARACTER blocks), ACTION -> storyboard frame (injects established character designs for identity consistency). English six-element prompt, saved to the block and viewable in the prompt panel. CONSUMES the user\'s configured AI quota.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          blockIndex: { type: 'integer', description: '0-based index of the target block.' },
+          blockId: { type: 'string', description: 'Block id (alternative to blockIndex).' },
+        },
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const r = await A().generateImagePrompt({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
+        return ok(r);
       },
     },
     {

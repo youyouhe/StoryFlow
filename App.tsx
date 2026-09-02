@@ -481,6 +481,39 @@ function App() {
         return { ok: false, error: String(e?.message || e) };
       }
     },
+    generateImagePrompt: async ({ blockIndex, blockId }) => {
+      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
+      if (b.type !== 'SCENE_HEADING' && b.type !== 'ACTION' && b.type !== 'CHARACTER') {
+        return { ok: false, error: `Block ${idx} (${b.type}) cannot hold an image prompt. Target a SCENE_HEADING, ACTION, or CHARACTER.` };
+      }
+      const kind = b.type === 'CHARACTER' ? 'character' as const : b.type === 'SCENE_HEADING' ? 'environment' as const : 'action' as const;
+      let sceneStart = idx;
+      for (let i = idx; i >= 0; i--) {
+        if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
+      }
+      const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
+      const sceneBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
+      try {
+        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind);
+        // Mirror the in-app save: CHARACTER prompts propagate to same-name blocks.
+        const isCharacter = b.type === 'CHARACTER';
+        const charName = isCharacter ? b.content.trim() : '';
+        setScreenplay(prev => ({
+          ...prev,
+          blocks: prev.blocks.map(x => {
+            if (x.id === b.id) return { ...x, imagePrompt: prompt };
+            if (isCharacter && x.type === 'CHARACTER' && x.content.trim() === charName) return { ...x, imagePrompt: prompt };
+            return x;
+          }),
+          lastModified: Date.now(),
+        }));
+        return { ok: true, kind };
+      } catch (e: any) {
+        return { ok: false, error: String(e?.message || e) };
+      }
+    },
   };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
