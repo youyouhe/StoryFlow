@@ -181,9 +181,11 @@ const clampImagePrompt = (prompt: string): string => {
   return cut > 0 ? p.slice(0, cut) : p.slice(0, MAX);
 };
 
-/** Generate images from a prompt. Returns downloaded blobs (the API returns
- *  short-lived hosted URLs — we materialize them immediately so assets are
- *  durable in the library). */
+/** Generate images from a prompt. Returns blobs ready for the asset library.
+ *  Uses response_format=base64 (natively supported) so the images arrive in
+ *  the API response itself — no CDN fetch, no CORS wall on the image host,
+ *  no 24h URL expiry. Falls back to URL download if the endpoint ignores
+ *  the base64 request. */
 export const generateImages = async (
   cfg: MiniMaxConfig,
   prompt: string,
@@ -193,7 +195,7 @@ export const generateImages = async (
     model: 'image-01',
     prompt: clampImagePrompt(prompt),
     aspect_ratio: opts?.aspectRatio ?? '16:9',
-    response_format: 'url',
+    response_format: 'base64',
     n: opts?.n ?? 1,
     prompt_optimizer: true,
   };
@@ -206,13 +208,31 @@ export const generateImages = async (
   if (!res.ok) {
     throw new Error(`图像生成失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
   }
-  const urls: string[] = data?.data?.image_urls ?? [];
-  if (!urls.length) throw new Error(`未返回图片: ${JSON.stringify(data).slice(0, 300)}`);
+  const d = data?.data ?? {};
+  // Collect payloads defensively: data URIs, raw base64, or hosted URLs.
+  const entries: string[] = [
+    ...(Array.isArray(d.image_urls) ? d.image_urls : []),
+    ...(Array.isArray(d.image_base64_list) ? d.image_base64_list : []),
+    ...(typeof d.image_base64 === 'string' ? [d.image_base64] : []),
+  ].filter((x) => typeof x === 'string' && x.length > 0);
+  if (!entries.length) throw new Error(`未返回图片: ${JSON.stringify(data).slice(0, 300)}`);
+
   const out: GeneratedImage[] = [];
-  for (const u of urls.slice(0, opts?.n ?? 1)) {
-    const imgRes = await fetch(u);
-    if (!imgRes.ok) throw new Error(`图片下载失败 (HTTP ${imgRes.status})`);
-    out.push({ url: u, blob: await imgRes.blob() });
+  for (const entry of entries.slice(0, opts?.n ?? 1)) {
+    if (entry.startsWith('data:')) {
+      const blob = await (await fetch(entry)).blob(); // data URIs: no CORS
+      out.push({ url: entry, blob });
+    } else if (entry.startsWith('http')) {
+      // endpoint ignored the base64 request — download the hosted URL
+      const imgRes = await fetch(entry).catch(() => {
+        throw new Error('图片下载失败（CDN 跨域？）——请重试一次；若持续失败请反馈。');
+      });
+      out.push({ url: entry, blob: await imgRes.blob() });
+    } else {
+      // raw base64 without the data: prefix
+      const uri = `data:image/png;base64,${entry}`;
+      out.push({ url: uri, blob: await (await fetch(uri)).blob() });
+    }
   }
   return out;
 };

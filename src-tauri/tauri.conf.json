@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://api.deepseek.com https://generativelanguage.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.deepseek.com https://generativelanguage.googleapis.com"
+      "csp": "default-src 'self' https://api.deepseek.com https://generativelanguage.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.deepseek.com https://generativelanguage.googleapis.com https://api.minimaxi.com https://api.minimax.cn https://api.minimax.io"
     }
   },
   "bundle": {
