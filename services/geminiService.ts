@@ -450,13 +450,29 @@ STRICT RULES:
     return `${b.type}:${tag} ${b.content}`;
   }).join('\n');
 
+  // Established character designs: CHARACTER blocks in the scene that already
+  // carry an imagePrompt (the canonical design sheets). Injected into ACTION
+  // prompts so the storyboard frame depicts THE designed character — same
+  // person, same clothes — instead of inventing a new appearance.
+  const charDesigns = new Map<string, string>();
+  if (!isCharacter) {
+    for (const b of sceneBlocks) {
+      if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+        const name = b.content.trim();
+        if (!charDesigns.has(name)) charDesigns.set(name, b.imagePrompt.trim());
+      }
+    }
+  }
+  const designSection = charDesigns.size
+    ? `\nEstablished character designs (CANONICAL — when these characters appear in frame, reuse their identity EXACTLY: same age, hair, face, and clothing wording. Do NOT invent new appearances for them):\n---\n${[...charDesigns.entries()].map(([n, p]) => `[CHARACTER ${n}] established design:\n${p}`).join('\n\n')}\n---\n`
+    : '';
+
   const targetNoun = isCharacter ? 'TARGET CHARACTER' : isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';
   const userPrompt = `Scene context (the marked ${targetNoun.toLowerCase()} is the one to turn into an image prompt):
 ---
 ${context}
----
-
-Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.`;
+---${designSection}
+Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.${charDesigns.size && !isEnvironment ? ' Characters in frame MUST match the established designs above.' : ''}`;
 
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
 
