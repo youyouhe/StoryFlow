@@ -389,7 +389,7 @@ export const generateImagePrompt = async (
     : 'Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.';
 
   const subjectGuidance = isCharacter
-    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description. If the surrounding beats imply a specific outfit state for THIS moment (battle-worn, formal court dress, travel gear, injured), describe that outfit — it defines this design sheet\'s costume variant.'
+    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description, with costume and hair styled to the story\'s era and genre (period-accurate when the setting is period). If the surrounding beats imply a specific outfit state for THIS moment (battle-worn, formal court dress, travel gear, injured), describe that outfit — it defines this design sheet\'s costume variant.'
     : '1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.';
 
   const envGuidance = isCharacter
@@ -422,6 +422,7 @@ ${matGuidance}
 6. Mood — emotional tone, atmosphere, color palette leaning.
 
 STRICT RULES:
+- ERA & GENRE LOCK — before writing, derive the story's era and genre from the system persona, the scene heading, and the surrounding beats. Costume, hair, props, architecture, and technology MUST be period/genre accurate: a period/xianxia/wuxia piece means period-accurate attire and artifacts; NO anachronisms (modern clothing, watches, zippers, sneakers, phones, cars) unless the script explicitly places them. Fold era cues into the Subject/Environment/Material lines.
 - Output EXACTLY six lines, one per element, in this exact format:
   Subject: ...
   Environment: ...
