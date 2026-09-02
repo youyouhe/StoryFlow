@@ -27,6 +27,8 @@ interface Labels {
   manageLibrary: string;
   recommended: string;
   smartBindNone: string;
+  sceneOnly: string;
+  sceneOnlyHint: string;
 }
 
 export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
@@ -43,6 +45,8 @@ export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
     manageLibrary: 'Manage library',
     recommended: 'subject match',
     smartBindNone: 'No subject-matched images to auto-bind — tag assets with character names in the library.',
+    sceneOnly: 'This scene only',
+    sceneOnlyHint: 'Bind a costume variant for THIS scene only (asset subject convention: Name/Outfit). Other scenes keep the script-wide default.',
   },
   zh: {
     title: '角色 → 参考图绑定',
@@ -57,6 +61,8 @@ export const REF_BINDING_LABELS: Record<'en' | 'zh', Labels> = {
     manageLibrary: '管理图库',
     recommended: 'subject 匹配',
     smartBindNone: '没有可自动绑定的 subject 匹配——请在图库里给资产打上角色名标签。',
+    sceneOnly: '仅本场',
+    sceneOnlyHint: '只为本场绑定装束变体（资产 subject 约定：角色名/装束名），其余场次沿用全局默认。',
   },
 };
 
@@ -69,6 +75,10 @@ interface Props {
   onUpload: (file: File, subject?: string) => void;
   onRemoveImage: (id: string) => void;
   onOpenLibrary?: () => void;
+  /** Owning scene — enables the per-scene costume-variant toggle. */
+  sceneHeading?: string;
+  sceneOnly: boolean;
+  onSceneOnlyChange: (v: boolean) => void;
   labels: Labels;
 }
 
@@ -76,7 +86,8 @@ interface Props {
 type PickerTarget = string | null;
 
 export const ReferenceBindingPanel: React.FC<Props> = ({
-  characters, images, bindings, onChange, onUpload, onRemoveImage, onOpenLibrary, labels,
+  characters, images, bindings, onChange, onUpload, onRemoveImage, onOpenLibrary,
+  sceneHeading, sceneOnly, onSceneOnlyChange, labels,
 }) => {
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -235,6 +246,24 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
     <div className="rounded-lg border border-gray-200 dark:border-zinc-700 p-2 mb-2">
       <div className="flex items-center gap-1.5 mb-1">
         <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{labels.title}</p>
+        {sceneHeading && (
+          <label
+            title={labels.sceneOnlyHint}
+            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold cursor-pointer select-none transition-colors ${
+              sceneOnly
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={sceneOnly}
+              onChange={(e) => onSceneOnlyChange(e.target.checked)}
+              className="accent-amber-500 w-2.5 h-2.5"
+            />
+            {labels.sceneOnly}
+          </label>
+        )}
         <button
           type="button"
           onClick={smartBind}

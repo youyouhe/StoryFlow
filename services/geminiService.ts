@@ -389,7 +389,7 @@ export const generateImagePrompt = async (
     : 'Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.';
 
   const subjectGuidance = isCharacter
-    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description.'
+    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description. If the surrounding beats imply a specific outfit state for THIS moment (battle-worn, formal court dress, travel gear, injured), describe that outfit — it defines this design sheet\'s costume variant.'
     : '1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.';
 
   const envGuidance = isCharacter
@@ -397,7 +397,7 @@ export const generateImagePrompt = async (
     : '2. Environment — location, time of day, weather, background detail.';
 
   const compGuidance = isCharacter
-    ? '3. Composition — full-body standing pose, centered, character turnaround reference (front view preferred).'
+    ? '3. Composition — character turnaround sheet: the SAME character in three views side by side (front / side / back), full-body, consistent scale and spacing, neutral standing pose — an animation model sheet. The three views must be identical in styling so the sheet locks the character\'s identity.'
     : '3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.';
 
   const matGuidance = isCharacter

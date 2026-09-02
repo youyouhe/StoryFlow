@@ -230,9 +230,18 @@ export interface RefImage {
 /** White-model reference bindings, persisted per screenplay in localStorage
  *  (`ref_bindings_{scriptId}`). Keys are character names as they appear in
  *  the scene's character blocking; values are RefImage ids. */
+/** Per-scene override layer for costume variants (asset subjects use the
+ *  "角色名/装束名" convention, e.g. "林枫/战损"). Resolution: scene override
+ *  wins, else the script-wide default. */
+export interface SceneRefBindings {
+  characters?: Record<string, string>;
+  environment?: string;
+}
 export interface RefBindings {
   characters: Record<string, string>;
   environment?: string;
+  /** Keyed by the owning SCENE_HEADING text. */
+  scenes?: Record<string, SceneRefBindings>;
 }
 
 /** An in-app MiniMax H3 generation task — the browser-BYOK white-model

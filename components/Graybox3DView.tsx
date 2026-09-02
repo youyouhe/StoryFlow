@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, RefImage, RefBindings, H3Task } from '../types';
 import { whiteModelCharColor, buildSeedancePrompt, buildH3Prompt, copyTextToClipboard, WHITE_MODEL_STYLE_TEMPLATES } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth, HealthReport } from '../utils/grayboxHealth';
+import { resolveRefBindings, writeRefBindings } from '../utils/refBindings';
 import { ReferenceBindingPanel, REF_BINDING_LABELS } from './ReferenceBindingPanel';
 import { estimateH3Cost } from '../services/minimaxService';
 
@@ -851,6 +852,15 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   // H3 submission state
   const [h3Resolution, setH3Resolution] = useState<'768P' | '2K'>('768P');
   const [h3Error, setH3Error] = useState<string | null>(null);
+  // Costume variants: bind per-scene instead of script-wide
+  const [sceneOnly, setSceneOnly] = useState(false);
+  const effBindings = useMemo(
+    () => resolveRefBindings(refBindings, sceneHeading),
+    [refBindings, sceneHeading],
+  );
+  const handleBindingsWrite = (next: import('../types').RefBindings) => {
+    onRefBindingsChange?.(writeRefBindings(refBindings, sceneHeading, sceneOnly, next));
+  };
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -923,7 +933,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   const promptInputFor = useCallback((target: 'seedance' | 'h3') => {
     const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
     const imageById = (id?: string) => refImages.find((img) => img.id === id);
-    const boundChars = refBindings && refImages.length
+    const boundChars = effBindings && refImages.length
       ? Object.fromEntries(
           Object.entries(refBindings.characters)
             .filter(([, id]) => !!imageById(id))
@@ -931,7 +941,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
         )
       : undefined;
     const hasAnyBinding = boundChars && Object.keys(boundChars).length > 0;
-    const envImage = refBindings && refImages.length && imageById(refBindings.environment)?.name;
+    const envImage = effBindings && refImages.length && imageById(effBindings.environment)?.name;
     return {
       beatContent: beat?.content ?? '',
       camera: graybox.camera!,
@@ -942,7 +952,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       ...(hasAnyBinding ? { characterImages: boundChars } : {}),
       ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
     };
-  }, [styleId, refImages, refBindings, beat, sceneChars, sceneHeading, graybox.camera]);
+  }, [styleId, refImages, effBindings, beat, sceneChars, sceneHeading, graybox.camera]);
 
   // ---- white-model export: record the POV playback as a reference video ----
   // `h3Payload` switches the tail from "download the file" to "hand the blob
@@ -1044,10 +1054,10 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     // bound reference images in scene order + env last (matches the prompt mapping)
     const refImageUrls: string[] = [];
     for (const c of sceneChars) {
-      const img = refImages.find((i) => i.id === refBindings?.characters[c.name]);
+      const img = refImages.find((i) => i.id === effBindings.characters[c.name]);
       if (img) refImageUrls.push(img.url);
     }
-    const envImg = refImages.find((i) => i.id === refBindings?.environment);
+    const envImg = refImages.find((i) => i.id === effBindings.environment);
     if (envImg) refImageUrls.push(envImg.url);
 
     const cost = estimateH3Cost({
@@ -1067,7 +1077,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       outputSeconds,
       referenceImageUrls: refImageUrls,
     });
-  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, sceneChars, refImages, refBindings, h3Resolution, beat, L, startExport, promptInputFor]);
+  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, sceneChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor]);
 
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';
@@ -1195,11 +1205,14 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                 <ReferenceBindingPanel
                   characters={sceneChars}
                   images={refImages}
-                  bindings={refBindings}
-                  onChange={onRefBindingsChange}
+                  bindings={effBindings}
+                  onChange={handleBindingsWrite}
                   onUpload={onUploadRefImage ?? (() => {})}
                   onRemoveImage={onRemoveRefImage ?? (() => {})}
                   onOpenLibrary={onOpenAssetLibrary}
+                  sceneHeading={sceneHeading}
+                  sceneOnly={sceneOnly}
+                  onSceneOnlyChange={setSceneOnly}
                   labels={REF_BINDING_LABELS[uiLang]}
                 />
               )}
