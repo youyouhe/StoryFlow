@@ -394,7 +394,7 @@ export const generateImagePrompt = async (
 
   const envGuidance = isCharacter
     ? '2. Environment — a neutral or simple backdrop suitable for a character design sheet (e.g. plain studio background). Keep it minimal so the character stands out.'
-    : '2. Environment — location, time of day, weather, background detail.';
+    : '2. Environment — location, time of day, weather, background detail. Architecture, furnishings, and set dressing must match the story\'s era and genre (period piece = period buildings and props, no anachronistic objects).';
 
   const compGuidance = isCharacter
     ? '3. Composition — character turnaround sheet: the SAME character in three views side by side (front / side / back), full-body, consistent scale and spacing, neutral standing pose — an animation model sheet. The three views must be identical in styling so the sheet locks the character\'s identity.'
@@ -745,6 +745,7 @@ Output STRICT JSON and nothing else, in this exact shape:
 
 Rules:
 - layout: include a ground plane. Add enclosing walls only for interiors or where the scene names a boundary. Include only the most important props/furniture/terrain features (<=12 objects). Outdoors, prefer a few large environment-role shapes over many small ones. Within layout entries, you may omit rotation/color when they add nothing.
+- era & genre: derive the story's era/genre from the scene heading and beats; furniture, props, and structures must fit it — a period hall gets long tables and floor seats (长案/坐席), not sofas, shop counters, or other anachronistic objects. Prefer the script's own object names for labels.
 - characters: REQUIRED whenever the scene has any speaking/acting character — output the "characters" array with one entry per distinct named character who appears (via a CHARACTER cue, or clearly acting/speaking in a beat). <=8 entries. Position each on the x/z ground plane, with facing + pose that reflect their relationship and power this scene. Infer reasonable positions/facings from the script's staging cues (who faces whom, who is seated, who confronts whom) — inference is expected and welcome; omitting the whole array is only correct for a scene with no acting characters at all (a pure landscape/establishing shot). An empty "characters": [] is NOT acceptable for a scene with dialogue or action involving named characters.
 - Do NOT include markdown, commentary, or any text outside the JSON.`;
 
