@@ -112,6 +112,11 @@ export interface StoryflowWebMcpAccessor {
    *  environment sheet, CHARACTER -> design sheet w/ same-name propagation,
    *  ACTION -> storyboard frame). Consumes AI quota; saved to block.imagePrompt. */
   generateImagePrompt(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; kind?: 'environment' | 'character' | 'action'; error?: string }>;
+  /** Generate the IMAGE for a block's existing imagePrompt via MiniMax
+   *  image-01 (page-held BYOK key). Saves to the asset library with subject +
+   *  provenance. ACTION beats auto-attach the nearest established character
+   *  sheet as subject_reference (bound asset first, subject-name fallback). */
+  generateImage(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; subject?: string; characterLock?: string; error?: string }>;
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -416,6 +421,22 @@ export const registerStoryflowWebMcpTools = (
       annotations: { readOnlyHint: false, destructiveHint: false },
       execute: async (args) => {
         const r = await A().generateImagePrompt({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
+        return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_generate_image',
+      description: 'Generate the IMAGE for a block\'s existing imagePrompt via MiniMax image-01 (the page\'s BYOK key — billed per image, base64 response). Saves straight into the asset library with auto subject (character name / 环境) and sourcePrompt provenance. For ACTION beats, automatically attaches the nearest preceding character\'s design sheet as subject_reference (identity lock) when a bound or subject-matched asset exists. Run storyflow_generate_image_prompt first if the block has no prompt.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          blockIndex: { type: 'integer', description: '0-based index of the target block.' },
+          blockId: { type: 'string', description: 'Block id (alternative to blockIndex).' },
+        },
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      execute: async (args) => {
+        const r = await A().generateImage({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
         return ok(r);
       },
     },

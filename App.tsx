@@ -514,6 +514,63 @@ function App() {
         return { ok: false, error: String(e?.message || e) };
       }
     },
+    generateImage: async ({ blockIndex, blockId }) => {
+      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
+      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
+      if (!b) return { ok: false, error: 'Block not found.' };
+      if (!b.imagePrompt?.trim()) return { ok: false, error: `Block ${idx} has no imagePrompt — run storyflow_generate_image_prompt first.` };
+      if (!appSettings.minimaxApiKey.trim()) return { ok: false, error: '未配置 MiniMax API Key（Settings → 视频生成）。' };
+      try {
+        const subject = b.type === 'CHARACTER' ? b.content.trim().slice(0, 40) : '环境';
+        // ACTION: identity lock — nearest preceding character's sheet as
+        // subject_reference. Bound asset first; subject-name fallback so the
+        // chain works before manual binding.
+        let subjectRef: Blob | undefined;
+        let lockName: string | undefined;
+        if (b.type === 'ACTION') {
+          let sceneHead = '';
+          for (let i = idx; i >= 0; i--) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
+          }
+          const eff = resolveRefBindings(screenplay.referenceBindings, sceneHead);
+          for (let i = idx; i >= 0; i--) {
+            const x = screenplay.blocks[i];
+            if (x.type === 'SCENE_HEADING' && i !== idx) break;
+            if (x.type === 'CHARACTER') {
+              const name = x.content.trim();
+              const boundId = eff.characters[name];
+              let img = boundId ? refImages.find(r => r.id === boundId) : undefined;
+              if (!img) {
+                img = refImages.find(r => (r.subject ?? '') === name || (r.subject ?? '').startsWith(name + '/'));
+              }
+              if (img) {
+                subjectRef = await (await fetch(img.url)).blob().catch(() => undefined);
+                lockName = name;
+              }
+              break;
+            }
+          }
+        }
+        const imgs = await generateImages(
+          { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl },
+          b.imagePrompt,
+          { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
+        );
+        const stamp = Date.now().toString(36);
+        const name = b.type === 'CHARACTER'
+          ? `${subject}-gen-${stamp}.png`
+          : `scene-gen-${stamp}.png`;
+        await handleUploadRefImage(
+          new File([imgs[0].blob], name, { type: imgs[0].blob.type || 'image/png' }),
+          subject || '环境',
+          b.imagePrompt,
+          'ai-generate',
+        );
+        return { ok: true, subject, ...(lockName ? { characterLock: lockName } : {}) };
+      } catch (e: any) {
+        return { ok: false, error: String(e?.message || e) };
+      }
+    },
   };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
