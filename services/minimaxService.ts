@@ -199,11 +199,14 @@ export const generateImages = async (
     n: opts?.n ?? 1,
     prompt_optimizer: true,
   };
-  // Subject reference (图生图 identity lock): the bound character sheet,
-  // passed as a data URI — base64 natively supported, single front-facing
-  // subject works best (exactly what our turnaround sheets are).
+  // Subject reference (图生图 identity lock): array of {type:'character',
+  // image_file} per the official schema — base64 Data URL natively supported,
+  // single front-facing subject works best (exactly our turnaround sheets).
   if (opts?.subjectReference) {
-    body.subject_reference = await asBase64DataUri(opts.subjectReference);
+    body.subject_reference = [{
+      type: 'character',
+      image_file: await asBase64DataUri(opts.subjectReference),
+    }];
   }
   const res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
     method: 'POST',
