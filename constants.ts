@@ -749,7 +749,7 @@ export const TRANSLATIONS = {
     apiKeyLabel: "API 密钥",
     videoGenLabel: "视频生成 · MiniMax H3",
     videoGenRegionLabel: "接口端点",
-    videoGenHint: "仅提交白模生成任务时使用（按秒计费：输出 + 输入参考视频均计费）。密钥获取：platform.minimaxi.com → 账户管理 → 接口密钥。",
+    videoGenHint: "仅提交白模生成任务时使用（按秒计费：输出 + 输入参考视频均计费；🎨生图按图计费）。密钥获取：platform.minimaxi.com → 账户管理 → 接口密钥。国内站 api.minimax.cn 与本端点等效可互换；国际站需在 minimax.io 单独充值取 key。",
     modelLabel: "模型",
     aiContextBlocksLabel: "上下文块数",
     aiContextBlocksDesc: "AI续写时发送的最近块数 (20-300)",
