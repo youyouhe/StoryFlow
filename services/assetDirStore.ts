@@ -18,7 +18,7 @@
  * empty — tag them in the library UI).
  */
 
-import { RefImageMetaPatch, openRefsDB } from './refImageStore';
+import { RefImageMetaPatch, StoredRefImage, openRefsDB } from './refImageStore';
 
 export interface DirAssetMeta {
   id: string;
@@ -151,6 +151,48 @@ export const pickAssetDir = async (): Promise<FileSystemDirectoryHandle | null> 
 export interface DirAsset extends DirAssetMeta {
   url: string; // session object URL from the file
 }
+
+/** One-time migration: copy browser-storage library records (with blobs and
+ *  full v2 identity) into the folder. Idempotent — records whose id already
+ *  exists in the manifest are skipped, so re-running after a partial switch
+ *  is safe. Returns how many records were newly written. */
+export const mergeIdbIntoDir = async (dir: FileSystemDirectoryHandle, records: StoredRefImage[]): Promise<number> => {
+  const manifest = await readManifest(dir);
+  const known = new Set(manifest.assets.map(a => a.id));
+  let written = 0;
+  for (const r of records) {
+    if (known.has(r.id)) continue;
+    const ext = (r.name.match(/\.[a-z0-9]+$/i)?.[0] ?? `.${(r.blob.type.split('/')[1] || 'png')}`).toLowerCase();
+    const fileName = `${r.id}${ext}`;
+    try {
+      const fh = await dir.getFileHandle(fileName, { create: true });
+      const w = await fh.createWritable();
+      await w.write(r.blob);
+      await w.close();
+    } catch { continue; } // unreadable blob — skip rather than abort the batch
+    manifest.assets.push({
+      id: r.id,
+      fileName,
+      name: r.name || 'reference',
+      subject: r.subject,
+      kind: r.kind ?? 'character',
+      charName: r.charName,
+      variant: r.variant,
+      sceneKey: r.sceneKey,
+      scriptIds: r.scriptIds ?? [],
+      versionGroup: r.versionGroup ?? `vg_${r.id}`,
+      version: r.version ?? 1,
+      isSelected: r.isSelected ?? true,
+      source: r.source ?? 'upload',
+      sourcePrompt: r.sourcePrompt,
+      size: r.size,
+      createdAt: r.createdAt,
+    });
+    written++;
+  }
+  if (written) await writeManifest(dir, manifest);
+  return written;
+};
 
 /** Scan the folder: adopt unknown image files, load blobs as object URLs. */
 export const listDirAssets = async (dir: FileSystemDirectoryHandle): Promise<DirAsset[]> => {

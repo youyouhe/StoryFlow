@@ -19,7 +19,7 @@ import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as remov
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
   queryDirPermission, requestDirPermission, listDirAssets, addAssetToDir,
-  updateAssetMetaInDir, removeAssetFromDir,
+  updateAssetMetaInDir, removeAssetFromDir, mergeIdbIntoDir,
 } from './services/assetDirStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
@@ -696,8 +696,19 @@ function App() {
     }
     try {
       await persistDirHandle(h);
+      // One-time migration: bring the browser-storage library (with identity,
+      // versions, provenance) into the folder. Idempotent by asset id.
+      let migratedNote = '';
+      try {
+        const idbRecords = await listRefImages();
+        const n = await mergeIdbIntoDir(h, idbRecords);
+        if (n) migratedNote = `（已自动迁移 ${n} 张浏览器存量资产）`;
+      } catch (e) {
+        console.warn('IDB→folder migration failed', e);
+      }
       const assets = await listDirAssets(h);
       setAssetDir(h);
+      if (migratedNote) console.info('[assets]', migratedNote);
       setRefImages(assets.map((a) => ({
         id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
         url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
