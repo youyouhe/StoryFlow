@@ -62,6 +62,10 @@ interface Graybox3DViewProps {
   /** shotTypes of every shot graybox in the owning scene — feeds the W001
    *  shot-variety check in the health report. Optional. */
   sceneShotTypes?: string[];
+  /** Names of scene characters plausibly IN this beat (App computes via
+   *  computeBeatCast). Reference images and capsule mappings are filtered to
+   *  this cast — over-supplied references leak into frame (live-tested). */
+  beatCastNames?: string[];
   /** White-model reference-image library (object URLs, session-managed in
    *  App state; blobs live in IndexedDB). */
   refImages?: RefImage[];
@@ -828,7 +832,7 @@ const UI_LABELS = {
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en' }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, beatCastNames, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en' }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -868,6 +872,12 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   const exportTimerRef = useRef<number | null>(null);
 
   const sceneChars = useMemo(() => sceneGraybox?.characters ?? [], [sceneGraybox]);
+  // Beat cast: only these characters enter the prompt mapping / submission
+  const castChars = useMemo(
+    () => beatCastNames?.length ? sceneChars.filter(c => beatCastNames.includes(c.name)) : sceneChars,
+    [sceneChars, beatCastNames],
+  );
+
   const hasSceneGeometry = (sceneGraybox?.layout?.length ?? 0) > 0 || sceneChars.length > 0;
   const exportSupported = typeof window !== 'undefined'
     && typeof MediaRecorder !== 'undefined'
@@ -946,14 +956,14 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       beatContent: beat?.content ?? '',
       beatType: beat?.type,
       camera: graybox.camera!,
-      characters: sceneChars,
+      characters: castChars,
       sceneHeading,
       styleHint,
       target,
       ...(hasAnyBinding ? { characterImages: boundChars } : {}),
       ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
     };
-  }, [styleId, refImages, effBindings, beat, sceneChars, sceneHeading, graybox.camera]);
+  }, [styleId, refImages, effBindings, beat, castChars, sceneHeading, graybox.camera]);
 
   // ---- white-model export: record the POV playback as a reference video ----
   // `h3Payload` switches the tail from "download the file" to "hand the blob
@@ -1054,7 +1064,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     const outputSeconds = Math.max(4, Math.min(15, Math.round(durSec)));
     // bound reference images in scene order + env last (matches the prompt mapping)
     const refImageUrls: string[] = [];
-    for (const c of sceneChars) {
+    for (const c of castChars) {
       const img = refImages.find((i) => i.id === effBindings.characters[c.name]);
       if (img) refImageUrls.push(img.url);
     }
@@ -1078,7 +1088,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       outputSeconds,
       referenceImageUrls: refImageUrls,
     });
-  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, sceneChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor]);
+  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, castChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor]);
 
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';

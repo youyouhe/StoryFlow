@@ -14,6 +14,7 @@ import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './service
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveRefBindings } from './utils/refBindings';
+import { computeBeatCast } from './utils/beatCast';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -2007,6 +2008,12 @@ function App() {
                         panelSceneShotTypes.push(b.graybox.camera.shotType);
                       }
                     }
+                    // Beat cast: characters plausibly in THIS beat — reference
+                    // images and capsule mappings are filtered to them.
+                    const panelSceneCharNames = (panelSceneGraybox?.characters ?? []).map(c => c.name);
+                    const panelBeatCast = panelBlock.type === 'ACTION' || panelBlock.type === 'DIALOGUE'
+                      ? computeBeatCast(screenplay.blocks, panelIdx, panelSceneCharNames)
+                      : undefined;
                     return (
                       <div className="flex-1 min-h-0 p-2">
                         <Graybox3DView
@@ -2017,6 +2024,7 @@ function App() {
                           beat={{ type: panelBlock.type, content: panelBlock.content }}
                           sceneHeading={panelSceneHeading}
                           sceneShotTypes={panelSceneShotTypes}
+                          beatCastNames={panelBeatCast}
                           refImages={refImages}
                           refBindings={refBindings}
                           onRefBindingsChange={handleRefBindingsChange}
