@@ -524,16 +524,16 @@ function App() {
       if (!appSettings.minimaxApiKey.trim()) return { ok: false, error: '未配置 MiniMax API Key（Settings → 视频生成）。' };
       try {
         const subject = b.type === 'CHARACTER' ? b.content.trim().slice(0, 40) : '环境';
+        let sceneHead = '';
+        for (let i = idx; i >= 0; i--) {
+          if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
+        }
         // ACTION: identity lock — nearest preceding character's sheet as
         // subject_reference. Bound asset first; subject-name fallback so the
         // chain works before manual binding.
         let subjectRef: Blob | undefined;
         let lockName: string | undefined;
         if (b.type === 'ACTION') {
-          let sceneHead = '';
-          for (let i = idx; i >= 0; i--) {
-            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
-          }
           const eff = resolveRefBindings(screenplay.referenceBindings, sceneHead);
           for (let i = idx; i >= 0; i--) {
             const x = screenplay.blocks[i];
@@ -567,6 +567,9 @@ function App() {
           subject || '环境',
           b.imagePrompt,
           'ai-generate',
+          b.type === 'CHARACTER'
+            ? { kind: 'character', charName: subject }
+            : { kind: 'environment', sceneKey: sceneHead },
         );
         if (!stored) return { ok: false, error: '图片已生成但入库失败（存储后端异常）——详见控制台。' };
         return { ok: true, subject, ...(lockName ? { characterLock: lockName } : {}) };
