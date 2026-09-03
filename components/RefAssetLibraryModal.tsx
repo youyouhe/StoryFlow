@@ -105,6 +105,8 @@ interface Props {
   onOpenDir: () => void;
   /** Re-scan the asset folder (called automatically when phone drops arrive). */
   onRescan: () => void;
+  /** Current screenplay id — enables the 本剧本/全部 scope filter. */
+  scriptId?: string;
 }
 
 /** Inline-editable text field: click to edit, Enter/blur to commit, Esc to cancel. */
@@ -144,9 +146,10 @@ const EditableText: React.FC<{
   );
 };
 
-export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan }) => {
+export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan, scriptId }) => {
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<RefImage | null>(null);
+  const [scopeAll, setScopeAll] = useState(false);
   const q = query.trim().toLowerCase();
 
   // ---- LocalSend receiver status (phone drop) -------------------------------
@@ -182,10 +185,14 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
     }
   }, [backend, onRescan]);
   const filtered = useMemo(() => {
-    if (!q) return images;
-    return images.filter((im) =>
+    let list = images;
+    if (!scopeAll && scriptId) list = list.filter(im => !im.scriptIds?.length || im.scriptIds.includes(scriptId));
+    if (q) list = list.filter((im) =>
       im.name.toLowerCase().includes(q) || (im.subject ?? '').toLowerCase().includes(q));
-  }, [images, q]);
+    // selected version of each group first
+    return [...list].sort((a, b) =>
+      Number(!!b.isSelected) - Number(!!a.isSelected) || b.createdAt - a.createdAt);
+  }, [images, q, scopeAll, scriptId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -297,7 +304,11 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px]">
                       {labels.sourceBadge[im.source ?? 'upload'] ?? im.source}
                       {im.sourcePrompt ? ' ⁺' : ''}
+                      {(im.version ?? 1) > 1 ? ` v${im.version}` : ''}
                     </span>
+                    {!im.isSelected && (
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white/80 text-[9px]">旧版本</span>
+                    )}
                     <button
                       type="button"
                       onClick={() => onDelete(im.id)}

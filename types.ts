@@ -223,7 +223,19 @@ export interface RefImage {
   size: number;
   createdAt: number;
   url: string; // object URL, valid for the session
+  /** DERIVED display/search string (名字 / 名字/装束 / 环境 / 道具:X). */
   subject?: string;
+  // ---- identity v2 ----
+  kind?: 'character' | 'environment' | 'prop';
+  charName?: string;
+  variant?: string;
+  sceneKey?: string;
+  /** Screenplays this asset is pinned to ([] = global). */
+  scriptIds?: string[];
+  // ---- versions ----
+  versionGroup?: string;
+  version?: number;
+  isSelected?: boolean;
   source?: 'upload' | 'ai-generate' | 'video-frame';
   /** For AI-generated assets: the prompt that produced them. */
   sourcePrompt?: string;

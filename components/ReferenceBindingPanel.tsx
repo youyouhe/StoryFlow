@@ -79,6 +79,8 @@ interface Props {
   sceneHeading?: string;
   sceneOnly: boolean;
   onSceneOnlyChange: (v: boolean) => void;
+  /** Current screenplay id — pinned assets rank above globals. */
+  scriptId?: string;
   labels: Labels;
 }
 
@@ -87,7 +89,7 @@ type PickerTarget = string | null;
 
 export const ReferenceBindingPanel: React.FC<Props> = ({
   characters, images, bindings, onChange, onUpload, onRemoveImage, onOpenLibrary,
-  sceneHeading, sceneOnly, onSceneOnlyChange, labels,
+  sceneHeading, sceneOnly, onSceneOnlyChange, scriptId, labels,
 }) => {
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,13 +98,20 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
 
   const imageById = (id?: string) => images.find((img) => img.id === id);
 
-  /** Does this image's subject identify the given slot (character name / 环境)? */
+  /** Does this asset identify the given slot (character name / 环境)?
+   *  Structured fields first (v2 identity), legacy subject string fallback. */
   const subjectMatches = (img: RefImage, target: PickerTarget): boolean => {
-    if (!target || !img.subject) return false;
-    const s = img.subject.trim();
-    if (target === 'env') return s === '环境' || s.includes('环境');
+    if (!target) return false;
+    if (target === 'env') {
+      return img.kind === 'environment' || (img.subject ?? '').includes('环境');
+    }
+    if (img.kind === 'character') return img.charName === target || img.subject === target;
+    const s = (img.subject ?? '').trim();
     return s === target || s.includes(`:${target}`) || s.includes(target);
   };
+  /** Pinned to the current script (or global) — globals rank below pinned. */
+  const inScope = (img: RefImage): boolean =>
+    !img.scriptIds?.length || (scriptId ? img.scriptIds.includes(scriptId) : true);
 
   const bind = (target: PickerTarget, imageId: string) => {
     if (!target) return;
@@ -205,7 +214,10 @@ export const ReferenceBindingPanel: React.FC<Props> = ({
             ) : (
               <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto">
                 {[...images]
-                  .sort((a, b) => Number(subjectMatches(b, target)) - Number(subjectMatches(a, target)))
+                  .filter(inScope)
+                  .sort((a, b) =>
+                    Number(subjectMatches(b, target)) * 4 + Number(!!b.isSelected) * 2 + Number(inScope(b))
+                    - (Number(subjectMatches(a, target)) * 4 + Number(!!a.isSelected) * 2 + Number(inScope(a))))
                   .map((im) => (
                   <div key={im.id} className="relative group">
                     {subjectMatches(im, target) && (

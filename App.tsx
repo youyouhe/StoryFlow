@@ -15,7 +15,7 @@ import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveRefBindings } from './utils/refBindings';
 import { computeBeatCast } from './utils/beatCast';
-import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage } from './services/refImageStore';
+import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
   queryDirPermission, requestDirPermission, listDirAssets, addAssetToDir,
@@ -628,31 +628,47 @@ function App() {
     subject?: string,
     sourcePrompt?: string,
     source: 'upload' | 'ai-generate' | 'video-frame' = 'upload',
+    identity?: { kind: 'character' | 'environment' | 'prop'; charName?: string; variant?: string; sceneKey?: string },
   ): Promise<boolean> => {
-    const meta = subject || sourcePrompt || source !== 'upload'
-      ? { ...(subject ? { subject } : {}), source, ...(sourcePrompt ? { sourcePrompt } : {}) }
-      : undefined;
+    // v2 identity: pin to the current script; same-identity regenerations join
+    // one version group (history kept, the newest becomes the selected one).
+    const kind = identity?.kind ?? 'environment';
+    const scriptIds = [screenplay.id];
+    const versionGroup = computeVersionGroup({ kind, charName: identity?.charName ?? subject, variant: identity?.variant, sceneKey: identity?.sceneKey, scriptIds });
+    const siblings = refImages.filter(r => r.versionGroup === versionGroup);
+    const version = siblings.length ? Math.max(...siblings.map(r => r.version ?? 1)) + 1 : 1;
+    const meta: RefImageMetaPatch = {
+      subject, source, sourcePrompt,
+      kind, charName: identity?.charName, variant: identity?.variant, sceneKey: identity?.sceneKey,
+      scriptIds, versionGroup, version, isSelected: true,
+    };
     try {
       if (assetDir) {
         const a = await addAssetToDir(assetDir, file, meta);
-        setRefImages((prev) => [...prev, {
+        setRefImages((prev) => [...prev.map(r => r.versionGroup === versionGroup ? { ...r, isSelected: false } : r), {
           id: a.id, name: a.name, type: file.type || 'image/*', size: a.size, createdAt: a.createdAt,
           url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
+          kind: a.kind, charName: a.charName, variant: a.variant, sceneKey: a.sceneKey, scriptIds: a.scriptIds,
+          versionGroup: a.versionGroup, version: a.version, isSelected: a.isSelected ?? true,
         }]);
+        if (siblings.length) promoteVersion(versionGroup, a.id).catch(() => {});
       } else {
         const stored = await addRefImage(file, meta);
-        setRefImages((prev) => [...prev, {
+        setRefImages((prev) => [...prev.map(r => r.versionGroup === versionGroup ? { ...r, isSelected: false } : r), {
           id: stored.id, name: stored.name, type: stored.type, size: stored.size, createdAt: stored.createdAt,
           url: URL.createObjectURL(stored.blob),
-          subject: stored.subject, source: stored.source ?? 'upload',
+          subject: stored.subject, source: stored.source ?? 'upload', sourcePrompt: stored.sourcePrompt,
+          kind: stored.kind, charName: stored.charName, variant: stored.variant, sceneKey: stored.sceneKey, scriptIds: stored.scriptIds,
+          versionGroup: stored.versionGroup, version: stored.version, isSelected: stored.isSelected ?? true,
         }]);
+        if (siblings.length) promoteVersion(versionGroup, stored.id).catch(() => {});
       }
       return true;
     } catch (e) {
       console.warn('Failed to store reference image', e);
       return false;
     }
-  }, [assetDir]);
+  }, [assetDir, screenplay.id, refImages]);
 
   /** Library metadata edits (rename / re-tag subject) — persisted, UI state synced. */
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
@@ -2027,6 +2043,7 @@ function App() {
                           sceneHeading={panelSceneHeading}
                           sceneShotTypes={panelSceneShotTypes}
                           beatCastNames={panelBeatCast}
+                          scriptId={screenplay.id}
                           refImages={refImages}
                           refBindings={refBindings}
                           onRefBindingsChange={handleRefBindingsChange}
@@ -2148,12 +2165,20 @@ function App() {
                             });
                             for (const im of imgs) {
                               // route through the active asset backend with
-                              // full provenance (subject + source + prompt)
+                              // full provenance + v2 identity (pin-script,
+                              // version group per character/scene)
+                              let envScene = '';
+                              for (let i = screenplay.blocks.findIndex(b => b.id === panelBlock.id); i >= 0; i--) {
+                                if (screenplay.blocks[i].type === 'SCENE_HEADING') { envScene = screenplay.blocks[i].content; break; }
+                              }
                               await handleUploadRefImage(
                                 new File([im.blob], name, { type: im.blob.type || 'image/png' }),
                                 subject || '环境',
                                 panelBlock.imagePrompt,
                                 'ai-generate',
+                                panelBlock.type === 'CHARACTER'
+                                  ? { kind: 'character', charName: subject }
+                                  : { kind: 'environment', sceneKey: envScene },
                               );
                             }
                           } catch (e: any) {
@@ -2442,6 +2467,7 @@ function App() {
                 onDelete={handleRemoveRefImage}
                 onClose={() => setShowAssetLibrary(false)}
                 labels={REF_LIBRARY_LABELS[lang]}
+                scriptId={screenplay.id}
                 backend={assetDir ? 'dir' : 'idb'}
                 backendName={assetDir?.name}
                 dirAvailable={isDirStoreAvailable()}

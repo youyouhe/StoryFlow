@@ -25,6 +25,15 @@ export interface DirAssetMeta {
   fileName: string;
   name: string;
   subject?: string;
+  /** Identity v2 (mirrors StoredRefImage). */
+  kind?: 'character' | 'environment' | 'prop';
+  charName?: string;
+  variant?: string;
+  sceneKey?: string;
+  scriptIds?: string[];
+  versionGroup?: string;
+  version?: number;
+  isSelected?: boolean;
   source?: 'upload' | 'ai-generate' | 'video-frame';
   sourcePrompt?: string;
   size: number;
@@ -158,6 +167,7 @@ export const listDirAssets = async (dir: FileSystemDirectoryHandle): Promise<Dir
         id: newId(),
         fileName: name,
         name,
+        kind: 'environment',
         source: 'upload',
         size: file.size,
         createdAt: file.lastModified || Date.now(),
@@ -198,6 +208,14 @@ export const addAssetToDir = async (
     fileName,
     name: meta?.name || file.name || 'reference',
     subject: meta?.subject,
+    kind: meta?.kind ?? 'character',
+    charName: meta?.charName,
+    variant: meta?.variant,
+    sceneKey: meta?.sceneKey,
+    scriptIds: meta?.scriptIds ?? [],
+    versionGroup: meta?.versionGroup ?? `vg_${id}`,
+    version: meta?.version ?? 1,
+    isSelected: meta?.isSelected ?? true,
     source: meta?.source ?? 'upload',
     sourcePrompt: meta?.sourcePrompt,
     size: file.size,
