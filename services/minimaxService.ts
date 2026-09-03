@@ -137,12 +137,17 @@ export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H
   if (!res.ok) {
     return { status: 'failed', errorMessage: `查询失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}` };
   }
-  const status = data?.status as H3TaskStatus['status'] | undefined;
+  // Live-tested shape: the task object arrives NESTED under "task"
+  // ({task:{id,status,content,...}}); tolerate a flat response too.
+  const t = data?.task ?? data;
+  const status = t?.status as H3TaskStatus['status'] | undefined;
   if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
   return {
     status,
-    videoUrl: data?.content?.url,
-    errorMessage: status === 'failed' ? String(data?.fail_code ?? '') + ' ' + String(data?.fail_reason ?? data?.error ?? '') : undefined,
+    videoUrl: t?.content?.url ?? data?.content?.url,
+    errorMessage: status === 'failed'
+      ? String(t?.fail_code ?? data?.fail_code ?? '') + ' ' + String(t?.fail_reason ?? data?.fail_reason ?? t?.error ?? data?.error ?? '')
+      : undefined,
   };
 };
 
