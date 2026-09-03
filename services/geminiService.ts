@@ -1,4 +1,5 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { logAiCall, classifyError } from "./aiLog";
 import { ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera } from "../types";
 
 // Helper to get plain text context from blocks
@@ -40,85 +41,118 @@ const getLanguageInstruction = (lang: ScriptLanguage): string => {
   }
 };
 
-// Generic AI Call Handler
+// Generic AI Call Handler — every call is timed and logged (services/aiLog).
+// DeepSeek gets a hard timeout (180s) plus one automatic retry on
+// timeout/network/5xx — the continuation API is intermittently slow.
 const callAIProvider = async (
   settings: AppSettings,
   messages: { system: string, user: string },
   jsonMode = false,
+  op = 'unknown',
 ): Promise<string> => {
+  const started = performance.now();
+  const promptChars = messages.system.length + messages.user.length;
+  const finish = (model: string, outcome: 'ok' | 'error' | 'timeout', text: string,
+                  extra: { errorType?: string; error?: string; attempt?: number } = {}) => {
+    logAiCall({
+      ts: Date.now(), durationMs: Math.round(performance.now() - started),
+      op, provider: settings.provider, model, outcome,
+      promptChars, responseChars: outcome === 'ok' ? text.length : undefined,
+      ...extra,
+    });
+    return text;
+  };
 
   // 1. DeepSeek Provider
   if (settings.provider === 'deepseek') {
     if (!settings.deepseekApiKey) throw new Error("DEEPSEEK_KEY_MISSING");
+    const model = settings.deepseekModel || 'deepseek-v4-flash';
 
-    try {
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.deepseekApiKey}`
-        },
-        body: JSON.stringify({
-          model: settings.deepseekModel || 'deepseek-v4-flash',
-          messages: [
-            { role: "system", content: messages.system },
-            { role: "user", content: messages.user }
-          ],
-          stream: false,
-          ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
-        })
-      });
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.deepseekApiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: messages.system },
+              { role: "user", content: messages.user }
+            ],
+            stream: false,
+            ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
+          }),
+          signal: AbortSignal.timeout(180_000),
+        });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || `DeepSeek API Error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || '';
-    } catch (e) {
-      console.error("DeepSeek API Error:", e);
-      throw e;
-    }
-  } 
-  
-  // 2. Google Gemini Provider (Default)
-  else {
-    const key = settings.geminiApiKey || process.env.API_KEY;
-    if (!key) throw new Error("GEMINI_KEY_MISSING");
-
-    const ai = new GoogleGenAI({ apiKey: key });
-
-    // Combine system and user prompt for Gemini's simple interface or use config
-    const combinedPrompt = `${messages.system}\n\n${messages.user}`;
-
-    // Map the user-facing thinking level to the SDK's thinkingLevel enum.
-    // 'none' disables thinking entirely (budget 0); others map to the enum members.
-    const userLevel = settings.geminiThinkingLevel;
-    const levelMap: Record<'low' | 'medium' | 'high', ThinkingLevel> = {
-      low: ThinkingLevel.LOW,
-      medium: ThinkingLevel.MEDIUM,
-      high: ThinkingLevel.HIGH,
-    };
-    const thinkingConfig = userLevel === 'none'
-      ? { thinkingBudget: 0 }
-      : { thinkingLevel: levelMap[userLevel] };
-
-    try {
-      const response = await ai.models.generateContent({
-        model: settings.geminiModel || 'gemini-3.7-flash',
-        contents: combinedPrompt,
-        config: {
-          temperature: 0.9,
-          thinkingConfig,
-          ...(jsonMode ? { responseMimeType: 'application/json' as const } : {}),
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          const message = err.error?.message || `DeepSeek API Error: ${response.statusText}`;
+          if (response.status >= 500 && attempt === 1) {
+            lastErr = new Error(message);
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          return finish(model, 'error', '', { errorType: `http:${response.status}`, error: message, attempt });
         }
-      });
-      return response.text || '';
-    } catch (error) {
-      console.error("Gemini Generate Error:", error);
-      throw error;
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        return finish(model, 'ok', text, { attempt });
+      } catch (e) {
+        const { errorType, message } = classifyError(e);
+        const transient = errorType === 'timeout' || errorType === 'network';
+        if (attempt === 1 && transient) {
+          lastErr = e;
+          await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
+        console.error("DeepSeek API Error:", e);
+        return finish(model, errorType === 'timeout' ? 'timeout' : 'error', '',
+          { errorType, error: message, attempt });
+      }
     }
+    const { errorType, message } = classifyError(lastErr);
+    return finish(model, 'error', '', { errorType, error: message, attempt: 2 });
+  }
+
+  // 2. Google Gemini Provider (Default)
+  const key = settings.geminiApiKey || process.env.API_KEY;
+  if (!key) throw new Error("GEMINI_KEY_MISSING");
+  const model = settings.geminiModel || 'gemini-3.7-flash';
+  const ai = new GoogleGenAI({ apiKey: key });
+
+  const combinedPrompt = `${messages.system}\n\n${messages.user}`;
+
+  const userLevel = settings.geminiThinkingLevel;
+  const levelMap: Record<'low' | 'medium' | 'high', ThinkingLevel> = {
+    low: ThinkingLevel.LOW,
+    medium: ThinkingLevel.MEDIUM,
+    high: ThinkingLevel.HIGH,
+  };
+  const thinkingConfig = userLevel === 'none'
+    ? { thinkingBudget: 0 }
+    : { thinkingLevel: levelMap[userLevel] };
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: combinedPrompt,
+      config: {
+        temperature: 0.9,
+        thinkingConfig,
+        ...(jsonMode ? { responseMimeType: 'application/json' as const } : {}),
+      }
+    });
+    return finish(model, 'ok', response.text || '');
+  } catch (error) {
+    const { errorType, message } = classifyError(error);
+    console.error("Gemini Generate Error:", error);
+    return finish(model, 'error', '', { errorType, error: message });
   }
 };
 
@@ -220,7 +254,7 @@ ${sceneMap ? `
   ${directiveInstruction}
   `;
 
-  return callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+  return callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'continue');
 };
 
 // Helper to extract song info from lyrics blocks
@@ -278,7 +312,7 @@ export const rewriteBlock = async (
   Return only the rewritten text, no quotes or markdown. Do not include [TYPE] labels.
   `;
 
-  return callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+  return callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'rewrite');
 };
 
 // Helper for lyrics-specific tone guidance
@@ -351,7 +385,7 @@ export const suggestIdeas = async (
   - Returned as a simple bulleted list (start lines with - or *).
   `;
 
-  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'ideas');
 
   return responseText.split('\n')
     .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
@@ -474,7 +508,7 @@ ${context}
 ---${designSection}
 Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.${charDesigns.size && !isEnvironment ? ' Characters in frame MUST match the established designs above.' : ''}`;
 
-  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt });
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'image-prompt');
 
   // Normalize: keep only the six labeled lines, trim each, drop any stray markdown.
   const allowed = ['Subject', 'Environment', 'Composition', 'Lighting', 'Material', 'Mood'];
@@ -535,7 +569,7 @@ Judge whether the next continuation should stay in the current scene or transiti
 
   let raw = '';
   try {
-    raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true);
+    raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'scene-transition');
   } catch (err: any) {
     // Network/key/API error: degrade gracefully so the user can still continue.
     return { action: 'continue', reason: (err?.message || 'Assessment unavailable — continuing in current scene.') };
@@ -888,7 +922,7 @@ Output only the shot graybox JSON.`;
 
   let raw = '';
   try {
-    raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true);
+    raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'graybox');
   } catch (err: any) {
     return { kind, error: `Generation failed: ${err?.message || 'unknown error'}` };
   }

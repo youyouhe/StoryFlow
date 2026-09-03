@@ -117,6 +117,8 @@ export interface StoryflowWebMcpAccessor {
    *  provenance. ACTION beats auto-attach the nearest established character
    *  sheet as subject_reference (bound asset first, subject-name fallback). */
   generateImage(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; subject?: string; characterLock?: string; error?: string }>;
+  /** AI call performance/diagnostic log (ring buffer, localStorage). */
+  getAiLog(opts: { last?: number; op?: string; failuresOnly?: boolean }): Array<Record<string, unknown>>;
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -438,6 +440,27 @@ export const registerStoryflowWebMcpTools = (
       execute: async (args) => {
         const r = await A().generateImage({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
         return ok(r);
+      },
+    },
+    {
+      name: 'storyflow_get_ai_log',
+      description: 'Read the AI call performance log (ring buffer, newest last): op, provider/model, durationMs, outcome (ok/error/timeout), errorType (timeout/network/http:N), payload sizes. Use it to diagnose slowness or failures before retrying - e.g. when a generation tool times out.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          last: { type: 'integer', description: 'Return only the last N entries (default 30).' },
+          op: { type: 'string', description: 'Filter by op: continue / ideas / rewrite / image-prompt / scene-transition / graybox / image-gen / h3-upload / h3-create / h3-query.' },
+          failuresOnly: { type: 'boolean', description: 'Only entries that failed.' },
+        },
+      },
+      annotations: RO,
+      execute: async (args) => {
+        const r = A().getAiLog({
+          last: asInt(args.last) ?? 30,
+          op: asString(args.op),
+          failuresOnly: args.failuresOnly === true,
+        });
+        return ok({ entries: r, count: r.length });
       },
     },
     {

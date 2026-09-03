@@ -19,6 +19,8 @@
  *     (768P 0.50, 2K 0.80); images beyond 5 cost ¥0.20 each
  */
 
+import { logAiCall, classifyError } from './aiLog';
+
 export interface MiniMaxConfig {
   apiKey: string;
   baseUrl: string;
@@ -72,6 +74,7 @@ export const uploadH3Video = async (
   cfg: MiniMaxConfig,
   videoBlob: Blob,
 ): Promise<string> => {
+  const t0 = performance.now();
   const form = new FormData();
   form.append('purpose', 'video_generation_input');
   const ext = videoBlob.type.includes('webm') ? 'webm' : 'mp4';
@@ -86,6 +89,9 @@ export const uploadH3Video = async (
     throw new Error(`上传白模视频失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
   }
   const fileId = data?.file?.file_id ?? data?.file_id;
+  logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-upload', provider: 'minimax', model: 'video-upload',
+    outcome: fileId ? 'ok' : 'error', errorType: fileId ? undefined : 'http:2013', error: fileId ? undefined : JSON.stringify(data).slice(0, 200),
+    responseChars: videoBlob.size });
   if (!fileId) throw new Error(`上传成功但未返回 file_id: ${JSON.stringify(data).slice(0, 300)}`);
   return `mm_file://${fileId}`;
 };
@@ -114,16 +120,20 @@ export const createH3Task = async (
     duration: p.outputSeconds,
     prompt_engineering: true,
   };
+  const t0 = performance.now();
   const res = await fetch(`${cfg.baseUrl}/v2/video_generation`, {
     method: 'POST',
     headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
+  const taskId = data?.task_id;
+  logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-create', provider: 'minimax', model: body.model as string,
+    outcome: res.ok && taskId ? 'ok' : 'error', errorType: res.ok ? undefined : `http:${res.status}`,
+    error: res.ok ? undefined : JSON.stringify(data).slice(0, 200), promptChars: p.prompt.length });
   if (!res.ok) {
     throw new Error(`创建任务失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
   }
-  const taskId = data?.task_id;
   if (!taskId) throw new Error(`未返回 task_id: ${JSON.stringify(data).slice(0, 300)}`);
   return taskId as string;
 };
@@ -141,6 +151,8 @@ export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H
   // ({task:{id,status,content,...}}); tolerate a flat response too.
   const t = data?.task ?? data;
   const status = t?.status as H3TaskStatus['status'] | undefined;
+  logAiCall({ ts: Date.now(), durationMs: 0, op: 'h3-query', provider: 'minimax', model: 'poll',
+    outcome: status && status !== 'failed' ? 'ok' : 'error', error: status ? undefined : JSON.stringify(data).slice(0, 200) });
   if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
   return {
     status,
@@ -213,13 +225,26 @@ export const generateImages = async (
       image_file: await asBase64DataUri(opts.subjectReference),
     }];
   }
-  const res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
-    method: 'POST',
-    headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const t0 = performance.now();
+  let outcome: 'ok' | 'error' = 'ok';
+  let errorType: string | undefined;
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
+      method: 'POST',
+      headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    const c = classifyError(e);
+    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'image-gen', provider: 'minimax', model: 'image-01', outcome: 'error', errorType: c.errorType, error: c.message });
+    throw e;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    outcome = 'error';
+    errorType = `http:${res.status}`;
+    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'image-gen', provider: 'minimax', model: 'image-01', outcome, errorType, error: JSON.stringify(data).slice(0, 200) });
     throw new Error(`图像生成失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}`);
   }
   const d = data?.data ?? {};
@@ -233,6 +258,7 @@ export const generateImages = async (
   ].filter((x) => typeof x === 'string' && x.length > 0);
   if (!entries.length) throw new Error(`未返回图片: ${JSON.stringify(data).slice(0, 300)}`);
 
+  logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'image-gen', provider: 'minimax', model: 'image-01', outcome, responseChars: entries.join('').length });
   const out: GeneratedImage[] = [];
   for (const entry of entries.slice(0, opts?.n ?? 1)) {
     if (entry.startsWith('data:')) {
