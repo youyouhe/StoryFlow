@@ -402,7 +402,7 @@ export const generateImagePrompt = async (
     : '2. Environment — location, time of day, weather, background detail. Architecture, furnishings, and set dressing must match the story\'s era and genre (period piece = period buildings and props, no anachronistic objects).';
 
   const compGuidance = isCharacter
-    ? '3. Composition — character turnaround sheet: the SAME character in three views side by side (front / side / back), full-body, consistent scale and spacing, neutral standing pose — an animation model sheet. The three views must be identical in styling so the sheet locks the character\'s identity.'
+    ? '3. Composition — character turnaround sheet with EXACTLY THREE figures side by side, each full-body and identical in scale, styling and spacing: the LEFT figure faces the camera (front view), the CENTER figure is a strict profile side view (90°, looking right), the RIGHT figure shows the back (back view, head turned away). All three wear the identical outfit and share the same neutral standing pose — an animation model sheet.'
     : isEnvironment
     ? '3. Composition — wide establishing frame of the whole space, eye level, full depth readable.'
     : '3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.';
