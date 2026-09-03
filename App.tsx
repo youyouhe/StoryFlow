@@ -31,6 +31,35 @@ import { clsx } from 'clsx';
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
+/** Full-field mapper — every library-loading path MUST carry the v2 identity
+ *  fields (kind/charName/variant/sceneKey/scriptIds/version*), or category
+ *  tabs, script filters and version badges silently break (live bug). */
+const toRefImage = (s: {
+  id: string; name: string; size: number; createdAt: number;
+  blob?: Blob; url?: string; type?: string;
+  subject?: string; kind?: RefImage['kind']; charName?: string; variant?: string;
+  sceneKey?: string; scriptIds?: string[]; versionGroup?: string; version?: number;
+  isSelected?: boolean; source?: RefImage['source']; sourcePrompt?: string;
+}): RefImage => ({
+  id: s.id,
+  name: s.name,
+  type: s.type ?? (s.blob?.type || 'image/*'),
+  size: s.size,
+  createdAt: s.createdAt,
+  url: s.url ?? (s.blob ? URL.createObjectURL(s.blob) : ''),
+  subject: s.subject,
+  kind: s.kind,
+  charName: s.charName,
+  variant: s.variant,
+  sceneKey: s.sceneKey,
+  scriptIds: s.scriptIds ?? [],
+  versionGroup: s.versionGroup,
+  version: s.version,
+  isSelected: s.isSelected,
+  source: s.source ?? 'upload',
+  sourcePrompt: s.sourcePrompt,
+});
+
 // Storage Constants
 const STORAGE_KEYS = {
     LEGACY_AUTOSAVE: 'screenplay_autosave',
@@ -595,20 +624,15 @@ function App() {
           const assets = await listDirAssets(h);
           if (cancelled) return;
           setAssetDir(h);
-          setRefImages(assets.map((a) => ({
-            id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-            url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
-          })));
+          setRefImages(assets.map((a) => toRefImage(a)));
           return;
         }
       } catch { /* dir unreadable — fall through */ }
       const stored = await listRefImages().catch(() => []);
       if (cancelled) return;
-      setRefImages(stored.map((s) => {
-        const url = URL.createObjectURL(s.blob);
-        urls.push(url);
-        return { id: s.id, name: s.name, type: s.type, size: s.size, createdAt: s.createdAt, url, subject: s.subject, source: s.source ?? 'upload', sourcePrompt: s.sourcePrompt };
-      }));
+      const mapped = stored.map((s) => toRefImage(s));
+      urls.push(...mapped.map((m) => m.url));
+      setRefImages(mapped);
     })();
     return () => { cancelled = true; urls.forEach((u) => URL.revokeObjectURL(u)); };
   }, []);
@@ -709,10 +733,7 @@ function App() {
       const assets = await listDirAssets(h);
       setAssetDir(h);
       if (migratedNote) console.info('[assets]', migratedNote);
-      setRefImages(assets.map((a) => ({
-        id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-        url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
-      })));
+      setRefImages(assets.map((a) => toRefImage(a)));
     } catch (e) {
       console.warn('Failed to open asset folder', e);
     }
@@ -724,10 +745,7 @@ function App() {
     if (!assetDir) return;
     try {
       const assets = await listDirAssets(assetDir);
-      setRefImages(assets.map((a) => ({
-        id: a.id, name: a.name, type: 'image/*', size: a.size, createdAt: a.createdAt,
-        url: a.url, subject: a.subject, source: a.source ?? 'upload', sourcePrompt: a.sourcePrompt,
-      })));
+      setRefImages(assets.map((a) => toRefImage(a)));
     } catch (e) {
       console.warn('Failed to rescan asset folder', e);
     }
