@@ -1764,6 +1764,8 @@ function App() {
             onRenameScript={handleRenameScript}
             currentScriptId={screenplay.id}
             onExport={() => setShowExportMenu(true)}
+            onOpenAssetLibrary={() => setShowAssetLibrary(true)}
+            assetLibraryLabel={t.assetLibraryLabel}
         />
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ScriptBlock } from '../types';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download } from 'lucide-react';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -22,6 +22,9 @@ interface SidebarProps {
   onToggle: () => void;
   onNewScript: () => void;
   onScriptSettings: () => void;
+  /** Opens the global reference-asset library modal. */
+  onOpenAssetLibrary: () => void;
+  assetLibraryLabel: string;
   /** Open the export menu (format + options). */
   onExport?: () => void;
   t: typeof TRANSLATIONS['en'];
@@ -41,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onToggle,
     onNewScript,
     onScriptSettings,
+    onOpenAssetLibrary,
+    assetLibraryLabel,
     onExport,
     t,
     savedScripts,
@@ -254,6 +259,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Download className="w-4 h-4 opacity-70" />
           <span>{t.exportPdf}</span>
+        </button>
+        <button
+          onClick={onOpenAssetLibrary}
+          className="flex items-center gap-2.5 w-full text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-zinc-800"
+        >
+          <Images className="w-4 h-4 opacity-70" />
+          <span>{assetLibraryLabel}</span>
         </button>
         <button 
           onClick={onScriptSettings}
