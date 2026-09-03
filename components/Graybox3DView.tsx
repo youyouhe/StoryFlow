@@ -1130,12 +1130,15 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   return (
     <div className="flex flex-col h-full">
       <div ref={wrapRef} className={`relative flex-1 min-h-0 overflow-hidden ${canvasBg}`}>
-        {/* During export the inner box is fixed at 1920×1080 (the recording
-            resolution) and scaled back to fit — transforms don't affect the
-            canvas backing store, only its on-screen size. */}
+        {/* During export the inner box is a REAL 1920×1080 layout (the recording
+            resolution). Do NOT scale it back with a CSS transform — r3f's
+            measure pass reads the transformed rect and sizes the renderer to
+            the DISPLAY size (366×206), which the video API rejects (min side
+            256). The overflow is clipped by the parent; the recording overlay
+            covers the visual oddity for the few seconds it lasts. */}
         <div
           style={exporting
-            ? { position: 'absolute', top: 0, left: 0, width: EXPORT_W, height: EXPORT_H, transform: `scale(${exportScale})`, transformOrigin: 'top left' }
+            ? { position: 'absolute', top: 0, left: 0, width: EXPORT_W, height: EXPORT_H }
             : { width: '100%', height: '100%' }}
         >
           {graybox.kind === 'scene' ? (
