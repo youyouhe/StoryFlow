@@ -25,7 +25,7 @@ const DB_VERSION = 4;
 const STORE = 'images';
 const META_STORE = 'meta';
 
-export type AssetKind = 'character' | 'environment' | 'prop';
+export type AssetKind = 'character' | 'environment' | 'prop' | 'action';
 export type AssetSource = 'upload' | 'ai-generate' | 'video-frame';
 
 export interface StoredRefImage {
@@ -106,6 +106,7 @@ const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now(
 
 /** Derive the display/search subject from structured identity fields. */
 export const deriveSubject = (r: Pick<StoredRefImage, 'kind' | 'charName' | 'variant' | 'sceneKey'>): string => {
+  if (r.kind === 'action') return '环境';
   if (r.kind === 'environment') return '环境';
   if (r.kind === 'prop') return `道具:${r.charName ?? ''}`;
   const base = r.charName ?? '';

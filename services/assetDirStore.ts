@@ -26,7 +26,7 @@ export interface DirAssetMeta {
   name: string;
   subject?: string;
   /** Identity v2 (mirrors StoredRefImage). */
-  kind?: 'character' | 'environment' | 'prop';
+  kind?: 'character' | 'environment' | 'prop' | 'action';
   charName?: string;
   variant?: string;
   sceneKey?: string;

@@ -633,7 +633,7 @@ function App() {
     subject?: string,
     sourcePrompt?: string,
     source: 'upload' | 'ai-generate' | 'video-frame' = 'upload',
-    identity?: { kind: 'character' | 'environment' | 'prop'; charName?: string; variant?: string; sceneKey?: string },
+    identity?: { kind: 'character' | 'environment' | 'prop' | 'action'; charName?: string; variant?: string; sceneKey?: string },
   ): Promise<boolean> => {
     // v2 identity: pin to the current script; same-identity regenerations join
     // one version group (history kept, the newest becomes the selected one).
@@ -2183,7 +2183,9 @@ function App() {
                                 'ai-generate',
                                 panelBlock.type === 'CHARACTER'
                                   ? { kind: 'character', charName: subject }
-                                  : { kind: 'environment', sceneKey: envScene },
+                                  : panelBlock.type === 'SCENE_HEADING'
+                                    ? { kind: 'environment', sceneKey: envScene }
+                                    : { kind: 'action', sceneKey: envScene },
                               );
                             }
                           } catch (e: any) {
@@ -2473,6 +2475,7 @@ function App() {
                 onClose={() => setShowAssetLibrary(false)}
                 labels={REF_LIBRARY_LABELS[lang]}
                 scriptId={screenplay.id}
+                scripts={savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
                 backend={assetDir ? 'dir' : 'idb'}
                 backendName={assetDir?.name}
                 dirAvailable={isDirStoreAvailable()}

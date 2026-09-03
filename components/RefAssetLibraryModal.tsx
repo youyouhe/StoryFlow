@@ -35,6 +35,8 @@ interface Labels {
   rescan: string;
   qrHint: string;
   previewClose: string;
+  catAll: string; catChar: string; catAction: string; catScene: string; catProp: string;
+  scriptAll: string; scriptNone: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -63,6 +65,8 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     rescan: 'Rescan',
     qrHint: 'Scan on the phone to open the upload page — no app needed.',
     previewClose: 'Close preview',
+    catAll: 'All', catChar: 'Characters', catAction: 'Storyboard', catScene: 'Scenes', catProp: 'Props',
+    scriptAll: 'All scripts', scriptNone: 'Unassigned',
   },
   zh: {
     title: '参考资产库',
@@ -89,6 +93,8 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     rescan: '重新扫描',
     qrHint: '手机扫码打开上传页——无需安装任何 App。',
     previewClose: '关闭预览',
+    catAll: '全部', catChar: '角色', catAction: '分镜', catScene: '场景', catProp: '道具',
+    scriptAll: '全部剧本', scriptNone: '未归属',
   },
 };
 
@@ -107,6 +113,8 @@ interface Props {
   onRescan: () => void;
   /** Current screenplay id — enables the 本剧本/全部 scope filter. */
   scriptId?: string;
+  /** Saved-script index for the per-script filter dropdown. */
+  scripts: Array<{ id: string; title: string }>;
 }
 
 /** Inline-editable text field: click to edit, Enter/blur to commit, Esc to cancel. */
@@ -146,10 +154,11 @@ const EditableText: React.FC<{
   );
 };
 
-export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan, scriptId }) => {
+export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan, scriptId, scripts }) => {
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<RefImage | null>(null);
-  const [scopeAll, setScopeAll] = useState(false);
+  const [cat, setCat] = useState<'all' | 'character' | 'action' | 'environment' | 'prop'>('all');
+  const [scriptFilter, setScriptFilter] = useState<string>(scriptId ?? 'all');
   const q = query.trim().toLowerCase();
 
   // ---- LocalSend receiver status (phone drop) -------------------------------
@@ -186,13 +195,18 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
   }, [backend, onRescan]);
   const filtered = useMemo(() => {
     let list = images;
-    if (!scopeAll && scriptId) list = list.filter(im => !im.scriptIds?.length || im.scriptIds.includes(scriptId));
+    if (cat !== 'all') list = list.filter(im => im.kind === cat);
+    if (scriptFilter !== 'all') {
+      list = scriptFilter === 'none'
+        ? list.filter(im => !im.scriptIds?.length)
+        : list.filter(im => im.scriptIds?.includes(scriptFilter));
+    }
     if (q) list = list.filter((im) =>
       im.name.toLowerCase().includes(q) || (im.subject ?? '').toLowerCase().includes(q));
     // selected version of each group first
     return [...list].sort((a, b) =>
       Number(!!b.isSelected) - Number(!!a.isSelected) || b.createdAt - a.createdAt);
-  }, [images, q, scopeAll, scriptId]);
+  }, [images, q, cat, scriptFilter]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -283,6 +297,31 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                 </div>
               </div>
             )}
+          </div>
+
+          {/* category tabs + per-script filter */}
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            {([['all', labels.catAll], ['character', labels.catChar], ['action', labels.catAction], ['environment', labels.catScene], ['prop', labels.catProp]] as const).map(([k, lbl]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCat(k)}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${cat === k
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+              >
+                {lbl} {k === 'all' ? images.length : images.filter(im => im.kind === k).length}
+              </button>
+            ))}
+            <select
+              value={scriptFilter}
+              onChange={(e) => setScriptFilter(e.target.value)}
+              className="ml-auto rounded-md border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-[10px] text-gray-700 dark:text-gray-200 max-w-[180px]"
+            >
+              <option value="all">{labels.scriptAll}</option>
+              {scripts.map(sc => <option key={sc.id} value={sc.id}>{sc.title}</option>)}
+              <option value="none">{labels.scriptNone}</option>
+            </select>
           </div>
 
           {images.length === 0 ? (

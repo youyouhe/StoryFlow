@@ -226,7 +226,7 @@ export interface RefImage {
   /** DERIVED display/search string (名字 / 名字/装束 / 环境 / 道具:X). */
   subject?: string;
   // ---- identity v2 ----
-  kind?: 'character' | 'environment' | 'prop';
+  kind?: 'character' | 'environment' | 'prop' | 'action';
   charName?: string;
   variant?: string;
   sceneKey?: string;
