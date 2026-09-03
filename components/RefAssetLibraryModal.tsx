@@ -34,6 +34,7 @@ interface Labels {
   phoneCount: (n: number) => string;
   rescan: string;
   qrHint: string;
+  previewClose: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -61,6 +62,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     phoneCount: (n) => `received ${n}`,
     rescan: 'Rescan',
     qrHint: 'Scan on the phone to open the upload page — no app needed.',
+    previewClose: 'Close preview',
   },
   zh: {
     title: '参考资产库',
@@ -86,6 +88,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     phoneCount: (n) => `已收 ${n} 个`,
     rescan: '重新扫描',
     qrHint: '手机扫码打开上传页——无需安装任何 App。',
+    previewClose: '关闭预览',
   },
 };
 
@@ -143,6 +146,7 @@ const EditableText: React.FC<{
 
 export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan }) => {
   const [query, setQuery] = useState('');
+  const [preview, setPreview] = useState<RefImage | null>(null);
   const q = query.trim().toLowerCase();
 
   // ---- LocalSend receiver status (phone drop) -------------------------------
@@ -287,7 +291,8 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                       src={im.url}
                       alt={im.name}
                       title={im.sourcePrompt ? `${im.sourcePrompt.slice(0, 200)}` : im.name}
-                      className="w-full h-full object-cover"
+                      onClick={() => setPreview(im)}
+                      className="w-full h-full object-cover cursor-zoom-in"
                     />
                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px]">
                       {labels.sourceBadge[im.source ?? 'upload'] ?? im.source}
@@ -322,6 +327,40 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
             </div>
           )}
         </div>
+
+        {/* full-size preview lightbox */}
+        {preview && (
+          <div
+            className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6"
+            onClick={() => setPreview(null)}
+          >
+            <div className="max-w-[90vw] max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={preview.url}
+                alt={preview.name}
+                className="max-w-[90vw] max-h-[78vh] object-contain rounded-lg shadow-2xl"
+              />
+              <div className="mt-2 flex items-center gap-3 text-xs text-gray-200">
+                <span className="font-semibold truncate">{preview.name}</span>
+                {preview.subject && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-600/80 text-white text-[10px]">{preview.subject}</span>
+                )}
+                {preview.sourcePrompt && (
+                  <span className="text-[10px] text-gray-400 truncate flex-1" title={preview.sourcePrompt}>
+                    {preview.sourcePrompt.slice(0, 120)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  className="ml-auto shrink-0 px-2.5 py-1 rounded-md border border-white/30 text-white/90 hover:bg-white/10"
+                >
+                  ✕ {labels.previewClose}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="px-4 py-3 border-t border-gray-100 dark:border-zinc-800">
           <button
