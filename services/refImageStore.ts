@@ -79,6 +79,18 @@ const generateId = () => Math.random().toString(36).substring(2, 11) + Date.now(
 /** Store an uploaded file. Returns the stored record. */
 export const addRefImage = async (file: File, meta?: RefImageMetaPatch): Promise<StoredRefImage> => {
   const store = await tx('readwrite');
+  // Defensive: AI-generated files are named "<subject>-gen-<stamp>.<ext>" by
+  // construction — if a caller dropped the subject (observed once via a stale
+  // HMR closure), recover it from the name instead of storing an untagged
+  // asset that smart binding can never find.
+  const effective: RefImageMetaPatch = { ...meta };
+  if (!effective.subject && effective.source === 'ai-generate') {
+    const m = file.name.match(/^(.+)-gen-[a-z0-9]+\.(?:png|jpe?g|webp)$/i);
+    if (m) {
+      effective.subject = m[1];
+      console.warn('[refImageStore] subject missing in meta — recovered from filename:', m[1]);
+    }
+  }
   const record: StoredRefImage = {
     id: generateId(),
     name: file.name || 'reference',
@@ -86,7 +98,7 @@ export const addRefImage = async (file: File, meta?: RefImageMetaPatch): Promise
     size: file.size,
     createdAt: Date.now(),
     blob: file,
-    ...meta,
+    ...effective,
   };
   await new Promise<void>((resolve, reject) => {
     const req = store.put(record);
