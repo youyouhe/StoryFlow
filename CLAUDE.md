@@ -18,9 +18,20 @@ npm run preview      # preview the production build
 npm run tauri:dev          # desktop dev (launches npm run dev, then Tauri window)
 npm run tauri:build        # release desktop build
 npm run tauri:build-debug  # debug desktop build
+
+# Gallery backend (cloud sync, P1) — own package in server/
+cd server && npm install
+npm run dev                # tsx watch, PORT 8787
+npm run build && npm start # compiled dist/ (copies migrations/)
+npx tsc --noEmit           # type check (client root too: npx tsc --noEmit at repo root)
+
+# Sync verification suite (all should print ALL CHECKS PASSED)
+npx esbuild scripts/sync-smoke.ts --bundle --platform=node --format=esm --outfile=/tmp/opencode/sync-smoke.mjs && node /tmp/opencode/sync-smoke.mjs   # engine vs mock, no server needed
+node scripts/server-smoke.mjs                                    # HTTP contract (server must run)
+npx esbuild scripts/sync-e2e.ts --bundle --platform=node --format=esm --outfile=/tmp/opencode/sync-e2e.mjs && node /tmp/opencode/sync-e2e.mjs         # client stack vs real server
 ```
 
-There is no lint or test script configured — type checking is done implicitly via `vite build` (tsconfig has `noEmit: true`).
+There is no lint or test script configured — type checking is done implicitly via `vite build` (tsconfig has `noEmit: true`); run `npx tsc --noEmit` for a real full check (root tsconfig excludes `server/`, which has its own).
 
 **API keys**: Set `GEMINI_API_KEY` (and optionally `DEEPSEEK_API_KEY`) in `.env.local`. `vite.config.ts` injects these into `process.env.API_KEY` and `process.env.GEMINI_API_KEY` at build time. Keys can also be entered at runtime via the Settings UI (stored in localStorage and take precedence over the env fallback).
 
@@ -38,8 +49,12 @@ components/
   Toolbar.tsx            # Block type selector + AI mode trigger
   SettingsModal.tsx      # Provider/keys/colors/shortcuts/AI params UI
 services/geminiService.ts # AI calls — both Gemini and DeepSeek providers
+services/gallery.ts       # Gallery sync singleton + mock/HTTP backend switch
+services/apiClient.ts     # Cloud transport + auth wrapper + MockGalleryApi
+services/syncEngine.ts    # Outbox queue + per-script sync state machine
 utils/pagination.ts      # Page-break calc for print view (~55 blocks/page)
 utils/pdfExport.ts       # PDF export via html2pdf.js
+server/                  # Gallery cloud backend (Hono + pg, no Docker)
 src-tauri/               # Tauri 2 Rust desktop shell (tauri.conf.json)
 ```
 
@@ -62,9 +77,20 @@ All state lives in `App.tsx` — there is no external store. Key pieces: `screen
 - `script_index`: array of `{id, title, lastModified}` summaries
 - `script_{id}`: full screenplay JSON per script
 - `screenplay_app_settings`: persisted `appSettings`
+- `sync_{id}`: gallery sync state; `sync_outbox`: pending pushes; `gallery_auth`: cloud token pair
 - Legacy migration from the old single-script `screenplay_autosave` key runs on load (App.tsx ~150).
 
-Autosave debounces 1s (`setTimeout` in App.tsx:159-182), persisting both the current script and the index.
+Autosave debounces 1s (`setTimeout` in App.tsx:159-182), persisting both the current script and the index, then calls `syncEngine.markDirty(screenplay)` — cloud-backed scripts push automatically, never-synced ('local') scripts only sync via the explicit one-click badge in the Sidebar.
+
+### Gallery Cloud Sync (P1)
+
+Local-first sync of whole-doc JSON + monotonic revision; the cloud is never required for editing. Key pieces:
+
+- `services/gallery.ts` — singleton wiring + the **backend switch**: `new MockGalleryApi()` (default; simulates the cloud in localStorage) vs `new HttpGalleryApi('<url>')`. Nothing else changes when swapping.
+- `services/apiClient.ts` — `GalleryApi` transport interface, `GalleryClient` (token persistence in `gallery_auth`, single-flight refresh on INVALID_TOKEN), `MockGalleryApi` (with `debug*` hooks to simulate a second device).
+- `services/syncEngine.ts` — persisted outbox (`sync_outbox`) + per-script state machine (local→synced→dirty→pushing; conflict on 409). Conflict policy: fork the cloud doc locally as `"<title> (云端冲突副本)"`, then accept the server revision and overwrite — local wins, nothing is ever lost.
+- `server/` — Hono + raw `pg` backend (no ORM, no Docker): auth with scrypt + rotating refresh tokens (`devices` table), scripts with `SELECT … FOR UPDATE` revision guard, immutable `script_versions` chain, `Idempotency-Key` partial unique index. Deploy: bare Node 20+ + PostgreSQL on the VPS (see `server/README.md`).
+- Visibility is `private`-only in P1; groups/public arrive in P2 as additive migrations.
 
 ### AI Integration (`services/geminiService.ts`)
 
@@ -94,9 +120,12 @@ standalone toolkit repo (StoryFlow stays focused on the product):
 **https://github.com/youyouhe/webmcp-retrofit** — on this dev box, clone at
 `~/webmcp-retrofit` (bridge: `~/webmcp-retrofit/mcp-bridge/index.mjs`).
 
-1. Ensure the WebMCP browser is up: `bash ~/webmcp-retrofit/scripts/webmcp-chromium.sh`
-   (headless Chromium with `--enable-features=WebMCP`, CDP on 127.0.0.1:9222,
-   opens http://localhost:5173/). Keep it running — the page is the tool host.
+1. Ensure the dev stack is up: `scripts/dev.sh start` (from the StoryFlow
+   root — starts the Vite dev server AND the WebMCP browser; see
+   `scripts/dev.sh status`). The browser is headless Chromium with
+   `--enable-features=WebMCP`, CDP on 127.0.0.1:9222, opening
+   http://localhost:5173/. Keep it running — the page is the tool host.
+   `scripts/dev.sh stop|restart|logs app|logs browser` manage the rest.
 2. Use the `storyflow_*` tools directly (read scripts, append blocks, graybox
    health checks, Seedance/H3 prompt generation). `storyflow_append_blocks`
    is the only write surface and is append-only by design.

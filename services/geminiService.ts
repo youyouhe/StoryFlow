@@ -601,7 +601,7 @@ Judge whether the next continuation should stay in the current scene or transiti
 
 const VALID_OBJ_TYPES = ['box', 'plane', 'cylinder', 'sphere'] as const;
 const VALID_OBJ_ROLES = ['wall', 'floor', 'ceiling', 'door', 'window', 'prop', 'furniture', 'environment'] as const;
-const VALID_SHOT_TYPES = ['wide', 'medium', 'close-up', 'extreme-close-up', 'over-the-shoulder', 'top-down', 'pov'] as const;
+const VALID_SHOT_TYPES = ['extreme-wide', 'wide', 'medium', 'close-up', 'extreme-close-up', 'over-the-shoulder', 'top-down', 'pov'] as const;
 const VALID_MOVE_TYPES = ['static', 'pan', 'tilt', 'dolly', 'tracking', 'orbit', 'crane', 'handheld'] as const;
 
 /** Coerce an arbitrary value to a 3-tuple `[x, y, z]` of numbers, filling 0
@@ -763,7 +763,11 @@ ${systemInstruction}
 
 ${langInstruction}
 
-Coordinates: meters. Origin = the scene's natural center (room center for an interior, the action's ground zero for an exterior). Floor/ground at y=0 (y is up).
+Coordinates & units (FIXED CONTRACT — never deviate, never invent other units or flip axes; the renderer and every downstream exporter read these literally):
+- Meters. y is UP. Floor/ground at y=0.
+- Origin = the scene's natural center (room center for an interior, the action's ground zero for an exterior).
+- Scale reference: a standing adult is ~1.7m tall (eye ~1.6m) — size walls/props against that, and keep blocking distances realistic for the space you describe.
+- Character "facing" is radians about the vertical axis; 0 = +Z, increasing counterclockwise (seen from above). Speakers face each other with roughly opposite values.
 
 Read the scene heading to judge the SPACE before you build it. An interior (INT./内.) is an enclosed room — origin at room center, walls and a floor bound it. An exterior (EXT./外.) is open — origin can be the action's ground zero, the ground is a large plane, and there are no enclosing walls unless the scene names them (a courtyard wall, a gate, a cliff edge). For exteriors, use the "environment" role for terrain and natural features — a ground plane, hills, trees, rocks, water, distant mountains — and give each its own color so the gray-box reads as that place (mountain green, water blue, rock gray, grass, sand…). Let the scale match what the scene actually is: a street corner, a palace square, a battlefield can span tens of meters, not a room-sized box.
 
@@ -821,7 +825,10 @@ ${systemInstruction}
 
 ${langInstruction}
 
-Coordinates: meters. Origin = the scene's natural center (room center for an interior, the action's ground zero for an exterior). Floor/ground at y=0 (y is up). Eye level ~1.6m for a standing adult.
+Coordinates & units (FIXED CONTRACT — never deviate, never invent other units or flip axes; the renderer and every downstream exporter read these literally):
+- Meters. y is UP. Floor/ground at y=0. Eye level ~1.6m for a standing adult.
+- Origin = the scene's natural center (room center for an interior, the action's ground zero for an exterior).
+- Camera aim is expressed ONLY as a lookAt TARGET point in world space (never rotation angles).
 
 How to think about it — be a real cinematographer, not a template-filler:
 - Read the VERB and the EMOTION in the beat first. The movement type is just a tool to express them; pick the one that fits, not the first that comes to mind. A dolly push-in is one option among many, not a default.
@@ -851,7 +858,7 @@ Output STRICT JSON and nothing else, in this exact shape:
 {
   "kind": "shot",
   "camera": {
-    "shotType": "wide" | "medium" | "close-up" | "extreme-close-up" | "over-the-shoulder" | "top-down" | "pov",
+    "shotType": "extreme-wide" | "wide" | "medium" | "close-up" | "extreme-close-up" | "over-the-shoulder" | "top-down" | "pov",
     "shotDescription": "one short sentence on WHY this shot serves the beat — the director's intent (e.g. 'Crane up to reveal the seal cracking as the elders reel')",
     "position": [x, y, z],
     "lookAt": [x, y, z],

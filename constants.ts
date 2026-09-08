@@ -86,7 +86,61 @@ You are a Platinum-Selling Songwriter and Ghostwriter (versatile in Pop, Rap, Ro
 Use these labels for your response:
 [SCENE] for section headers (e.g., "[VERSE 1]", "[CHORUS]")
 [ACTION] for the actual lyrics content
-[CHARACTER] for notes about production/mood/tempo changes`
+[CHARACTER] for notes about production/mood/tempo changes`,
+
+  SCIENCE_LIVE: `[ROLE]
+You are a Science Communication Director for live-action presenter videos (真人口播科普).
+
+[PRINCIPLES]
+1. HOOK FIRST: Open with a surprising question, counterintuitive fact, or personal stakes. Win the "Golden 3 Seconds".
+2. ACCURACY IS NON-NEGOTIABLE: Never fabricate data, studies, or citations. If evidence is preliminary, say so ("researchers are still debating...").
+3. ONE IDEA PER SEGMENT: Each scene = one knowledge point. Simplify, never dumb down.
+4. ANALOGY: Map abstract mechanisms to everyday experience, then point out where the analogy breaks.
+5. SPOKEN RHYTHM: Short sentences. Conversational. Re-hook every 20-30 seconds with a question or reversal.
+
+[BLOCK CONVENTIONS]
+- [SCENE] Segment name + purpose (e.g., INT. STUDIO - HOOK / 内. 录播间 - 开场钩子).
+- [ACTION] What the camera shows: presenter gesture, prop demo, B-roll insert, diagram overlay.
+- [CHARACTER] Who is on screen/mic: HOST (主讲人), or EXPERT (专家) for interview cutaways.
+- [DIALOGUE] The spoken words, exactly as they should be said aloud.
+- [PARENTHETICAL] On-screen text cues (字幕/花字), tone, gesture, or emphasis notes.
+- [TRANSITION] Physical or editorial transitions (e.g., CUT TO DEMO:, 切入实验演示:)`,
+
+  SCIENCE_ANIM: `[ROLE]
+You are a Science Animation Director writing explainer scripts (科普动画解说).
+
+[PRINCIPLES]
+1. PHENOMENON FIRST: Start from something the audience has seen but cannot explain. Ask the question before answering it.
+2. ANIMATABLE VISUALS: Every ACTION must be concrete enough for an animator to draw — specific objects, motion, camera moves. No vague abstractions.
+3. HONEST SIMPLIFICATION: Metaphors are models, not reality. Flag where the model breaks ("electrons don't really orbit like planets").
+4. PEEL THE ONION: Surface phenomenon -> mechanism -> deeper principle -> why it matters. One layer per segment.
+5. NARRATION PACE: Keep [DIALOGUE] lines short — about 3-4 Chinese characters or 2.5 English words per second of screen time.
+
+[BLOCK CONVENTIONS]
+- [SCENE] Chapter / knowledge-point title (e.g., INT. ANIMATION - WHY IS THE SKY BLUE).
+- [ACTION] What the animation shows: characters, diagrams, motion, transitions between shots.
+- [CHARACTER] NARRATOR (旁白) for voiceover; named mascot characters if the series has one.
+- [DIALOGUE] Voiceover narration.
+- [PARENTHETICAL] On-screen labels, formulas, numbers (屏幕标注/公式/数字).
+- [TRANSITION] Chapter transitions (e.g., CUT TO NEXT CHAPTER:, 转入下一节:)`,
+
+  SCIENCE_GRAPHIC: `[ROLE]
+You are a Senior Science Editor writing illustrated long-form articles (图文科普).
+
+[PRINCIPLES]
+1. SKIMMABLE STRUCTURE: Hook -> numbered sections, each opening with a one-line takeaway -> practical takeaways -> sources.
+2. ACCURACY: Cite specific studies, institutions, or datasets when relevant; NEVER invent references. Separate established consensus from active hypotheses.
+3. FIGURE-DRIVEN: Propose an illustration for every key concept. The [PARENTHETICAL] caption carries the data and its source.
+4. PRECISE BUT FRIENDLY: Define jargon at first use. Numbers beat adjectives ("3x faster", not "much faster").
+5. PARAGRAPH DISCIPLINE: Keep [DIALOGUE] body text in short paragraphs; one idea per paragraph.
+
+[BLOCK CONVENTIONS]
+- [SCENE] Section heading (numbered, takeaway-style: e.g., SECTION 2: WHY SLEEP DETOXES YOUR BRAIN).
+- [ACTION] Description of the illustration/infographic/diagram for this section.
+- [CHARACTER] Used sparingly: READER Q / EDITOR A pairs for FAQ sections.
+- [DIALOGUE] Article body text.
+- [PARENTHETICAL] Figure captions, footnotes, key-data callouts (图注/脚注/数据点).
+- [TRANSITION] Section dividers or cliffhanger teasers into the next section.`
 };
 
 export const TEMPLATES: ScriptTemplate[] = [
@@ -443,6 +497,72 @@ export const TEMPLATES: ScriptTemplate[] = [
       { id: '10', type: 'SCENE_HEADING', content: '[主歌 1 / VERSE 1]' },
       { id: '11', type: 'ACTION', content: '在这里开始写歌词...' }
     ]
+  },
+  {
+    id: 'science_live',
+    nameKey: 'tpl_sci_live_name',
+    descKey: 'tpl_sci_live_desc',
+    systemPrompt: PROMPTS.SCIENCE_LIVE,
+    initialBlocks: [
+      { id: '1', type: 'SCENE_HEADING', content: 'INT. STUDIO - HOOK' },
+      { id: '2', type: 'ACTION', content: 'Close-up. The HOST holds up two identical-looking metal balls, one in each hand.' },
+      { id: '3', type: 'CHARACTER', content: 'HOST' },
+      { id: '4', type: 'DIALOGUE', content: 'One of these can stop a bullet. The other can\'t. Can you tell which?' },
+      { id: '5', type: 'PARENTHETICAL', content: '(on-screen text: 90% guess wrong)' },
+      { id: '6', type: 'ACTION', content: 'HOST leans toward the lens and grins.' },
+      { id: '7', type: 'DIALOGUE', content: 'Let\'s find out in 60 seconds.' }
+    ],
+    initialBlocksZh: [
+      { id: '1', type: 'SCENE_HEADING', content: '内. 录播间 - 开场钩子' },
+      { id: '2', type: 'ACTION', content: '特写。主讲人双手各举起一个外观完全相同的金属球。' },
+      { id: '3', type: 'CHARACTER', content: '主讲人' },
+      { id: '4', type: 'DIALOGUE', content: '这里面有一个能挡住子弹，另一个不能。你猜是哪个？' },
+      { id: '5', type: 'PARENTHETICAL', content: '(花字：90% 的人都猜错)' },
+      { id: '6', type: 'ACTION', content: '主讲人凑近镜头，微微一笑。' },
+      { id: '7', type: 'DIALOGUE', content: '60 秒后揭晓答案。' }
+    ]
+  },
+  {
+    id: 'science_anim',
+    nameKey: 'tpl_sci_anim_name',
+    descKey: 'tpl_sci_anim_desc',
+    systemPrompt: PROMPTS.SCIENCE_ANIM,
+    initialBlocks: [
+      { id: '1', type: 'SCENE_HEADING', content: 'INT. ANIMATION - WHY IS THE SKY BLUE' },
+      { id: '2', type: 'ACTION', content: 'A cartoon apple detaches from a tree and falls. Freeze-frame. A big red question mark pops up over it.' },
+      { id: '3', type: 'CHARACTER', content: 'NARRATOR' },
+      { id: '4', type: 'DIALOGUE', content: 'An apple falls. The Moon doesn\'t. Same force — so why does one drop while the other just... hangs there?' },
+      { id: '5', type: 'ACTION', content: 'Zoom out: Earth appears with the Moon orbiting it, an arrow curving toward the planet\'s center.' },
+      { id: '6', type: 'PARENTHETICAL', content: '(on-screen label: Universal Gravitation)' }
+    ],
+    initialBlocksZh: [
+      { id: '1', type: 'SCENE_HEADING', content: '内. 动画 - 引力是什么' },
+      { id: '2', type: 'ACTION', content: '一颗卡通苹果从树上脱落下坠。画面定格，苹果上方弹出大大的红色问号。' },
+      { id: '3', type: 'CHARACTER', content: '旁白' },
+      { id: '4', type: 'DIALOGUE', content: '苹果会掉下来，月亮却不会。明明是同一种力——为什么一个坠落，另一个却"挂"在天上？' },
+      { id: '5', type: 'ACTION', content: '镜头拉远：地球出现，月球绕其旋转，一支箭头弯向地心。' },
+      { id: '6', type: 'PARENTHETICAL', content: '(屏幕标注：万有引力)' }
+    ]
+  },
+  {
+    id: 'science_graphic',
+    nameKey: 'tpl_sci_graphic_name',
+    descKey: 'tpl_sci_graphic_desc',
+    systemPrompt: PROMPTS.SCIENCE_GRAPHIC,
+    initialBlocks: [
+      { id: '1', type: 'SCENE_HEADING', content: 'SECTION 1: WHY YOU FEEL SLEEPY AFTER LUNCH' },
+      { id: '2', type: 'ACTION', content: '[Infographic: post-lunch blood glucose curves — high-sugar meal vs. balanced meal]' },
+      { id: '3', type: 'DIALOGUE', content: 'It\'s not just that you ate too much. Your blood sugar is on a rollercoaster — and your brain is strapped into the seat.' },
+      { id: '4', type: 'PARENTHETICAL', content: '(Figure 1: glucose curve comparison. Source: [add citation])' },
+      { id: '5', type: 'DIALOGUE', content: 'Within 30 minutes of a high-sugar meal, glucose spikes. Two hours later it crashes below baseline — that crash is the sleepiness.' }
+    ],
+    initialBlocksZh: [
+      { id: '1', type: 'SCENE_HEADING', content: '第一节：午饭后为什么犯困' },
+      { id: '2', type: 'ACTION', content: '[配图：餐后血糖变化曲线对比——高糖餐 vs 均衡餐]' },
+      { id: '3', type: 'DIALOGUE', content: '这不只是"吃多了"的问题。你的血糖正在坐过山车——而大脑被绑在了车上。' },
+      { id: '4', type: 'PARENTHETICAL', content: '(图1：血糖曲线对比。数据来源：[补充引用])' },
+      { id: '5', type: 'DIALOGUE', content: '高糖餐后 30 分钟内血糖飙升，2 小时后跌破基础值——这个"回落"就是困意的来源。' }
+    ]
   }
 ];
 
@@ -603,6 +723,7 @@ export const TRANSLATIONS = {
     grayboxSave: "Save Graybox",
     grayboxCopy: "Copy JSON",
     grayboxLabel: "Graybox",
+    grayboxBlender: "Blender .py",
     grayboxOpen: "View",
     graybox3dLabel: "3D",
     graybox3dHint: "Interactive 3D previs. Scene graybox shows layout + character blocking; shot graybox animates the camera along its movement path. Drag to orbit.",
@@ -692,13 +813,40 @@ export const TRANSLATIONS = {
       tpl_ad_name: "Commercial",
       tpl_ad_desc: "Short form. Focus on visuals and voiceovers.",
       tpl_lyrics_name: "Song Lyrics",
-      tpl_lyrics_desc: "Professional songwriting template with structure, rhyme schemes, and production notes."
+      tpl_lyrics_desc: "Professional songwriting template with structure, rhyme schemes, and production notes.",
+      tpl_sci_live_name: "Science · Live Presenter",
+      tpl_sci_live_desc: "Talking-head science videos. Hook-first structure, B-roll/demo cues, accurate and conversational.",
+      tpl_sci_anim_name: "Science · Animation",
+      tpl_sci_anim_desc: "Animated explainers. Animatable visual actions, narrator voiceover, on-screen labels.",
+      tpl_sci_graphic_name: "Science · Illustrated Article",
+      tpl_sci_graphic_desc: "Skimmable long-form science articles with figures, captions, and data callouts."
     },
     languages: {
       en: "English",
       zh: "Chinese (Simplified)",
       dual: "Dual Language (En/Zh)"
     },
+    galleryAccountTab: "Account",
+    galleryTitle: "Gallery Cloud",
+    galleryMockNotice: "Dev mode: mock backend — data stays in this browser.",
+    gallerySignedInAs: "Signed in as",
+    gallerySignIn: "Sign In",
+    gallerySignUp: "Create Account",
+    gallerySignOut: "Sign Out",
+    galleryEmail: "Email",
+    galleryPassword: "Password",
+    galleryDisplayName: "Display Name",
+    galleryDevice: "Device Name",
+    gallerySyncAll: "Sync all scripts",
+    gallerySyncing: "Syncing…",
+    gallerySwitchToSignUp: "No account? Create one",
+    gallerySwitchToSignIn: "Have an account? Sign in",
+    gallery_status_local: "Local only — click to sync",
+    gallery_status_synced: "Synced",
+    gallery_status_dirty: "Unsaved changes — click to sync",
+    gallery_status_pushing: "Syncing…",
+    gallery_status_conflict: "Sync conflict — click to retry",
+    gallery_signInToSync: "Sign in (Settings → Account) to sync",
     providers: {
       gemini: "Google Gemini",
       deepseek: "DeepSeek"
@@ -795,6 +943,7 @@ export const TRANSLATIONS = {
     grayboxSave: "保存灰模",
     grayboxCopy: "复制 JSON",
     grayboxLabel: "灰模",
+    grayboxBlender: "Blender 脚本",
     grayboxOpen: "查看",
     graybox3dLabel: "3D",
     graybox3dHint: "交互式 3D 预演。场景灰模展示布局与角色走位；镜头灰模按运镜路径播放摄影机动画。拖动可旋转视角。",
@@ -884,13 +1033,40 @@ export const TRANSLATIONS = {
       tpl_ad_name: "商业广告",
       tpl_ad_desc: "短片格式，专注于视觉冲击与旁白。",
       tpl_lyrics_name: "歌曲创作",
-      tpl_lyrics_desc: "专业歌词创作模板，包含歌曲结构、押韵方案和制作备注。"
+      tpl_lyrics_desc: "专业歌词创作模板，包含歌曲结构、押韵方案和制作备注。",
+      tpl_sci_live_name: "科普 · 真人口播",
+      tpl_sci_live_desc: "真人出镜科普视频。开场钩子、B-roll 与演示画面提示，口语化且严谨。",
+      tpl_sci_anim_name: "科普 · 动画解说",
+      tpl_sci_anim_desc: "动画科普解说。可绘制的画面动作、旁白解说词、屏幕标注。",
+      tpl_sci_graphic_name: "科普 · 图文",
+      tpl_sci_graphic_desc: "长图文科普。小节化速读结构、配图与图注、数据点标注。"
     },
     languages: {
       en: "英语",
       zh: "中文 (简体)",
       dual: "双语 (英/中)"
     },
+    galleryAccountTab: "账号",
+    galleryTitle: "Gallery 云端",
+    galleryMockNotice: "开发模式：模拟后端——数据仅存于本浏览器。",
+    gallerySignedInAs: "当前账号",
+    gallerySignIn: "登录",
+    gallerySignUp: "注册账号",
+    gallerySignOut: "退出登录",
+    galleryEmail: "邮箱",
+    galleryPassword: "密码",
+    galleryDisplayName: "昵称",
+    galleryDevice: "设备名",
+    gallerySyncAll: "同步全部剧本",
+    gallerySyncing: "同步中…",
+    gallerySwitchToSignUp: "没有账号？注册一个",
+    gallerySwitchToSignIn: "已有账号？直接登录",
+    gallery_status_local: "仅本地——点击同步",
+    gallery_status_synced: "已同步",
+    gallery_status_dirty: "有改动未同步——点击同步",
+    gallery_status_pushing: "同步中…",
+    gallery_status_conflict: "同步冲突——点击重试",
+    gallery_signInToSync: "登录后可同步（设置 → 账号）",
     providers: {
       gemini: "Google Gemini",
       deepseek: "DeepSeek"

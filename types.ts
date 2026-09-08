@@ -55,7 +55,7 @@ export interface GrayboxCharacter {
  *  whole move (the Phase-1 behavior — fine for dolly/tracking where the
  *  subject stays framed). */
 export interface GrayboxCamera {
-  shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-the-shoulder' | 'top-down' | 'pov';
+  shotType: 'extreme-wide' | 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-the-shoulder' | 'top-down' | 'pov';
   /** one short sentence on WHY this shot serves the beat — the director's
    *  intent (e.g. "Crane up to reveal the seal cracking as the elders reel").
    *  Carried through normalize and surfaced in the UI so the previs reads as
@@ -85,7 +85,19 @@ export interface GrayboxCamera {
  *  - SCENE_HEADING: `layout` + `characters` populated, `camera` absent.
  *  - ACTION / DIALOGUE: `camera` populated, `layout`/`characters` absent.
  *  `error` is populated only when AI generation degraded; the renderer should
- *  refuse to render an errored graybox. */
+ *  refuse to render an errored graybox.
+ *
+ *  ── COORDINATE & UNITS CONSTITUTION (the interchange contract) ─────────────
+ *  Every downstream consumer — the Three.js renderer (Graybox3DView), the
+ *  white-model health check, the Seedance/H3 prompt builders, and any future
+ *  external-DCC exporter (e.g. Blender) — reads these numbers literally:
+ *    · Units: meters.
+ *    · Axes: y is UP. Origin = the scene's natural center (room center for an
+ *      interior, the action's ground zero for an exterior). Floor at y=0.
+ *    · Angles: radians. Character `facing` is rotation about Y; 0 = +Z.
+ *    · Camera aim is expressed as a lookAt TARGET point (never euler angles).
+ *  AI generation prompts must restate these conventions verbatim so generated
+ *  payloads never drift; converters must transform (never reinterpret) them. */
 export interface GrayboxData {
   kind: 'scene' | 'shot';
   layout?: GrayboxObject[];
@@ -285,4 +297,35 @@ export interface ExportOptions {
   includeGraybox?: boolean;
   grayboxFormat?: 'json' | 'summary';
   includeBlockIds?: boolean;
+}
+
+// ── Gallery cloud sync (P1) ────────────────────────────────────────────────
+
+/** Lifecycle of a script relative to the cloud.
+ *  - `local`    never synced (no ScriptSyncState persisted)
+ *  - `synced`   local copy reflects `baseRevision` on the server
+ *  - `dirty`    edited locally since last sync, queued for push
+ *  - `pushing`  transient, runtime-only, never persisted
+ *  - `conflict` push got 409 and auto-resolution failed; needs user attention */
+export type SyncStatus = 'local' | 'synced' | 'dirty' | 'pushing' | 'conflict';
+
+/** Per-script cloud sync state, persisted as `sync_{scriptId}`. Absent = local. */
+export interface ScriptSyncState {
+  cloudId: string;
+  /** Last server revision this local copy is known to reflect. */
+  baseRevision: number;
+  status: Exclude<SyncStatus, 'local' | 'pushing'>;
+  /** Server updatedAt at last successful sync. */
+  syncedAt?: number;
+}
+
+export interface GalleryUser {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+export interface GalleryTokens {
+  accessToken: string;
+  refreshToken: string;
 }

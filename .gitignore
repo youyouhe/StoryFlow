@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# server secrets (server/.env.example IS committed)
+.env
+
+# local demo assets (not shipped)
+preview-assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -25,3 +31,5 @@ dist-ssr
 
 # Rust / Cargo
 src-tauri/target
+
+# dev.sh runtime dir (pids/logs live in /tmp/storyflow-dev)

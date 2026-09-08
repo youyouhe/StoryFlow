@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings, H3Task } from './types';
+import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings, H3Task, GalleryUser, SyncStatus } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS } from './constants';
 import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
@@ -24,7 +24,9 @@ import {
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { getAiLog } from './services/aiLog';
-import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS } from './utils/exportData';
+import { galleryClient, syncEngine, readAllSyncStatuses } from './services/gallery';
+import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS, grayboxOverviewLine } from './utils/exportData';
+import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from './utils/grayboxToBlender';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -168,6 +170,10 @@ function App() {
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+  // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
+  const [galleryUser, setGalleryUser] = useState<GalleryUser | null>(galleryClient.user);
+  const [syncStatusMap, setSyncStatusMap] = useState<Record<string, SyncStatus>>(readAllSyncStatuses);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -931,6 +937,12 @@ function App() {
         });
 
         setSaveStatus('saved');
+
+        // Gallery sync: mirror the local save into the engine. Cloud-backed
+        // scripts flip to 'dirty' and flush on the engine's own debounce;
+        // never-synced ('local') scripts are intentionally left alone — the
+        // first push is always the explicit one-click sync.
+        syncEngine.markDirty(screenplay);
       } catch (e) {
         console.error("Autosave failed", e);
       }
@@ -938,6 +950,41 @@ function App() {
 
     return () => clearTimeout(timer);
   }, [screenplay]);
+
+  // Gallery sync engine subscription: keep badge statuses + script index fresh.
+  const refreshSavedScripts = useCallback(() => {
+    try {
+      const idx = JSON.parse(localStorage.getItem(STORAGE_KEYS.SCRIPT_INDEX) || '[]');
+      if (Array.isArray(idx)) setSavedScripts(idx);
+    } catch { /* ignore */ }
+  }, []);
+
+  const refreshGalleryView = useCallback(() => {
+    refreshSavedScripts();
+    setSyncStatusMap(readAllSyncStatuses());
+  }, [refreshSavedScripts]);
+
+  useEffect(() => {
+    const off = syncEngine.on(e => {
+      if (e.type === 'status') {
+        setSyncStatusMap(prev => ({ ...prev, [e.scriptId]: e.status }));
+      } else if (e.type === 'synced') {
+        setSyncStatusMap(prev => ({ ...prev, [e.scriptId]: 'synced' }));
+      } else if (e.type === 'error') {
+        setSyncError(e.message);
+      } else {
+        // 'pulled' | 'conflict-forked': a new local screenplay appeared.
+        refreshGalleryView();
+      }
+    });
+    return off;
+  }, [refreshGalleryView]);
+
+  // Returning signed-in user: reconcile with the cloud once on app start.
+  useEffect(() => {
+    if (!galleryClient.isAuthenticated) return;
+    void syncEngine.onSignedIn().then(refreshGalleryView);
+  }, [refreshGalleryView]);
 
   // App Settings Autosave
   useEffect(() => {
@@ -1070,7 +1117,22 @@ function App() {
       try {
           // Remove Content
           localStorage.removeItem(STORAGE_KEYS.SCRIPT_PREFIX + id);
-          
+
+          // Cloud bookkeeping: drop local sync state; soft-delete the cloud
+          // copy too so pullAll won't resurrect it on the next sign-in.
+          const cloudId = syncEngine.cloudIdOf(id);
+          syncEngine.forgetScript(id);
+          if (cloudId && galleryClient.isAuthenticated) {
+              galleryClient.deleteScript(cloudId).catch(e => {
+                  setSyncError(`删除云端副本失败: ${e instanceof Error ? e.message : String(e)}`);
+              });
+          }
+          setSyncStatusMap(prev => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+          });
+
           // Update Index
           const newIndex = savedScripts.filter(s => s.id !== id);
           localStorage.setItem(STORAGE_KEYS.SCRIPT_INDEX, JSON.stringify(newIndex));
@@ -1129,6 +1191,51 @@ function App() {
       setAppSettings(newAppSettings);
       setShowSettingsModal(false);
   };
+
+  // ---- Gallery account & sync handlers (SettingsModal account tab) ----
+
+  const handleGalleryLogin = useCallback(async (email: string, password: string, deviceName: string) => {
+      setSyncError(null);
+      await galleryClient.login({ email, password, deviceName });
+      setGalleryUser(galleryClient.user);
+      await syncEngine.onSignedIn();
+      refreshGalleryView();
+  }, [refreshGalleryView]);
+
+  const handleGalleryRegister = useCallback(async (email: string, password: string, displayName: string, deviceName: string) => {
+      setSyncError(null);
+      await galleryClient.register({ email, password, displayName, deviceName });
+      setGalleryUser(galleryClient.user);
+      await syncEngine.onSignedIn();
+      refreshGalleryView();
+  }, [refreshGalleryView]);
+
+  const handleGalleryLogout = useCallback(async () => {
+      await galleryClient.logout();
+      setGalleryUser(null);
+  }, []);
+
+  /** One-click sync for a single script (sidebar badge click). */
+  const handleSyncScript = useCallback(async (id: string) => {
+      if (!galleryClient.isAuthenticated) return;
+      setSyncError(null);
+      try {
+          await syncEngine.syncNow(id);
+      } catch { /* already surfaced via the engine event listener */ }
+      refreshGalleryView();
+  }, [refreshGalleryView]);
+
+  /** Push every script in the index (account tab button). */
+  const handleSyncAll = useCallback(async () => {
+      if (!galleryClient.isAuthenticated) return;
+      setSyncError(null);
+      try {
+          for (const s of savedScripts) {
+              await syncEngine.syncNow(s.id);
+          }
+      } catch { /* surfaced via events */ }
+      refreshGalleryView();
+  }, [savedScripts, refreshGalleryView]);
 
   // Unified export dispatcher. The ExportMenu picks a format + options; this
   // routes to the right backend (print pipeline for PDF, Blob download for
@@ -1816,6 +1923,9 @@ function App() {
             onExport={() => setShowExportMenu(true)}
             onOpenAssetLibrary={() => setShowAssetLibrary(true)}
             assetLibraryLabel={t.assetLibraryLabel}
+            syncStatus={syncStatusMap}
+            gallerySignedIn={!!galleryUser}
+            onSyncScript={handleSyncScript}
         />
       </div>
 
@@ -1970,6 +2080,44 @@ function App() {
               ? JSON.stringify(panelBlock.graybox, null, 2)
               : (panelBlock.imagePrompt || '');
 
+            // Owning-scene context, lifted so the 3D view AND the footer
+            // Blender exporter share one lookup: the nearest SCENE_HEADING
+            // at/above the panel block. Its graybox supplies the layout +
+            // character blocking that shot views render (the white-model POV
+            // export and the Blender export both need real geometry, not an
+            // empty grid); its text feeds the Seedance/H3 prompt builder.
+            const panelIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
+            let panelSceneGraybox: GrayboxData | null = null;
+            let panelSceneHeading = '';
+            let panelSceneStart = 0;
+            for (let i = panelIdx; i >= 0; i--) {
+              const b = screenplay.blocks[i];
+              if (b.type === 'SCENE_HEADING') {
+                panelSceneStart = i;
+                panelSceneHeading = b.content;
+                if (b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
+                  panelSceneGraybox = b.graybox;
+                }
+                break;
+              }
+            }
+            // every shot graybox's shotType in the owning scene — feeds
+            // the health check's W001 shot-variety warning
+            const panelSceneShotTypes: string[] = [];
+            for (let i = panelSceneStart + 1; i < screenplay.blocks.length; i++) {
+              const b = screenplay.blocks[i];
+              if (b.type === 'SCENE_HEADING') break;
+              if (b.graybox?.kind === 'shot' && b.graybox.camera && !b.graybox.error) {
+                panelSceneShotTypes.push(b.graybox.camera.shotType);
+              }
+            }
+            // Beat cast: characters plausibly IN THIS beat — reference
+            // images and capsule mappings are filtered to them.
+            const panelSceneCharNames = (panelSceneGraybox?.characters ?? []).map(c => c.name);
+            const panelBeatCast = panelBlock.type === 'ACTION' || panelBlock.type === 'DIALOGUE'
+              ? computeBeatCast(screenplay.blocks, panelIdx, panelSceneCharNames)
+              : undefined;
+
             return (
               <div className="fixed top-0 right-0 h-full w-full max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l border-gray-200 dark:border-zinc-800 flex flex-col animate-in slide-in-from-right duration-200">
                 <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
@@ -2029,43 +2177,6 @@ function App() {
                 )}
                 {showing3D && hasGraybox && panelBlock.graybox ? (
                   (() => {
-                    // Owning scene context for the 3D view: the nearest
-                    // SCENE_HEADING at/above the panel block. Its graybox
-                    // supplies the layout + character blocking that shot
-                    // views render (the white-model POV export needs real
-                    // geometry under the camera, not an empty grid); its text
-                    // and the block itself feed the Seedance/H3 prompt builder.
-                    const panelIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
-                    let panelSceneGraybox: GrayboxData | null = null;
-                    let panelSceneHeading = '';
-                    let panelSceneStart = 0;
-                    for (let i = panelIdx; i >= 0; i--) {
-                      const b = screenplay.blocks[i];
-                      if (b.type === 'SCENE_HEADING') {
-                        panelSceneStart = i;
-                        panelSceneHeading = b.content;
-                        if (b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
-                          panelSceneGraybox = b.graybox;
-                        }
-                        break;
-                      }
-                    }
-                    // every shot graybox's shotType in the owning scene — feeds
-                    // the health check's W001 shot-variety warning
-                    const panelSceneShotTypes: string[] = [];
-                    for (let i = panelSceneStart + 1; i < screenplay.blocks.length; i++) {
-                      const b = screenplay.blocks[i];
-                      if (b.type === 'SCENE_HEADING') break;
-                      if (b.graybox?.kind === 'shot' && b.graybox.camera && !b.graybox.error) {
-                        panelSceneShotTypes.push(b.graybox.camera.shotType);
-                      }
-                    }
-                    // Beat cast: characters plausibly in THIS beat — reference
-                    // images and capsule mappings are filtered to them.
-                    const panelSceneCharNames = (panelSceneGraybox?.characters ?? []).map(c => c.name);
-                    const panelBeatCast = panelBlock.type === 'ACTION' || panelBlock.type === 'DIALOGUE'
-                      ? computeBeatCast(screenplay.blocks, panelIdx, panelSceneCharNames)
-                      : undefined;
                     return (
                       <div className="flex-1 min-h-0 p-2">
                         <Graybox3DView
@@ -2094,6 +2205,11 @@ function App() {
                   })()
                 ) : (
                   <div className="flex-1 overflow-y-auto p-4">
+                    {showingGrayboxJSON && panelBlock.graybox && (
+                      <p className="mb-2 px-1 text-[10px] leading-snug text-emerald-600 dark:text-emerald-400 font-sans">
+                        {grayboxOverviewLine(panelBlock.graybox)}
+                      </p>
+                    )}
                     <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
                       {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : panelBlock.imagePrompt}
                     </pre>
@@ -2250,6 +2366,28 @@ function App() {
                     <Cloud className="w-3.5 h-3.5" />
                     {showingGraybox ? t.grayboxCopy : t.aiCopyPrompt}
                   </button>
+                  {showingGraybox && panelBlock.graybox && !panelBlock.graybox.error && (
+                    <button
+                      onClick={() => {
+                        const kind = panelBlock.graybox!.kind;
+                        const py = buildBlenderScript({
+                          kind,
+                          graybox: panelBlock.graybox!,
+                          sceneGraybox: panelSceneGraybox,
+                          sceneHeading: panelSceneHeading,
+                          beat: { type: panelBlock.type, content: panelBlock.content },
+                        });
+                        downloadBlenderScript(py, blenderScriptFilename(screenplay.metadata.title, kind));
+                      }}
+                      title={lang === 'zh'
+                        ? '导出自包含 .py：在 Blender 的 Scripting 标签打开并运行，即重建灰模（Y-up→Z-up 已转换；镜头含关键帧运镜）'
+                        : 'Export a self-contained .py: open and run it in Blender\'s Scripting tab to rebuild the graybox (Y-up→Z-up converted; shot cameras come with keyframed moves)'}
+                      className="flex-1 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Boxes className="w-3.5 h-3.5" />
+                      {t.grayboxBlender}
+                    </button>
+                  )}
                   {!isReadOnly && (
                     <button
                       onClick={() => {
@@ -2450,6 +2588,11 @@ function App() {
                                 {aiMode === 'GRAYBOX' && (
                                     <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.grayboxHint}</p>
                                 )}
+                                {aiMode === 'GRAYBOX' && aiState.grayboxDraft && !aiState.grayboxDraft.error && (
+                                    <p className="px-1 text-[10px] leading-snug text-emerald-600 dark:text-emerald-400 font-sans">
+                                        {grayboxOverviewLine(aiState.grayboxDraft)}
+                                    </p>
+                                )}
                                 <div className="p-4 bg-gray-50 dark:bg-zinc-900/50 rounded-xl border border-gray-100 dark:border-zinc-800 text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto text-gray-800 dark:text-gray-300 shadow-inner">
                                     {aiState.suggestion}
                                 </div>
@@ -2492,6 +2635,12 @@ function App() {
                 onSave={handleUpdateSettings}
                 onClose={() => setShowSettingsModal(false)}
                 t={t}
+                galleryUser={galleryUser}
+                syncError={syncError}
+                onGalleryLogin={handleGalleryLogin}
+                onGalleryRegister={handleGalleryRegister}
+                onGalleryLogout={handleGalleryLogout}
+                onSyncAll={handleSyncAll}
             />
         )}
 

@@ -238,7 +238,8 @@ const SceneCanvas: React.FC<{ graybox: GrayboxData; theme: 'light' | 'dark' }> =
     <Canvas
       shadows
       camera={{ position: [7, 7, 9], fov: 50 }}
-      gl={{ alpha: true, antialias: true }}
+      // preserveDrawingBuffer: snapshot export reads the canvas after present
+      gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
       style={{ background: 'transparent' }}
     >
       <ambientLight intensity={0.65} />
@@ -476,6 +477,7 @@ const ShotCanvas: React.FC<{
   // keeps the lens reading honestly at both ends of the size spectrum.
   const povFov = useMemo(() => {
     switch (camera.shotType) {
+      case 'extreme-wide': return 30;
       case 'wide': return 38;
       case 'top-down': return 55;
       case 'extreme-close-up': return 62;
@@ -491,7 +493,8 @@ const ShotCanvas: React.FC<{
       camera={pov
         ? { position: camera.position as [number, number, number], fov: povFov }
         : { position: orbitPos, fov: 50 }}
-      gl={{ alpha: !pov, antialias: true }}
+      // preserveDrawingBuffer: snapshot export reads the canvas after present
+      gl={{ alpha: !pov, antialias: true, preserveDrawingBuffer: true }}
       dpr={pov ? 1 : [1, 2]}
       style={{ background: 'transparent' }}
     >
@@ -804,6 +807,7 @@ const UI_LABELS = {
     promptTitle: 'White-model prompt', copy: 'Copy', copied: 'Copied ✓',
     copyFail: 'Copy failed — select the text and copy manually.', close: 'Close',
     povHint: 'Through-the-lens view — this is exactly what the white-model export records.',
+    snapshot: 'Snapshot PNG (current view)',
     health: 'Health check', healthOpen: 'Checks', healthPass: 'all clear', healthWarn: 'n warnings', healthFail: 'blocked',
     healthExportBlocked: 'Export blocked — fix the failing checks (❌) first.',
     style: 'Style',
@@ -822,6 +826,7 @@ const UI_LABELS = {
     promptTitle: '白模提示词', copy: '复制', copied: '已复制 ✓',
     copyFail: '复制失败——请手动选择文本复制。', close: '关闭',
     povHint: '过镜视角（镜头所见画面）——白模导出录制的就是这个画面。',
+    snapshot: '快照 PNG（当前视角）',
     health: '体检', healthOpen: '检查项', healthPass: '全部通过', healthWarn: 'n 项警告', healthFail: '已拦截',
     healthExportBlocked: '导出已拦截——请先修复 ❌ 未通过项。',
     style: '风格',
@@ -1137,6 +1142,30 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     setTimeout(() => setCopyResult(null), 2000);
   };
 
+  // ---- visual feedback loop: snapshot the live canvas as a PNG ----
+  // Composites the (possibly alpha) canvas onto the panel's background color so
+  // the saved file never shows checkered transparency. Works in scene, orbit,
+  // and POV views — whatever the viewer currently sees is what gets captured.
+  const takeSnapshot = useCallback(() => {
+    const canvas = wrapRef.current?.querySelector('canvas');
+    if (!canvas) return;
+    try {
+      const out = document.createElement('canvas');
+      out.width = canvas.width;
+      out.height = canvas.height;
+      const ctx = out.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = theme === 'dark' ? '#111827' : '#f9fafb';
+        ctx.fillRect(0, 0, out.width, out.height);
+        ctx.drawImage(canvas, 0, 0);
+      }
+      const a = document.createElement('a');
+      a.href = (ctx ? out : canvas).toDataURL('image/png');
+      a.download = `graybox-${graybox.kind}-${Date.now()}.png`;
+      a.click();
+    } catch { /* canvas read failure — ignore, never break the view */ }
+  }, [graybox.kind, theme]);
+
   const canvasBg = theme === 'dark' ? 'bg-gray-900/40' : 'bg-gray-50';
 
   return (
@@ -1163,6 +1192,20 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
           <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-black/60 text-white text-[10px] pointer-events-none max-w-[85%]">
             {L.povHint}
           </div>
+        )}
+        {!exporting && (
+          <button
+            type="button"
+            onClick={takeSnapshot}
+            title={L.snapshot}
+            aria-label={L.snapshot}
+            className="absolute top-2 right-2 w-7 h-7 rounded-md bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </button>
         )}
       </div>
       {isShot && graybox.camera && (

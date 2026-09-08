@@ -59,6 +59,39 @@ export const summarizeGraybox = (g: GrayboxData): string => {
   return parts.join(' · ');
 };
 
+/** "Overview first, detail on demand" layer (borrowed from Blender-MCP-style
+ *  scene summaries): a compact one-line overview of a graybox payload.
+ *  Scenes get per-role object counts, the ground extent in meters, and the
+ *  blocked character roster; shots delegate to `summarizeGraybox`. Cheap and
+ *  pure — safe to render beside any raw-JSON view. */
+export const grayboxOverviewLine = (g: GrayboxData): string => {
+  if (g.error) return `error: ${g.error}`;
+  if (g.kind === 'shot') return summarizeGraybox(g);
+  const layout = g.layout ?? [];
+  const chars = g.characters ?? [];
+  if (!layout.length && !chars.length) return 'scene · (empty)';
+  const roleCounts = new Map<string, number>();
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const o of layout) {
+    roleCounts.set(o.role, (roleCounts.get(o.role) ?? 0) + 1);
+    const [w, , d] = o.size ?? [1, 1, 1];
+    const [x, , z] = o.position ?? [0, 0, 0];
+    minX = Math.min(minX, x - w / 2); maxX = Math.max(maxX, x + w / 2);
+    minZ = Math.min(minZ, z - d / 2); maxZ = Math.max(maxZ, z + d / 2);
+  }
+  const roles = [...roleCounts.entries()].map(([r, n]) => `${r}×${n}`).join(', ');
+  const parts = [`scene · ${layout.length} object${layout.length === 1 ? '' : 's'}${roles ? ` (${roles})` : ''}`];
+  if (Number.isFinite(minX)) {
+    const w = Math.max(0, maxX - minX);
+    const d = Math.max(0, maxZ - minZ);
+    parts.push(`≈${w.toFixed(0)}×${d.toFixed(0)}m`);
+  }
+  if (chars.length) {
+    parts.push(`${chars.length} character${chars.length === 1 ? '' : 's'}: ${chars.map(c => c.name).join(', ')}`);
+  }
+  return parts.join(' · ');
+};
+
 // ---------------------------------------------------------------------------
 // Per-block payload rendering (shared by Markdown)
 // ---------------------------------------------------------------------------

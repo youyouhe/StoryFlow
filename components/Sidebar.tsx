@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ScriptBlock } from '../types';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images } from 'lucide-react';
+import { ScriptBlock, SyncStatus } from '../types';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -9,6 +9,15 @@ interface ScriptSummary {
     title: string;
     lastModified: number;
 }
+
+/** Sync badge visual per status; click = one-click sync for that script. */
+const SYNC_BADGE: Record<SyncStatus, { Icon: React.FC<{ className?: string }>; className: string }> = {
+    local:    { Icon: CloudOff,     className: 'text-gray-300 dark:text-gray-600' },
+    synced:   { Icon: Cloud,        className: 'text-emerald-500' },
+    dirty:    { Icon: CloudUpload,  className: 'text-amber-500' },
+    pushing:  { Icon: RefreshCw,    className: 'text-blue-500 animate-spin' },
+    conflict: { Icon: TriangleAlert, className: 'text-red-500' }
+};
 
 interface SidebarProps {
   blocks: ScriptBlock[];
@@ -33,6 +42,11 @@ interface SidebarProps {
   onDeleteScript: (id: string) => void;
   onRenameScript: (id: string, newTitle: string) => void;
   currentScriptId: string;
+  /** Gallery per-script sync statuses (absent key = 'local'). */
+  syncStatus?: Record<string, SyncStatus>;
+  gallerySignedIn?: boolean;
+  /** One-click sync for one script (badge click). */
+  onSyncScript?: (id: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -52,7 +66,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onLoadScript,
     onDeleteScript,
     onRenameScript,
-    currentScriptId
+    currentScriptId,
+    syncStatus = {},
+    gallerySignedIn = false,
+    onSyncScript
 }) => {
   const [activeTab, setActiveTab] = useState<'outline' | 'history'>('outline');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,6 +103,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onRenameScript(editingId, editTitle.trim());
       }
       setEditingId(null);
+  };
+
+  const syncBadgeFor = (id: string) => {
+      const status: SyncStatus = syncStatus[id] ?? 'local';
+      const { Icon, className } = SYNC_BADGE[status];
+      const label = !gallerySignedIn
+          ? t.gallery_signInToSync
+          : (t[`gallery_status_${status}` as const] ?? status);
+      return (
+          <button
+              onClick={(e) => {
+                  e.stopPropagation();
+                  if (gallerySignedIn && onSyncScript && status !== 'pushing') onSyncScript(id);
+              }}
+              className={clsx("shrink-0 p-0.5 rounded transition-opacity", className, gallerySignedIn ? "hover:opacity-70" : "cursor-default opacity-60")}
+              title={label}
+          >
+              <Icon className="w-3.5 h-3.5" />
+          </button>
+      );
   };
 
   return (
@@ -233,8 +270,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                  </span>
                              )}
                         </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-500 mb-2 font-mono">
-                            {formatDate(script.lastModified)}
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="text-[10px] text-gray-500 dark:text-gray-500 font-mono">
+                                {formatDate(script.lastModified)}
+                            </div>
+                            {syncBadgeFor(script.id)}
                         </div>
                         
                         {script.id !== currentScriptId && (
