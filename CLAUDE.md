@@ -19,15 +19,10 @@ npm run tauri:dev          # desktop dev (launches npm run dev, then Tauri windo
 npm run tauri:build        # release desktop build
 npm run tauri:build-debug  # debug desktop build
 
-# Gallery backend (cloud sync, P1) — own package in server/
-cd server && npm install
-npm run dev                # tsx watch, PORT 8787
-npm run build && npm start # compiled dist/ (copies migrations/)
-npx tsc --noEmit           # type check (client root too: npx tsc --noEmit at repo root)
-
-# Sync verification suite (all should print ALL CHECKS PASSED)
-npx esbuild scripts/sync-smoke.ts --bundle --platform=node --format=esm --outfile=/tmp/opencode/sync-smoke.mjs && node /tmp/opencode/sync-smoke.mjs   # engine vs mock, no server needed
-node scripts/server-smoke.mjs                                    # HTTP contract (server must run)
+# Gallery backend lives in the PRIVATE repo youyouhe/storyflow-gallery
+# (extracted from this repo's former server/; see its README for deploy).
+# Client↔server verification (run the backend first, default port 8787):
+node scripts/server-smoke.mjs                                    # HTTP contract (backend must run)
 npx esbuild scripts/sync-e2e.ts --bundle --platform=node --format=esm --outfile=/tmp/opencode/sync-e2e.mjs && node /tmp/opencode/sync-e2e.mjs         # client stack vs real server
 ```
 
@@ -54,7 +49,6 @@ services/apiClient.ts     # Cloud transport + auth wrapper + MockGalleryApi
 services/syncEngine.ts    # Outbox queue + per-script sync state machine
 utils/pagination.ts      # Page-break calc for print view (~55 blocks/page)
 utils/pdfExport.ts       # PDF export via html2pdf.js
-server/                  # Gallery cloud backend (Hono + pg, no Docker)
 src-tauri/               # Tauri 2 Rust desktop shell (tauri.conf.json)
 ```
 
@@ -89,7 +83,7 @@ Local-first sync of whole-doc JSON + monotonic revision; the cloud is never requ
 - `services/gallery.ts` — singleton wiring + the **backend switch**: `new MockGalleryApi()` (default; simulates the cloud in localStorage) vs `new HttpGalleryApi('<url>')`. Nothing else changes when swapping.
 - `services/apiClient.ts` — `GalleryApi` transport interface, `GalleryClient` (token persistence in `gallery_auth`, single-flight refresh on INVALID_TOKEN), `MockGalleryApi` (with `debug*` hooks to simulate a second device).
 - `services/syncEngine.ts` — persisted outbox (`sync_outbox`) + per-script state machine (local→synced→dirty→pushing; conflict on 409). Conflict policy: fork the cloud doc locally as `"<title> (云端冲突副本)"`, then accept the server revision and overwrite — local wins, nothing is ever lost.
-- `server/` — Hono + raw `pg` backend (no ORM, no Docker): auth with scrypt + rotating refresh tokens (`devices` table), scripts with `SELECT … FOR UPDATE` revision guard, immutable `script_versions` chain, `Idempotency-Key` partial unique index. Deploy: bare Node 20+ + PostgreSQL on the VPS (see `server/README.md`).
+- `server/` — moved to the PRIVATE repo **youyouhe/storyflow-gallery** (Hono + raw pg, no ORM, no Docker: scrypt auth + rotating refresh tokens, `SELECT … FOR UPDATE` revision guard, immutable `script_versions` chain, `Idempotency-Key` partial unique index). Deploy: bare Node 20+ + PostgreSQL on the VPS (see its README + `deploy.yaml`).
 - Visibility is `private`-only in P1; groups/public arrive in P2 as additive migrations.
 
 ### AI Integration (`services/geminiService.ts`)

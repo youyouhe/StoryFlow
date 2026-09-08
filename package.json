@@ -13,6 +13,9 @@
     "tauri:build": "tauri build",
     "tauri:build-debug": "tauri build --debug"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@google/genai": "^1.34.0",
     "@react-three/drei": "^10.7.8",
