@@ -29,6 +29,7 @@ export type GalleryErrorCode =
   | 'REVISION_CONFLICT'
   | 'VALIDATION'
   | 'NOT_FOUND'
+  | 'FORBIDDEN'
   | 'NETWORK'
   | 'RATE_LIMITED'
   | 'SERVER';
@@ -59,6 +60,13 @@ export interface CloudScript {
   updatedAt: number;
 }
 
+/** Public gallery feed card (P2). */
+export interface GalleryCard extends CloudScript {
+  templateId: string | null;
+  ownerType: 'user' | 'group';
+  ownerName: string;
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -87,6 +95,31 @@ export interface GalleryApi {
   pushScript(accessToken: string, cloudId: string, ifMatch: number, doc: Screenplay): Promise<{ revision: number }>;
   getScript(accessToken: string, cloudId: string): Promise<{ script: CloudScript; doc: Screenplay; revision: number }>;
   deleteScript(accessToken: string, cloudId: string): Promise<void>;
+  // ---- P2: gallery browse / fork / visibility / groups ----
+  galleryList(accessToken: string, q?: string): Promise<GalleryCard[]>;
+  galleryGet(accessToken: string, cloudId: string): Promise<{ script: GalleryCard; doc: Screenplay; revision: number }>;
+  forkScript(accessToken: string, cloudId: string, idempotencyKey: string): Promise<{ id: string; revision: number; doc?: Screenplay }>;
+  setVisibility(accessToken: string, cloudId: string, visibility: ScriptVisibility): Promise<{ visibility: ScriptVisibility }>;
+  listGroups(accessToken: string): Promise<GroupInfo[]>;
+  createGroup(accessToken: string, name: string): Promise<GroupInfo>;
+  listGroupMembers(accessToken: string, groupId: string): Promise<GroupMember[]>;
+  addGroupMember(accessToken: string, groupId: string, email: string): Promise<{ userId: string; role: string }>;
+  removeGroupMember(accessToken: string, groupId: string, userId: string): Promise<void>;
+}
+
+export interface GroupInfo {
+  id: string;
+  name: string;
+  slug?: string;
+  role?: string;
+  memberCount?: number;
+}
+
+export interface GroupMember {
+  userId: string;
+  displayName: string;
+  email: string;
+  role: string;
 }
 
 // ── HTTP transport ─────────────────────────────────────────────────────────
@@ -170,6 +203,44 @@ export class HttpGalleryApi implements GalleryApi {
   deleteScript(accessToken: string, cloudId: string) {
     return this.req<void>('DELETE', `/scripts/${cloudId}`, { token: accessToken });
   }
+
+  // ---- P2 ----
+
+  galleryList(accessToken: string, q?: string) {
+    return this.req<GalleryCard[]>('GET', `/gallery${q ? `?q=${encodeURIComponent(q)}` : ''}`, { token: accessToken });
+  }
+
+  galleryGet(accessToken: string, cloudId: string) {
+    return this.req<{ script: GalleryCard; doc: Screenplay; revision: number }>('GET', `/gallery/${cloudId}`, { token: accessToken });
+  }
+
+  forkScript(accessToken: string, cloudId: string, idempotencyKey: string) {
+    return this.req<{ id: string; revision: number; doc?: Screenplay }>('POST', `/scripts/${cloudId}/fork`, { token: accessToken, idempotencyKey });
+  }
+
+  setVisibility(accessToken: string, cloudId: string, visibility: ScriptVisibility) {
+    return this.req<{ visibility: ScriptVisibility }>('PATCH', `/scripts/${cloudId}`, { token: accessToken, body: { visibility } });
+  }
+
+  listGroups(accessToken: string) {
+    return this.req<GroupInfo[]>('GET', '/groups', { token: accessToken });
+  }
+
+  createGroup(accessToken: string, name: string) {
+    return this.req<GroupInfo>('POST', '/groups', { token: accessToken, body: { name } });
+  }
+
+  listGroupMembers(accessToken: string, groupId: string) {
+    return this.req<GroupMember[]>('GET', `/groups/${groupId}/members`, { token: accessToken });
+  }
+
+  addGroupMember(accessToken: string, groupId: string, email: string) {
+    return this.req<{ userId: string; role: string }>('POST', `/groups/${groupId}/members`, { token: accessToken, body: { email } });
+  }
+
+  removeGroupMember(accessToken: string, groupId: string, userId: string) {
+    return this.req<void>('DELETE', `/groups/${groupId}/members/${userId}`, { token: accessToken });
+  }
 }
 
 // ── Mock transport (localStorage "cloud" for pre-backend development) ──────
@@ -179,6 +250,7 @@ const MOCK_KEY = 'gallery_mock_cloud';
 interface MockScript {
   id: string;
   ownerId: string;
+  ownerType?: 'user' | 'group';
   title: string;
   visibility: ScriptVisibility;
   latestRevision: number;
@@ -192,6 +264,15 @@ interface MockCloud {
   users: Record<string, { id: string; email: string; displayName: string; password: string }>;
   refresh: Record<string, { userId: string }>;
   scripts: MockScript[];
+  groups?: MockGroup[];
+}
+
+interface MockGroup {
+  id: string;
+  name: string;
+  slug: string;
+  /** userId → role */
+  members: Record<string, string>;
 }
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -205,9 +286,11 @@ export class MockGalleryApi implements GalleryApi {
 
   private load(): MockCloud {
     try {
-      return JSON.parse(localStorage.getItem(MOCK_KEY) || '') as MockCloud;
+      const c = JSON.parse(localStorage.getItem(MOCK_KEY) || '') as MockCloud;
+      if (!c.groups) c.groups = []; // pre-P2 persisted state
+      return c;
     } catch {
-      return { users: {}, refresh: {}, scripts: [] };
+      return { users: {}, refresh: {}, scripts: [], groups: [] };
     }
   }
 
@@ -377,6 +460,152 @@ export class MockGalleryApi implements GalleryApi {
     this.save(c);
   }
 
+  // ---- P2: gallery / fork / visibility / groups (mock) --------------------
+
+  private ownerNameOf(c: MockCloud, s: MockScript): string {
+    if (s.ownerType === 'group') {
+      return c.groups?.find(g => g.id === s.ownerId)?.name ?? 'group';
+    }
+    return Object.values(c.users).find(u => u.id === s.ownerId)?.displayName ?? 'unknown';
+  }
+
+  private cardOf(c: MockCloud, s: MockScript): GalleryCard {
+    return {
+      id: s.id,
+      title: s.title,
+      visibility: s.visibility,
+      latestRevision: s.latestRevision,
+      blockCount: this.latest(s).blockCount,
+      updatedAt: s.updatedAt,
+      templateId: null,
+      ownerType: s.ownerType ?? 'user',
+      ownerName: this.ownerNameOf(c, s)
+    };
+  }
+
+  async galleryList(accessToken: string, q?: string): Promise<GalleryCard[]> {
+    await this.lag();
+    const c = this.load();
+    this.userFromAccess(c, accessToken);
+    return c.scripts
+      .filter(s => s.visibility === 'public' && !s.deletedAt && (!q || s.title.toLowerCase().includes(q.toLowerCase())))
+      .map(s => this.cardOf(c, s));
+  }
+
+  async galleryGet(accessToken: string, cloudId: string): Promise<{ script: GalleryCard; doc: Screenplay; revision: number }> {
+    await this.lag();
+    const c = this.load();
+    this.userFromAccess(c, accessToken);
+    const s = c.scripts.find(x => x.id === cloudId && x.visibility === 'public' && !x.deletedAt);
+    if (!s) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
+    const latest = this.latest(s);
+    return { script: this.cardOf(c, s), doc: structuredClone(latest.doc), revision: latest.revision };
+  }
+
+  async forkScript(accessToken: string, cloudId: string, idempotencyKey: string): Promise<{ id: string; revision: number }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const existing = c.scripts.find(
+      s => s.ownerType !== 'group' && s.ownerId === user.id && s.versions.some(v => v.idempotencyKey === idempotencyKey)
+    );
+    if (existing) return { id: existing.id, revision: existing.latestRevision };
+    const src = c.scripts.find(
+      x => x.id === cloudId && !x.deletedAt
+        && (x.visibility === 'public' || (x.ownerType !== 'group' && x.ownerId === user.id))
+    );
+    if (!src) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
+    const now = Date.now();
+    const fork: MockScript = {
+      id: newId(),
+      ownerId: user.id,
+      ownerType: 'user',
+      title: `${src.title} (fork)`,
+      visibility: 'private',
+      latestRevision: 1,
+      createdAt: now,
+      updatedAt: now,
+      versions: [{ revision: 1, doc: structuredClone(this.latest(src).doc), blockCount: this.latest(src).blockCount, createdAt: now, idempotencyKey }]
+    };
+    c.scripts.push(fork);
+    this.save(c);
+    return { id: fork.id, revision: 1 };
+  }
+
+  async setVisibility(accessToken: string, cloudId: string, visibility: ScriptVisibility): Promise<{ visibility: ScriptVisibility }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const s = c.scripts.find(x => x.id === cloudId && x.ownerType !== 'group' && x.ownerId === user.id && !x.deletedAt);
+    if (!s) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
+    s.visibility = visibility;
+    this.save(c);
+    return { visibility };
+  }
+
+  async listGroups(accessToken: string): Promise<GroupInfo[]> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    return (c.groups ?? [])
+      .filter(g => g.members[user.id])
+      .map(g => ({ id: g.id, name: g.name, slug: g.slug, role: g.members[user.id], memberCount: Object.keys(g.members).length }));
+  }
+
+  async createGroup(accessToken: string, name: string): Promise<GroupInfo> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    c.groups = c.groups ?? [];
+    const g: MockGroup = {
+      id: newId(),
+      name,
+      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'group',
+      members: { [user.id]: 'owner' }
+    };
+    c.groups.push(g);
+    this.save(c);
+    return { id: g.id, name: g.name, slug: g.slug, role: 'owner', memberCount: 1 };
+  }
+
+  async listGroupMembers(accessToken: string, groupId: string): Promise<GroupMember[]> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const g = c.groups?.find(x => x.id === groupId && x.members[user.id]);
+    if (!g) throw new GalleryApiError('NOT_FOUND', 'Group not found', 404);
+    return Object.entries(g.members).map(([uid, role]) => {
+      const u = Object.values(c.users).find(x => x.id === uid);
+      return { userId: uid, displayName: u?.displayName ?? '?', email: u?.email ?? '?', role };
+    });
+  }
+
+  async addGroupMember(accessToken: string, groupId: string, email: string): Promise<{ userId: string; role: string }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const g = c.groups?.find(x => x.id === groupId && x.members[user.id]);
+    if (!g) throw new GalleryApiError('NOT_FOUND', 'Group not found', 404);
+    const target = Object.values(c.users).find(u => u.email === email.toLowerCase());
+    if (!target) throw new GalleryApiError('NOT_FOUND', 'No user with that email', 404);
+    g.members[target.id] = g.members[target.id] ?? 'member';
+    this.save(c);
+    return { userId: target.id, role: g.members[target.id] };
+  }
+
+  async removeGroupMember(accessToken: string, groupId: string, userId: string): Promise<void> {
+    await this.lag();
+    const c = this.load();
+    const actor = this.userFromAccess(c, accessToken);
+    const g = c.groups?.find(x => x.id === groupId);
+    if (!g || !g.members[actor.id] || g.members[actor.id] === 'member') {
+      throw new GalleryApiError('FORBIDDEN', 'Insufficient group role', 403);
+    }
+    if (g.members[userId] === 'owner') throw new GalleryApiError('VALIDATION', 'Cannot remove the owner', 422);
+    delete g.members[userId];
+    this.save(c);
+  }
+
   // ---- test hooks: simulate a SECOND device mutating the cloud directly ----
 
   /** Push a doc as if another device did (bypasses ifMatch). */
@@ -491,6 +720,44 @@ export class GalleryClient {
 
   deleteScript(cloudId: string) {
     return this.authed(t => this.api.deleteScript(t, cloudId));
+  }
+
+  // ---- P2 ----
+
+  galleryList(q?: string) {
+    return this.authed(t => this.api.galleryList(t, q));
+  }
+
+  galleryGet(cloudId: string) {
+    return this.authed(t => this.api.galleryGet(t, cloudId));
+  }
+
+  forkScript(cloudId: string, idempotencyKey: string) {
+    return this.authed(t => this.api.forkScript(t, cloudId, idempotencyKey));
+  }
+
+  setVisibility(cloudId: string, visibility: ScriptVisibility) {
+    return this.authed(t => this.api.setVisibility(t, cloudId, visibility));
+  }
+
+  listGroups() {
+    return this.authed(t => this.api.listGroups(t));
+  }
+
+  createGroup(name: string) {
+    return this.authed(t => this.api.createGroup(t, name));
+  }
+
+  listGroupMembers(groupId: string) {
+    return this.authed(t => this.api.listGroupMembers(t, groupId));
+  }
+
+  addGroupMember(groupId: string, email: string) {
+    return this.authed(t => this.api.addGroupMember(t, groupId, email));
+  }
+
+  removeGroupMember(groupId: string, userId: string) {
+    return this.authed(t => this.api.removeGroupMember(t, groupId, userId));
   }
 
   /** Run an authenticated call; on token rejection refresh once and retry. */

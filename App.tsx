@@ -22,6 +22,7 @@ import {
   updateAssetMetaInDir, removeAssetFromDir, mergeIdbIntoDir,
 } from './services/assetDirStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
+import { GalleryModal } from './components/GalleryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { getAiLog } from './services/aiLog';
 import { galleryClient, syncEngine, readAllSyncStatuses } from './services/gallery';
@@ -707,6 +708,7 @@ function App() {
 
   /** Library metadata edits (rename / re-tag subject) — persisted, UI state synced. */
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
   const handleUpdateRefImageMeta = useCallback((id: string, patch: { name?: string; subject?: string }) => {
     setRefImages((prev) => prev.map((im) => im.id === id ? { ...im, ...patch, subject: patch.subject || undefined } : im));
     if (assetDir) updateAssetMetaInDir(assetDir, id, patch).catch((e) => console.warn('Failed to update asset meta', e));
@@ -1926,6 +1928,7 @@ function App() {
             syncStatus={syncStatusMap}
             gallerySignedIn={!!galleryUser}
             onSyncScript={handleSyncScript}
+            onOpenGallery={() => setShowGallery(true)}
         />
       </div>
 
@@ -2625,6 +2628,17 @@ function App() {
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* Gallery browse (P2) */}
+        {showGallery && (
+            <GalleryModal
+                isOpen={showGallery}
+                onClose={() => setShowGallery(false)}
+                signedIn={!!galleryUser}
+                onLocalChange={refreshGalleryView}
+                t={t}
+            />
         )}
 
         {/* Settings Modal */}

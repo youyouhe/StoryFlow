@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ScriptBlock, SyncStatus } from '../types';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert } from 'lucide-react';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert, Globe } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -47,6 +47,8 @@ interface SidebarProps {
   gallerySignedIn?: boolean;
   /** One-click sync for one script (badge click). */
   onSyncScript?: (id: string) => void;
+  /** Opens the Gallery browse modal (P2). */
+  onOpenGallery?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -69,7 +71,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     currentScriptId,
     syncStatus = {},
     gallerySignedIn = false,
-    onSyncScript
+    onSyncScript,
+    onOpenGallery
 }) => {
   const [activeTab, setActiveTab] = useState<'outline' | 'history'>('outline');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -307,6 +310,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Images className="w-4 h-4 opacity-70" />
           <span>{assetLibraryLabel}</span>
         </button>
+        {onOpenGallery && (
+            <button
+              onClick={onOpenGallery}
+              className="flex items-center gap-2.5 w-full text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-zinc-800"
+            >
+              <Globe className="w-4 h-4 opacity-70" />
+              <span>{t.galleryTabBrowse}</span>
+            </button>
+        )}
         <button 
           onClick={onScriptSettings}
           className="flex items-center gap-2.5 w-full text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2 rounded-md hover:bg-gray-200/50 dark:hover:bg-zinc-800"
