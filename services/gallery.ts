@@ -88,11 +88,15 @@ export const syncStore: SyncStoreAdapter = {
 };
 
 // ---- backend selection -----------------------------------------------------
-// TODO(gallery P1): swap for HttpGalleryApi('<prod-url>') once the server ships.
-const api = new MockGalleryApi();
+// Default: MockGalleryApi (offline dev, zero backend). To run against a real
+// server, set VITE_GALLERY_URL in .env.local (gitignored), e.g.:
+//   VITE_GALLERY_URL=http://127.0.0.1:8787
+import { HttpGalleryApi } from './apiClient';
+const galleryUrl = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_GALLERY_URL ?? '').trim();
+const api = galleryUrl ? new HttpGalleryApi(galleryUrl) : new MockGalleryApi();
 
 /** What the account tab displays so dev builds are unmistakable. */
-export const GALLERY_BACKEND: 'mock' | 'http' = 'mock';
+export const GALLERY_BACKEND: 'mock' | 'http' = galleryUrl ? 'http' : 'mock';
 
 export const galleryClient = new GalleryClient(api);
 export const syncEngine = new SyncEngine(galleryClient, syncStore);

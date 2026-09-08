@@ -21,8 +21,9 @@ npm run tauri:build-debug  # debug desktop build
 
 # Gallery backend lives in the PRIVATE repo youyouhe/storyflow-gallery
 # (extracted from this repo's former server/; see its README for deploy).
-# Client↔server verification (run the backend first, default port 8787):
-node scripts/server-smoke.mjs                                    # HTTP contract (backend must run)
+# Client↔server verification (run the backend first, default port 8787 —
+# clone the private repo, `bash scripts/dev-gallery.sh start`, or its npm start):
+node /tmp/onboard/youyouhe__storyflow-gallery/scripts/server-smoke.mjs   # HTTP contract
 npx esbuild scripts/sync-e2e.ts --bundle --platform=node --format=esm --outfile=/tmp/opencode/sync-e2e.mjs && node /tmp/opencode/sync-e2e.mjs         # client stack vs real server
 ```
 
