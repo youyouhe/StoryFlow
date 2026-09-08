@@ -273,13 +273,21 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
                   <button
                     key={card.id}
                     onClick={() => void openDetail(card)}
-                    className="text-left p-3 rounded-xl border border-gray-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-700 bg-gray-50 dark:bg-zinc-900/60 transition-colors"
+                    className="group text-left p-3 rounded-xl border border-gray-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-700 bg-gray-50 dark:bg-zinc-900/60 transition-colors"
                   >
                     <div className="font-bold text-sm text-gray-800 dark:text-gray-100 truncate">{card.title}</div>
+                    {card.snippet && (
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 font-mono leading-snug">
+                        {card.snippet}
+                      </div>
+                    )}
                     <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-2">
                       <span className="truncate">{card.ownerName}</span>
                       <span>·</span>
                       <span>{card.blockCount} {t.galleryBlocks}</span>
+                      <span className="ml-auto inline-flex items-center gap-1 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Eye className="w-3 h-3" /> {t.galleryQuickPreview}
+                      </span>
                     </div>
                     <div className="text-[10px] text-gray-400 mt-0.5 font-mono">{fmtDate(card.updatedAt)}</div>
                   </button>

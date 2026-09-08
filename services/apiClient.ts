@@ -60,11 +60,12 @@ export interface CloudScript {
   updatedAt: number;
 }
 
-/** Public gallery feed card (P2). */
+/** Public gallery feed card (P2). `snippet` = first ~160 chars of the doc. */
 export interface GalleryCard extends CloudScript {
   templateId: string | null;
   ownerType: 'user' | 'group';
   ownerName: string;
+  snippet?: string | null;
 }
 
 export interface RegisterInput {
@@ -105,6 +106,56 @@ export interface GalleryApi {
   listGroupMembers(accessToken: string, groupId: string): Promise<GroupMember[]>;
   addGroupMember(accessToken: string, groupId: string, email: string): Promise<{ userId: string; role: string }>;
   removeGroupMember(accessToken: string, groupId: string, userId: string): Promise<void>;
+  // ---- P3: cloud assets ----
+  assetUploadUrl(accessToken: string, input: AssetUploadInput): Promise<{ assetId: string; upload?: AssetUploadTarget; deduplicated: boolean }>;
+  /** Store the raw bytes at the upload target (HTTP PUT; Mock resolves in-place). */
+  assetPutBytes(accessToken: string, target: AssetUploadTarget, bytes: Uint8Array): Promise<void>;
+  assetFinalize(accessToken: string, assetId: string, info: AssetFinalizeInput): Promise<{ ok: boolean; status: string }>;
+  listAssets(accessToken: string, kind?: AssetKind): Promise<CloudAsset[]>;
+  deleteAsset(accessToken: string, assetId: string): Promise<void>;
+  /** Fetch raw/thumb bytes with auth (caller turns them into an object URL). */
+  assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array>;
+}
+
+export type AssetKind = 'image' | 'video' | 'panorama3d';
+
+export interface AssetUploadInput {
+  kind: AssetKind;
+  mime: string;
+  size: number;
+  sha256: string;
+  name?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface AssetUploadTarget {
+  url: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+  expiresInSec: number;
+}
+
+export interface AssetFinalizeInput {
+  thumbDataUrl?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  meta?: Record<string, unknown>;
+}
+
+export interface CloudAsset {
+  id: string;
+  kind: AssetKind;
+  name: string;
+  mime: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  meta: Record<string, unknown>;
+  status: string;
+  createdAt: number;
 }
 
 export interface GroupInfo {
@@ -241,6 +292,45 @@ export class HttpGalleryApi implements GalleryApi {
   removeGroupMember(accessToken: string, groupId: string, userId: string) {
     return this.req<void>('DELETE', `/groups/${groupId}/members/${userId}`, { token: accessToken });
   }
+
+  // ---- P3: assets ----
+
+  assetUploadUrl(accessToken: string, input: AssetUploadInput) {
+    return this.req<{ assetId: string; upload?: AssetUploadTarget; deduplicated: boolean }>('POST', '/assets/upload-url', {
+      token: accessToken,
+      body: input
+    });
+  }
+
+  async assetPutBytes(accessToken: string, target: AssetUploadTarget, bytes: Uint8Array): Promise<void> {
+    const res = await fetch(target.url, {
+      method: 'PUT',
+      headers: target.headers,
+      body: bytes as unknown as BodyInit
+    });
+    if (!res.ok) throw new GalleryApiError('NETWORK', `Upload failed: ${res.status}`);
+  }
+
+  assetFinalize(accessToken: string, assetId: string, info: AssetFinalizeInput) {
+    return this.req<{ ok: boolean; status: string }>('POST', `/assets/${assetId}/finalize`, { token: accessToken, body: info });
+  }
+
+  listAssets(accessToken: string, kind?: AssetKind) {
+    return this.req<CloudAsset[]>('GET', `/assets${kind ? `?kind=${kind}` : ''}`, { token: accessToken });
+  }
+
+  deleteAsset(accessToken: string, assetId: string) {
+    return this.req<void>('DELETE', `/assets/${assetId}`, { token: accessToken });
+  }
+
+  async assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array> {
+    const res = await fetch(`${this.baseUrl}/assets/${assetId}/${thumb ? 'thumb' : 'raw'}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      redirect: 'follow'
+    });
+    if (!res.ok) throw new GalleryApiError(res.status === 404 ? 'NOT_FOUND' : 'SERVER', `Asset fetch failed: ${res.status}`, res.status);
+    return new Uint8Array(await res.arrayBuffer());
+  }
 }
 
 // ── Mock transport (localStorage "cloud" for pre-backend development) ──────
@@ -265,6 +355,7 @@ interface MockCloud {
   refresh: Record<string, { userId: string }>;
   scripts: MockScript[];
   groups?: MockGroup[];
+  assets?: MockAsset[];
 }
 
 interface MockGroup {
@@ -273,6 +364,23 @@ interface MockGroup {
   slug: string;
   /** userId → role */
   members: Record<string, string>;
+}
+
+interface MockAsset {
+  id: string;
+  ownerId: string;
+  kind: AssetKind;
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  meta: Record<string, unknown>;
+  status: 'pending' | 'ready';
+  createdAt: number;
+  deletedAt?: number;
 }
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -288,9 +396,10 @@ export class MockGalleryApi implements GalleryApi {
     try {
       const c = JSON.parse(localStorage.getItem(MOCK_KEY) || '') as MockCloud;
       if (!c.groups) c.groups = []; // pre-P2 persisted state
+      if (!c.assets) c.assets = []; // pre-P3 persisted state
       return c;
     } catch {
-      return { users: {}, refresh: {}, scripts: [], groups: [] };
+      return { users: {}, refresh: {}, scripts: [], groups: [], assets: [] };
     }
   }
 
@@ -470,16 +579,22 @@ export class MockGalleryApi implements GalleryApi {
   }
 
   private cardOf(c: MockCloud, s: MockScript): GalleryCard {
+    const latest = this.latest(s);
+    const snippet = (latest.doc.blocks.slice(0, 3) as Array<{ content?: string }>)
+      .map(b => b.content ?? '')
+      .join(' ')
+      .slice(0, 160);
     return {
       id: s.id,
       title: s.title,
       visibility: s.visibility,
       latestRevision: s.latestRevision,
-      blockCount: this.latest(s).blockCount,
+      blockCount: latest.blockCount,
       updatedAt: s.updatedAt,
       templateId: null,
       ownerType: s.ownerType ?? 'user',
-      ownerName: this.ownerNameOf(c, s)
+      ownerName: this.ownerNameOf(c, s),
+      snippet
     };
   }
 
@@ -604,6 +719,93 @@ export class MockGalleryApi implements GalleryApi {
     if (g.members[userId] === 'owner') throw new GalleryApiError('VALIDATION', 'Cannot remove the owner', 422);
     delete g.members[userId];
     this.save(c);
+  }
+
+  // ---- P3: assets (mock — bytes are discarded, metadata-only simulation) ----
+
+  async assetUploadUrl(accessToken: string, input: AssetUploadInput): Promise<{ assetId: string; upload?: AssetUploadTarget; deduplicated: boolean }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    c.assets = c.assets ?? [];
+    const existing = c.assets.find(a => a.ownerId === user.id && a.sha256 === input.sha256 && !a.deletedAt);
+    if (existing) return { assetId: existing.id, deduplicated: true };
+    const a: MockAsset = {
+      id: newId(),
+      ownerId: user.id,
+      kind: input.kind,
+      name: input.name ?? '',
+      mime: input.mime,
+      size: input.size,
+      sha256: input.sha256,
+      width: input.width,
+      height: input.height,
+      meta: {},
+      status: 'ready', // no HTTP layer: bytes are "instantly there"
+      createdAt: Date.now()
+    };
+    c.assets.push(a);
+    this.save(c);
+    return { assetId: a.id, deduplicated: false };
+  }
+
+  async assetPutBytes(): Promise<void> {
+    /* mock: no transport needed */
+  }
+
+  async assetFinalize(accessToken: string, assetId: string, info: AssetFinalizeInput): Promise<{ ok: boolean; status: string }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const a = c.assets?.find(x => x.id === assetId && x.ownerId === user.id && !x.deletedAt);
+    if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    if (info.width !== undefined) a.width = Math.round(info.width);
+    if (info.height !== undefined) a.height = Math.round(info.height);
+    if (info.duration !== undefined) a.duration = info.duration;
+    if (info.meta) a.meta = info.meta;
+    a.status = 'ready';
+    this.save(c);
+    return { ok: true, status: 'ready' };
+  }
+
+  async listAssets(accessToken: string, kind?: AssetKind): Promise<CloudAsset[]> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    return (c.assets ?? [])
+      .filter(a => a.ownerId === user.id && !a.deletedAt && (!kind || a.kind === kind))
+      .map(a => ({
+        id: a.id, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
+        width: a.width ?? null, height: a.height ?? null, duration: a.duration ?? null,
+        meta: a.meta, status: a.status, createdAt: a.createdAt
+      }));
+  }
+
+  async deleteAsset(accessToken: string, assetId: string): Promise<void> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const a = c.assets?.find(x => x.id === assetId && x.ownerId === user.id && !x.deletedAt);
+    if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    a.deletedAt = Date.now();
+    this.save(c);
+  }
+
+  // 1×1 transparent PNG — mock bytes are discarded at upload.
+  private static readonly PLACEHOLDER_PNG = new Uint8Array([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+    0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0,
+    0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1,
+    13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]);
+
+  async assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array> {
+    await this.lag();
+    const c = this.load();
+    this.userFromAccess(c, accessToken);
+    const a = c.assets?.find(x => x.id === assetId && x.status === 'ready' && !x.deletedAt);
+    if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    return thumb || a.kind !== 'video' ? MockGalleryApi.PLACEHOLDER_PNG : MockGalleryApi.PLACEHOLDER_PNG;
   }
 
   // ---- test hooks: simulate a SECOND device mutating the cloud directly ----
@@ -758,6 +960,32 @@ export class GalleryClient {
 
   removeGroupMember(groupId: string, userId: string) {
     return this.authed(t => this.api.removeGroupMember(t, groupId, userId));
+  }
+
+  // ---- P3 ----
+
+  assetUploadUrl(input: AssetUploadInput) {
+    return this.authed(t => this.api.assetUploadUrl(t, input));
+  }
+
+  assetPutBytes(target: AssetUploadTarget, bytes: Uint8Array) {
+    return this.authed(t => this.api.assetPutBytes(t, target, bytes));
+  }
+
+  assetFinalize(assetId: string, info: AssetFinalizeInput) {
+    return this.authed(t => this.api.assetFinalize(t, assetId, info));
+  }
+
+  listAssets(kind?: AssetKind) {
+    return this.authed(t => this.api.listAssets(t, kind));
+  }
+
+  deleteAsset(assetId: string) {
+    return this.authed(t => this.api.deleteAsset(t, assetId));
+  }
+
+  assetBytes(assetId: string, thumb: boolean) {
+    return this.authed(t => this.api.assetBytes(t, assetId, thumb));
   }
 
   /** Run an authenticated call; on token rejection refresh once and retry. */

@@ -869,6 +869,7 @@ export const TRANSLATIONS = {
     gallery_vis_private: "Private",
     gallery_vis_group: "Group",
     gallery_vis_public: "Public",
+    galleryQuickPreview: "Preview",
     providers: {
       gemini: "Google Gemini",
       deepseek: "DeepSeek"
@@ -1111,6 +1112,7 @@ export const TRANSLATIONS = {
     gallery_vis_private: "私有",
     gallery_vis_group: "组内",
     gallery_vis_public: "公开",
+    galleryQuickPreview: "预览",
     providers: {
       gemini: "Google Gemini",
       deepseek: "DeepSeek"
