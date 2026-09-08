@@ -49,6 +49,10 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const [members, setMembers] = useState<Array<{ userId: string; displayName: string; email: string; role: string }> | null>(null);
   const [memberEmail, setMemberEmail] = useState('');
+  // push-to-group (P2 补遗): pick a cloud script, pick one of my groups
+  const [pushTarget, setPushTarget] = useState<string | null>(null);
+  const [pushedId, setPushedId] = useState<string | null>(null);
+  const [pushingId, setPushingId] = useState<string | null>(null);
 
   const errMsg = (e: unknown) => (isGalleryApiError(e) ? e.message : String(e));
 
@@ -164,6 +168,24 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
       void loadMine();
     }
   };
+  /** Push-to-group: create a fresh group-owned cloud copy of a script I
+   *  already have in the cloud (the original stays mine, private unchanged). */
+  const doPushToGroup = async (cloudId: string, groupId: string) => {
+    setPushingId(cloudId);
+    setError(null);
+    try {
+      const full = await galleryClient.getScript(cloudId);
+      await galleryClient.createScript(full.doc, crypto.randomUUID(), { groupId });
+      setPushedId(cloudId);
+      setPushTarget(null);
+      void loadMine();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setPushingId(null);
+    }
+  };
+
 
   const visLabel = (v: ScriptVisibility) =>
     v === 'public' ? t.gallery_vis_public : v === 'group' ? t.gallery_vis_group : t.gallery_vis_private;
@@ -333,6 +355,14 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
                       rev {s.latestRevision} · {s.blockCount} {t.galleryBlocks} · {fmtDate(s.updatedAt)}
                     </div>
                   </div>
+                  {s.id === pushedId && <span className="text-[10px] font-bold text-emerald-600">{t.galleryPushed}</span>}
+                  <button
+                    onClick={() => { setPushTarget(pushTarget === s.id ? null : s.id); if (!groups) void loadGroups(); }}
+                    title={t.galleryPushToGroup}
+                    className="text-gray-400 hover:text-indigo-500 p-1"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                  </button>
                   <select
                     value={s.visibility}
                     onChange={e => void changeVisibility(s.id, e.target.value as ScriptVisibility)}
@@ -344,9 +374,38 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
                   </select>
                 </div>
               ))}
+              {pushTarget && (
+                <div className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/30 flex items-center gap-2">
+                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{t.galleryPushPickGroup}:</span>
+                  {groups && groups.length > 0 ? (
+                    <>
+                      <select
+                        id="push-group-select"
+                        className="text-xs bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 dark:text-white outline-none"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>—</option>
+                        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                      <button
+                        onClick={() => {
+                          const sel = document.getElementById('push-group-select') as HTMLSelectElement | null;
+                          if (sel?.value) void doPushToGroup(pushTarget, sel.value);
+                        }}
+                        disabled={pushingId !== null}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+                      >
+                        {pushingId ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        {t.galleryPushConfirm}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-gray-500">{t.galleryPushNoGroups}</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
-
           {/* groups tab */}
           {signedIn && tab === 'groups' && !loading && (
             <div className="space-y-3">

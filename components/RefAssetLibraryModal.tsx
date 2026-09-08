@@ -1,7 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
+import { CloudUpload } from 'lucide-react';
 import { RefImage } from '../types';
-
+import { Panorama3DViewer } from './Panorama3DViewer';
+import { galleryClient } from '../services/gallery';
+import {
+  uploadedLocalIds,
+  uploadLocalAsset,
+  downloadCloudBlob,
+  cloudObjectUrl
+} from '../services/assetCloud';
+import { addRefImage } from '../services/refImageStore';
+import type { CloudAsset } from '../services/apiClient';
 /**
  * RefAssetLibraryModal — the management surface for the white-model
  * reference assets (数字资产). Global library view with search, renaming,
@@ -37,6 +47,18 @@ interface Labels {
   previewClose: string;
   catAll: string; catChar: string; catAction: string; catScene: string; catProp: string;
   scriptAll: string; scriptNone: string;
+  // ---- cloud sync (P3) ----
+  syncToCloud: string;
+  syncing: string;
+  uploadDone: (ok: number, fail: number) => string;
+  signInFirst: string;
+  cloudSection: string;
+  cloudEmpty: string;
+  cloudLoading: string;
+  download: string;
+  downloading: string;
+  transcode: string;
+  transcoding: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -67,6 +89,17 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     previewClose: 'Close preview',
     catAll: 'All', catChar: 'Characters', catAction: 'Storyboard', catScene: 'Scenes', catProp: 'Props',
     scriptAll: 'All scripts', scriptNone: 'Unassigned',
+    syncToCloud: 'Sync to cloud',
+    syncing: 'Syncing…',
+    uploadDone: (ok, fail) => `Uploaded ${ok}${fail ? `, ${fail} failed` : ''}`,
+    signInFirst: 'Sign in (Settings → Account) to sync assets to the cloud.',
+    cloudSection: 'Cloud assets',
+    cloudEmpty: 'No cloud assets yet — sync your library or download from another device.',
+    cloudLoading: 'Loading…',
+    download: 'Download to library',
+    downloading: 'Downloading…',
+    transcode: 'Transcode to 1080p proxy',
+    transcoding: 'Queued…',
   },
   zh: {
     title: '参考资产库',
@@ -95,6 +128,17 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     previewClose: '关闭预览',
     catAll: '全部', catChar: '角色', catAction: '分镜', catScene: '场景', catProp: '道具',
     scriptAll: '全部剧本', scriptNone: '未归属',
+    syncToCloud: '同步到云端',
+    syncing: '同步中…',
+    uploadDone: (ok, fail) => `已上传 ${ok}${fail ? `，${fail} 个失败` : ''}`,
+    signInFirst: '登录后（设置 → 账号）可把资产同步到云端。',
+    cloudSection: '云端资产',
+    cloudEmpty: '云端还没有资产——同步本地图库，或从其他设备下载。',
+    cloudLoading: '加载中…',
+    download: '下载到图库',
+    downloading: '下载中…',
+    transcode: '转码为 1080p 代理档',
+    transcoding: '已入队…',
   },
 };
 
@@ -160,6 +204,105 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
   const [cat, setCat] = useState<'all' | 'character' | 'action' | 'environment' | 'prop'>('all');
   const [scriptFilter, setScriptFilter] = useState<string>(scriptId ?? 'all');
   const q = query.trim().toLowerCase();
+
+  // ---- Cloud sync (P3) ------------------------------------------------------
+  // Local → cloud: upload every not-yet-uploaded asset (sha256 dedupe makes
+  // retries idempotent). Cloud → local: list cloud assets, one-click import
+  // into the IndexedDB library. Sign-in state comes from the gallery client.
+  const signedIn = galleryClient.isAuthenticated;
+  const [uploaded, setUploaded] = useState<Set<string>>(() => uploadedLocalIds());
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [cloud, setCloud] = useState<CloudAsset[] | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [transcoding, setTranscoding] = useState<string | null>(null);
+  const [cloudUrls, setCloudUrls] = useState<Record<string, string>>({});
+
+  const refreshCloud = useCallback(async () => {
+    if (!galleryClient.isAuthenticated) { setCloud(null); return; }
+    setCloudLoading(true);
+    try {
+      const assets = await galleryClient.listAssets();
+      setCloud(assets.filter(a => a.status === 'ready'));
+    } catch { setCloud(null); }
+    finally { setCloudLoading(false); }
+  }, []);
+
+  useEffect(() => { void refreshCloud(); }, [refreshCloud]);
+
+  // Thumbnail object URLs for the cloud grid — revoked on unmount/refresh.
+  useEffect(() => {
+    if (!cloud?.length) return;
+    let cancelled = false;
+    const made: string[] = [];
+    (async () => {
+      for (const a of cloud) {
+        if (cancelled) return;
+        if (cloudUrls[a.id]) continue;
+        try {
+          const url = await cloudObjectUrl(a.id, true);
+          if (cancelled) { URL.revokeObjectURL(url); return; }
+          made.push(url);
+          setCloudUrls(prev => (prev[a.id] ? prev : { ...prev, [a.id]: url }));
+        } catch { /* leave the tile without a preview */ }
+      }
+    })();
+    return () => { cancelled = true; made.forEach(u => URL.revokeObjectURL(u)); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud]);
+  useEffect(() => () => { Object.values(cloudUrls).forEach(u => URL.revokeObjectURL(u)); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSyncToCloud = useCallback(async () => {
+    if (syncing) return;
+    if (!galleryClient.isAuthenticated) { setSyncMsg(labels.signInFirst); return; }
+    setSyncing(true);
+    setSyncMsg(null);
+    let ok = 0, fail = 0;
+    for (const im of images) {
+      if (uploaded.has(im.id)) continue;
+      try {
+        const blob = await fetch(im.url).then(r => r.blob());
+        await uploadLocalAsset({ localId: im.id, blob, name: im.name, kind: 'image', meta: { subject: im.subject ?? '' } });
+        ok++;
+      } catch { fail++; }
+    }
+    setUploaded(uploadedLocalIds());
+    setSyncing(false);
+    setSyncMsg(labels.uploadDone(ok, fail));
+    void refreshCloud();
+  }, [images, uploaded, syncing, labels, refreshCloud]);
+
+  const handleDownload = useCallback(async (asset: CloudAsset) => {
+    if (downloading) return;
+    setDownloading(asset.id);
+    try {
+      const { blob } = await downloadCloudBlob(asset.id);
+      // panorama3d assets import with the panorama mime so the local preview
+      // lightbox routes them into the 360° viewer (same as direct uploads).
+      const type = asset.kind === 'panorama3d' ? 'image/panorama' : asset.mime;
+      const file = new File([blob], asset.name || `asset-${asset.id.slice(0, 8)}`, { type });
+      await addRefImage(file, { source: 'upload', name: asset.name || undefined });
+      onRescan(); // reload local library state in App
+    } catch { /* keep the button clickable for a retry */ }
+    setDownloading(null);
+  }, [downloading, onRescan]);
+
+  const handleTranscode = useCallback(async (asset: CloudAsset) => {
+    if (transcoding) return;
+    setTranscoding(asset.id);
+    try {
+      await galleryClient.assetTranscode(asset.id);
+      await refreshCloud();
+    } catch { /* keep the button clickable for a retry */ }
+    setTranscoding(null);
+  }, [transcoding, refreshCloud]);
+
+  const pendingCount = useMemo(
+    () => images.filter(im => !uploaded.has(im.id)).length,
+    [images, uploaded]
+  );
 
   // ---- LocalSend receiver status (phone drop) -------------------------------
   // Polls http://<this-host>:53317/status while the modal is open; when the
@@ -231,6 +374,21 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
               ? `📁 ${backendName ?? ''}`
               : `💾 ${labels.localMode} · ${dirAvailable ? labels.useFolder : '—'}`}
           </button>
+          {signedIn ? (
+            <button
+              type="button"
+              onClick={() => void handleSyncToCloud()}
+              disabled={syncing || pendingCount === 0}
+              title={syncing ? labels.syncing : labels.syncToCloud}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-colors disabled:opacity-50 border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40"
+            >
+              <CloudUpload className="w-3 h-3" />
+              {syncing ? labels.syncing : `${labels.syncToCloud}${pendingCount ? ` (${pendingCount})` : ''}`}
+            </button>
+          ) : (
+            <span className="text-[9px] text-gray-400" title={labels.signInFirst}>☁︎</span>
+          )}
+          {syncMsg && <span className="text-[9px] text-gray-500 dark:text-gray-400">{syncMsg}</span>}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -348,6 +506,9 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                     {!im.isSelected && (
                       <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white/80 text-[9px]">旧版本</span>
                     )}
+                    {uploaded.has(im.id) && (
+                      <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-indigo-500/90 text-white text-[9px]" title={labels.syncToCloud}>☁</span>
+                    )}
                     <button
                       type="button"
                       onClick={() => onDelete(im.id)}
@@ -376,10 +537,91 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
               ))}
             </div>
           )}
+          {/* Cloud assets (P3) — one-click import into the local library */}
+          {signedIn && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">☁ {labels.cloudSection}</span>
+                <span className="text-[10px] text-gray-400">{cloud?.length ?? ''}</span>
+                {cloudLoading && <span className="text-[10px] text-gray-400">{labels.cloudLoading}</span>}
+              </div>
+              {!cloud ? null : cloud.length === 0 ? (
+                <p className="text-xs text-gray-400">{labels.cloudEmpty}</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-3">
+                  {cloud.map(a => (
+                    <div key={a.id} className="rounded-lg border border-indigo-200 dark:border-indigo-900 overflow-hidden">
+                      <div className="relative aspect-square bg-gray-100 dark:bg-zinc-800">
+                        {cloudUrls[a.id] ? (
+                          <img src={cloudUrls[a.id]} alt={a.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-zinc-600 text-lg">☁</div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleDownload(a)}
+                          disabled={downloading === a.id}
+                          title={downloading === a.id ? labels.downloading : labels.download}
+                          className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-indigo-600/90 text-white text-[9px] leading-none hover:bg-indigo-600 disabled:opacity-60"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                      <div className="p-1.5">
+                        <div className="text-[10px] text-gray-700 dark:text-gray-200 truncate">{a.name || a.id.slice(0, 8)}</div>
+                        <div className="flex items-center gap-1">
+                          {a.width && a.height && (
+                            <span className="text-[9px] text-gray-400">{a.width}×{a.height}</span>
+                          )}
+                          {a.kind === 'video' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleTranscode(a)}
+                              disabled={transcoding === a.id || a.transcodeStatus === 'queued' || a.transcodeStatus === 'running'}
+                              title={a.transcodeStatus === 'ready' ? '1080p proxy ready' : labels.transcode}
+                              className="ml-auto px-1 py-0.5 rounded bg-zinc-600/90 text-white text-[9px] leading-none hover:bg-zinc-500 disabled:opacity-60"
+                            >
+                              {a.transcodeStatus === 'ready' ? 'HD✓' : a.transcodeStatus === 'queued' || a.transcodeStatus === 'running' ? '⏳' : '▶1080p'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* full-size preview lightbox */}
-        {preview && (
+        {/* full-size preview lightbox — panorama assets get the 360° viewer */}
+        {preview && preview.type === 'image/panorama' ? (
+          <div
+            className="fixed inset-0 z-[60] bg-black flex items-center justify-center p-3"
+            onClick={() => setPreview(null)}
+          >
+            <div className="w-full h-full flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <Panorama3DViewer
+                src={preview.url}
+                className="flex-1 rounded-lg overflow-hidden"
+                onLoaded={(w, h) => {
+                  if (w / h < 1.8) console.warn('[assets] panorama is not 2:1 equirectangular:', w, h);
+                }}
+              />
+              <div className="mt-2 flex items-center gap-3 text-xs text-gray-200">
+                <span className="font-semibold truncate">{preview.name}</span>
+                <span className="text-[10px] text-gray-400">360° — 拖拽旋转 · 滚轮缩放</span>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  className="ml-auto shrink-0 px-2.5 py-1 rounded-md border border-white/30 text-white/90 hover:bg-white/10"
+                >
+                  ✕ {labels.previewClose}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : !!preview && (
           <div
             className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6"
             onClick={() => setPreview(null)}

@@ -747,10 +747,15 @@ function App() {
     }
   }, [assetDir]);
 
-  /** Re-scan the asset folder — manual button + auto-triggered when a phone
-   *  drop (LocalSend) lands new files. */
+  /** Re-scan the asset store — manual button + auto-triggered when a phone
+   *  drop (LocalSend) lands new files or a cloud download imports locally. */
   const reloadAssets = useCallback(async () => {
-    if (!assetDir) return;
+    if (!assetDir) {
+      // IndexedDB backend: re-read the store into display state.
+      const stored = await listRefImages().catch(() => []);
+      setRefImages(stored.map((s) => toRefImage(s)));
+      return;
+    }
     try {
       const assets = await listDirAssets(assetDir);
       setRefImages(assets.map((a) => toRefImage(a)));

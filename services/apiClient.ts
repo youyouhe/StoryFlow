@@ -92,7 +92,7 @@ export interface GalleryApi {
   refresh(refreshToken: string): Promise<AuthResult>;
   logout(accessToken: string, refreshToken: string): Promise<void>;
   listScripts(accessToken: string): Promise<CloudScript[]>;
-  createScript(accessToken: string, doc: Screenplay, idempotencyKey: string): Promise<{ id: string; revision: number }>;
+  createScript(accessToken: string, doc: Screenplay, idempotencyKey: string, opts?: { groupId?: string }): Promise<{ id: string; revision: number }>;
   pushScript(accessToken: string, cloudId: string, ifMatch: number, doc: Screenplay): Promise<{ revision: number }>;
   getScript(accessToken: string, cloudId: string): Promise<{ script: CloudScript; doc: Screenplay; revision: number }>;
   deleteScript(accessToken: string, cloudId: string): Promise<void>;
@@ -112,6 +112,10 @@ export interface GalleryApi {
   assetPutBytes(accessToken: string, target: AssetUploadTarget, bytes: Uint8Array): Promise<void>;
   assetFinalize(accessToken: string, assetId: string, info: AssetFinalizeInput): Promise<{ ok: boolean; status: string }>;
   listAssets(accessToken: string, kind?: AssetKind): Promise<CloudAsset[]>;
+  /** Enqueue a video proxy transcode (idempotent while queued/running). */
+  assetTranscode(accessToken: string, assetId: string): Promise<{ jobId: string; status: string; deduplicated?: boolean }>;
+  /** Job history for one asset. */
+  assetTranscodes(accessToken: string, assetId: string): Promise<TranscodeJob[]>;
   deleteAsset(accessToken: string, assetId: string): Promise<void>;
   /** Fetch raw/thumb bytes with auth (caller turns them into an object URL). */
   assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array>;
@@ -152,11 +156,21 @@ export interface CloudAsset {
   size: number;
   width: number | null;
   height: number | null;
-  duration: number | null;
-  meta: Record<string, unknown>;
   status: string;
   createdAt: number;
+  /** P4: video proxy transcode state (none|queued|running|ready|failed). */
+  transcodeStatus?: string;
 }
+
+export interface TranscodeJob {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  attempts: number;
+  lastError: string | null;
+  createdAt: number;
+  proxyKey: string | null;
+  assetTranscodeStatus: string;
+ }
 
 export interface GroupInfo {
   id: string;
@@ -239,8 +253,12 @@ export class HttpGalleryApi implements GalleryApi {
     return this.req<CloudScript[]>('GET', '/scripts', { token: accessToken });
   }
 
-  createScript(accessToken: string, doc: Screenplay, idempotencyKey: string) {
-    return this.req<{ id: string; revision: number }>('POST', '/scripts', { token: accessToken, body: { doc }, idempotencyKey });
+  createScript(accessToken: string, doc: Screenplay, idempotencyKey: string, opts?: { groupId?: string }) {
+    return this.req<{ id: string; revision: number }>('POST', '/scripts', {
+      token: accessToken,
+      body: { doc, ...(opts?.groupId ? { ownerType: 'group', ownerId: opts.groupId } : {}) },
+      idempotencyKey
+    });
   }
 
   pushScript(accessToken: string, cloudId: string, ifMatch: number, doc: Screenplay) {
@@ -321,6 +339,14 @@ export class HttpGalleryApi implements GalleryApi {
 
   deleteAsset(accessToken: string, assetId: string) {
     return this.req<void>('DELETE', `/assets/${assetId}`, { token: accessToken });
+  }
+
+  assetTranscode(accessToken: string, assetId: string) {
+    return this.req<{ jobId: string; status: string; deduplicated?: boolean }>('POST', `/assets/${assetId}/transcode`, { token: accessToken });
+  }
+
+  assetTranscodes(accessToken: string, assetId: string) {
+    return this.req<TranscodeJob[]>('GET', `/assets/${assetId}/transcodes`, { token: accessToken });
   }
 
   async assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array> {
@@ -495,26 +521,44 @@ export class MockGalleryApi implements GalleryApi {
     this.save(c);
   }
 
+  /** Server parity: WRITABLE scope = mine or my groups' (any role). */
+  private writableFilter(c: MockCloud, userId: string) {
+    const myGroups = new Set((c.groups ?? []).filter(g => g.members[userId]).map(g => g.id));
+    return (s: MockScript) => !s.deletedAt && (
+      (s.ownerType ?? 'user') === 'user' ? s.ownerId === userId : myGroups.has(s.ownerId)
+    );
+  }
+
   async listScripts(accessToken: string): Promise<CloudScript[]> {
     await this.lag();
     const c = this.load();
     const user = this.userFromAccess(c, accessToken);
-    return c.scripts.filter(s => s.ownerId === user.id && !s.deletedAt).map(s => this.summary(s));
+    return c.scripts.filter(s => this.writableFilter(c, user.id)(s)).map(s => this.summary(s));
   }
 
-  async createScript(accessToken: string, doc: Screenplay, idempotencyKey: string): Promise<{ id: string; revision: number }> {
+  async createScript(accessToken: string, doc: Screenplay, idempotencyKey: string, opts?: { groupId?: string }): Promise<{ id: string; revision: number }> {
     await this.lag();
     const c = this.load();
     const user = this.userFromAccess(c, accessToken);
+    // Group ownership: caller must be a member (mirrors the server contract).
+    let ownerType: 'user' | 'group' = 'user';
+    let ownerId = user.id;
+    if (opts?.groupId) {
+      const g = c.groups?.find(x => x.id === opts.groupId && x.members[user.id]);
+      if (!g) throw new GalleryApiError('NOT_FOUND', 'Group not found', 404);
+      ownerType = 'group';
+      ownerId = g.id;
+    }
     // Idempotent retry: same key → same script.
     const existing = c.scripts.find(
-      s => s.ownerId === user.id && s.versions.some(v => v.idempotencyKey === idempotencyKey)
+      s => s.ownerId === ownerId && s.versions.some(v => v.idempotencyKey === idempotencyKey)
     );
     if (existing) return { id: existing.id, revision: existing.latestRevision };
     const now = Date.now();
     const script: MockScript = {
       id: newId(),
-      ownerId: user.id,
+      ownerId,
+      ownerType,
       title: doc.metadata.title,
       visibility: 'private',
       latestRevision: 1,
@@ -526,12 +570,10 @@ export class MockGalleryApi implements GalleryApi {
     this.save(c);
     return { id: script.id, revision: 1 };
   }
-
   async pushScript(accessToken: string, cloudId: string, ifMatch: number, doc: Screenplay): Promise<{ revision: number }> {
-    await this.lag();
     const c = this.load();
     const user = this.userFromAccess(c, accessToken);
-    const s = c.scripts.find(x => x.id === cloudId && x.ownerId === user.id && !x.deletedAt);
+    const s = c.scripts.find(x => x.id === cloudId && this.writableFilter(c, user.id)(x));
     if (!s) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
     if (this.simulateConflict === cloudId) {
       this.simulateConflict = null;
@@ -541,9 +583,6 @@ export class MockGalleryApi implements GalleryApi {
       throw new GalleryApiError('REVISION_CONFLICT', `Expected ifMatch=${s.latestRevision}`, 409, s.latestRevision);
     }
     const revision = s.latestRevision + 1;
-    s.versions.push({ revision, doc, blockCount: doc.blocks.length, createdAt: Date.now() });
-    s.latestRevision = revision;
-    s.title = doc.metadata.title;
     s.updatedAt = Date.now();
     this.save(c);
     return { revision };
@@ -553,7 +592,7 @@ export class MockGalleryApi implements GalleryApi {
     await this.lag();
     const c = this.load();
     const user = this.userFromAccess(c, accessToken);
-    const s = c.scripts.find(x => x.id === cloudId && x.ownerId === user.id && !x.deletedAt);
+    const s = c.scripts.find(x => x.id === cloudId && this.writableFilter(c, user.id)(x));
     if (!s) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
     const latest = this.latest(s);
     return { script: this.summary(s), doc: structuredClone(latest.doc), revision: latest.revision };
@@ -563,7 +602,7 @@ export class MockGalleryApi implements GalleryApi {
     await this.lag();
     const c = this.load();
     const user = this.userFromAccess(c, accessToken);
-    const s = c.scripts.find(x => x.id === cloudId && x.ownerId === user.id);
+    const s = c.scripts.find(x => x.id === cloudId && this.writableFilter(c, user.id)(x));
     if (!s) throw new GalleryApiError('NOT_FOUND', 'Script not found', 404);
     s.deletedAt = Date.now();
     this.save(c);
@@ -777,7 +816,8 @@ export class MockGalleryApi implements GalleryApi {
       .map(a => ({
         id: a.id, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
         width: a.width ?? null, height: a.height ?? null, duration: a.duration ?? null,
-        meta: a.meta, status: a.status, createdAt: a.createdAt
+        meta: a.meta, status: a.status, createdAt: a.createdAt,
+        transcodeStatus: (a as { transcodeStatus?: string }).transcodeStatus ?? 'none'
       }));
   }
 
@@ -806,6 +846,16 @@ export class MockGalleryApi implements GalleryApi {
     const a = c.assets?.find(x => x.id === assetId && x.status === 'ready' && !x.deletedAt);
     if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
     return thumb || a.kind !== 'video' ? MockGalleryApi.PLACEHOLDER_PNG : MockGalleryApi.PLACEHOLDER_PNG;
+  }
+
+  assetTranscode(accessToken: string, assetId: string): Promise<{ jobId: string; status: string; deduplicated?: boolean }> {
+    void accessToken; void assetId;
+    return Promise.resolve({ jobId: 'mock-job', status: 'queued' });
+  }
+
+  assetTranscodes(accessToken: string, assetId: string): Promise<TranscodeJob[]> {
+    void accessToken; void assetId;
+    return Promise.resolve([]);
   }
 
   // ---- test hooks: simulate a SECOND device mutating the cloud directly ----
@@ -903,14 +953,14 @@ export class GalleryClient {
       // best-effort: local sign-out is already complete
     }
   }
-
   listScripts() {
     return this.authed(t => this.api.listScripts(t));
   }
 
-  createScript(doc: Screenplay, idempotencyKey: string) {
-    return this.authed(t => this.api.createScript(t, doc, idempotencyKey));
+  createScript(doc: Screenplay, idempotencyKey: string, opts?: { groupId?: string }) {
+    return this.authed(t => this.api.createScript(t, doc, idempotencyKey, opts));
   }
+
 
   pushScript(cloudId: string, ifMatch: number, doc: Screenplay) {
     return this.authed(t => this.api.pushScript(t, cloudId, ifMatch, doc));
@@ -982,6 +1032,14 @@ export class GalleryClient {
 
   deleteAsset(assetId: string) {
     return this.authed(t => this.api.deleteAsset(t, assetId));
+  }
+
+  assetTranscode(assetId: string) {
+    return this.authed(t => this.api.assetTranscode(t, assetId));
+  }
+
+  assetTranscodes(assetId: string) {
+    return this.authed(t => this.api.assetTranscodes(t, assetId));
   }
 
   assetBytes(assetId: string, thumb: boolean) {

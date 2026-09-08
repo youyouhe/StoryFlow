@@ -51,6 +51,8 @@ interface OutboxEntry {
   scriptId: string;
   /** Generated once per enqueue so create-retries stay idempotent. */
   createKey: string;
+  /** When set, the first create pushes into this group (server: ownerType=group). */
+  groupId?: string;
 }
 
 const newId = () => crypto.randomUUID();
@@ -113,9 +115,8 @@ export class SyncEngine {
     this.scheduleFlush();
   }
 
-  /** One-click sync. First push for 'local' scripts; manual flush otherwise. */
-  async syncNow(scriptId: string): Promise<void> {
-    this.enqueue(scriptId);
+  async syncNow(scriptId: string, opts?: { groupId?: string }): Promise<void> {
+    this.enqueue(scriptId, opts);
     await this.flush();
   }
 
@@ -225,10 +226,15 @@ export class SyncEngine {
     localStorage.setItem(OUTBOX_KEY, JSON.stringify(q));
   }
 
-  private enqueue(scriptId: string) {
+  private enqueue(scriptId: string, opts?: { groupId?: string }) {
     const q = this.readOutbox();
-    if (q.some(e => e.scriptId === scriptId)) return;
-    q.push({ scriptId, createKey: newId() });
+    const existing = q.find(e => e.scriptId === scriptId);
+    if (existing) {
+      if (opts?.groupId && !existing.groupId) existing.groupId = opts.groupId;
+      this.writeOutbox(q);
+      return;
+    }
+    q.push({ scriptId, createKey: newId(), groupId: opts?.groupId });
     this.writeOutbox(q);
   }
 
@@ -250,7 +256,7 @@ export class SyncEngine {
     try {
       let next: ScriptSyncState;
       if (!st) {
-        const res = await this.client.createScript(sp, entry.createKey);
+        const res = await this.client.createScript(sp, entry.createKey, entry.groupId ? { groupId: entry.groupId } : undefined);
         next = { cloudId: res.id, baseRevision: res.revision, status: 'synced', syncedAt: Date.now() };
       } else {
         next = await this.pushOrResolve(entry.scriptId, st, sp);

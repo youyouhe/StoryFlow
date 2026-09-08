@@ -869,6 +869,11 @@ export const TRANSLATIONS = {
     gallery_vis_private: "Private",
     gallery_vis_group: "Group",
     gallery_vis_public: "Public",
+    galleryPushToGroup: "Push to group",
+    galleryPushPickGroup: "Push to group",
+    galleryPushConfirm: "Push",
+    galleryPushNoGroups: "No groups yet — create one in the Groups tab first.",
+    galleryPushed: "Pushed ✓",
     galleryQuickPreview: "Preview",
     providers: {
       gemini: "Google Gemini",
@@ -1112,6 +1117,11 @@ export const TRANSLATIONS = {
     gallery_vis_private: "私有",
     gallery_vis_group: "组内",
     gallery_vis_public: "公开",
+    galleryPushToGroup: "推送到组",
+    galleryPushPickGroup: "推送到组",
+    galleryPushConfirm: "推送",
+    galleryPushNoGroups: "还没有组——请先在“组”标签页创建。",
+    galleryPushed: "已推送 ✓",
     galleryQuickPreview: "预览",
     providers: {
       gemini: "Google Gemini",
