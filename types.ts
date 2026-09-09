@@ -108,12 +108,30 @@ export interface GrayboxData {
 
 export type ScriptLanguage = 'en' | 'zh' | 'dual';
 
+/** The fixed visual DNA of a screenplay, picked (from LLM-generated
+ *  candidates) when writing starts. Once set, every text-to-image prompt is
+ *  locked to this look so all generated art stays stylistically consistent. */
+export interface StyleHead {
+  /** Short display name, e.g. "赛博朋克霓虹夜" / "水墨武侠". */
+  name: string;
+  /** Art style (画风): medium, palette, rendering language. */
+  artStyle: string;
+  /** World/scene preset (场景): era, location flavor, atmosphere. */
+  scenePreset: string;
+  /** Ready-to-use English prompt prefix injected verbatim into every
+   *  image-prompt call. */
+  promptPrefix: string;
+}
+
 export interface ScriptMetadata {
   title: string;
   author: string;
   draft: string;
   templateId?: string;
   scriptLanguage: ScriptLanguage;
+  /** Chosen visual style head; absent = not picked yet (prompts then infer
+   *  style per-call, which can drift). */
+  styleHead?: StyleHead;
 }
 
 export interface Screenplay {
@@ -154,6 +172,9 @@ export interface KeyboardShortcuts {
   aiStoryboard: string;
   /** Alt+G by default. Triggers graybox generation on a focused block. */
   aiGraybox: string;
+  /** Alt+Y by default. Pushes the current script to the cloud (first push
+   *  creates the cloud copy; later pushes flush pending edits). */
+  syncCloud: string;
 }
 
 /** AI assistant operating modes.

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ScriptBlock, SyncStatus } from '../types';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert, Globe } from 'lucide-react';
+import type { ScriptVisibility } from '../services/apiClient';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert, Globe, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -47,6 +48,10 @@ interface SidebarProps {
   gallerySignedIn?: boolean;
   /** One-click sync for one script (badge click). */
   onSyncScript?: (id: string) => void;
+  /** Cloud visibility per local script id (present = cloud-backed). */
+  cloudVisibility?: Record<string, ScriptVisibility>;
+  /** Cycle private ↔ public for a cloud-backed script. */
+  onChangeVisibility?: (id: string, v: ScriptVisibility) => void;
   /** Opens the Gallery browse modal (P2). */
   onOpenGallery?: () => void;
 }
@@ -72,6 +77,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     syncStatus = {},
     gallerySignedIn = false,
     onSyncScript,
+    cloudVisibility = {},
+    onChangeVisibility,
     onOpenGallery
 }) => {
   const [activeTab, setActiveTab] = useState<'outline' | 'history'>('outline');
@@ -127,6 +134,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
       );
   };
+  /** Visibility chip for cloud-backed scripts: Lock = private, Globe =
+   *  public. Click cycles private ↔ public (group visibility stays a
+   *  Gallery-modal concern — it needs group context). */
+  const visChipFor = (id: string) => {
+      const v = cloudVisibility[id];
+      if (!v || !onChangeVisibility) return null;
+      const isPublic = v === 'public';
+      const Icon = isPublic ? Globe : Lock;
+      const label = isPublic ? t.gallery_vis_public : t.gallery_vis_private;
+      const next = isPublic ? 'private' : 'public';
+      return (
+          <button
+              onClick={(e) => {
+                  e.stopPropagation();
+                  onChangeVisibility(id, next);
+              }}
+              className={clsx("shrink-0 p-0.5 rounded transition-opacity", isPublic ? "text-sky-500" : "text-gray-400 dark:text-gray-500", "hover:opacity-70")}
+              title={`${t.gallery_vis_private} ↔ ${t.gallery_vis_public} — ${label}`}
+          >
+              <Icon className="w-3.5 h-3.5" />
+          </button>
+      );
+  };
 
   return (
     <div className="w-64 h-full bg-gray-50 dark:bg-[#0c0c0e] border-r border-gray-200 dark:border-zinc-800 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out">
@@ -134,6 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
            <Clapperboard className="w-4 h-4" />
         </div>
+
         <div className="overflow-hidden">
              <h1 className="font-sans font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
                {t.screenplay}
@@ -277,7 +308,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <div className="text-[10px] text-gray-500 dark:text-gray-500 font-mono">
                                 {formatDate(script.lastModified)}
                             </div>
-                            {syncBadgeFor(script.id)}
+                            <div className="flex items-center gap-1">
+                                {visChipFor(script.id)}
+                                {syncBadgeFor(script.id)}
+                            </div>
                         </div>
                         
                         {script.id !== currentScriptId && (

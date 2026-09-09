@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { logAiCall, classifyError } from "./aiLog";
-import { ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera } from "../types";
+import { ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead } from "../types";
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -393,6 +393,76 @@ export const suggestIdeas = async (
 }
 
 /**
+ * Generate candidate "style heads" for a screenplay: a few distinct visual
+ * DNA presets (art style + world/scene + a ready-to-use English prompt
+ * prefix). The user picks ONE at script start; it is then locked into the
+ * script so all downstream text-to-image prompts share the same look.
+ *
+ * Returns 3 candidates. Response is JSON — parsed leniently (fences,
+ * preamble chatter tolerated).
+ */
+export const generateStyleHeads = async (
+  blocks: ScriptBlock[],
+  systemInstruction: string,
+  scriptLanguage: ScriptLanguage,
+  settings: AppSettings,
+  templateId?: string,
+): Promise<StyleHead[]> => {
+  const context = getScriptContext(blocks, Math.max(30, Math.floor(settings.aiContextBlocks * 0.5)));
+  const langInstruction = getLanguageInstruction(scriptLanguage);
+  const persona = systemInstruction ? `\nThe script's persona for tone-matching:\n${systemInstruction}` : '';
+  const genreHint = templateId ? `The script uses the "${templateId}" template/genre.` : '';
+
+  const systemPrompt = `You are a Production Designer and Visual Development lead for film/animation.
+You invent DISTINCT visual directions for a screenplay so the team can lock one look before storyboarding begins.
+${langInstruction}${persona}`;
+
+  const userPrompt = `Invent 3 visually DISTINCT style heads for this screenplay. Each is a complete look: medium/art style, era + world flavor, lighting and palette personality.
+${genreHint}
+
+Screenplay context:
+---
+${context || '(script is still empty — infer from the title/genre and be creative)'}
+---
+
+Requirements:
+- The 3 candidates must feel like different productions (e.g. live-action realism vs. painterly animation vs. retro grain), not minor variations.
+- "name": short, evocative, in the script's language (${scriptLanguage}).
+- "artStyle": the 画风 — medium, rendering, palette (in the script's language).
+- "scenePreset": the 场景/世界 — era, location flavor, atmosphere (in the script's language).
+- "promptPrefix": ENGLISH ONLY. A dense single-line prompt prefix (~30-60 words) that can be prepended to ANY text-to-image prompt to reproduce this look: medium, style, era, lighting, palette, texture. No aspect-ratio or quality-booster terms.
+
+Return ONLY a JSON array (no markdown fences, no commentary):
+[{"name":"...","artStyle":"...","scenePreset":"...","promptPrefix":"..."}, ...] exactly 3 items.`;
+
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'style-heads');
+
+  // Lenient JSON extraction: strip fences, take the outermost array.
+  const cleaned = responseText.replace(/```(?:json)?/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start < 0 || end <= start) throw new Error('STYLE_HEAD_PARSE');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new Error('STYLE_HEAD_PARSE');
+  }
+  if (!Array.isArray(parsed)) throw new Error('STYLE_HEAD_PARSE');
+  const heads = parsed
+    .filter((h): h is Record<string, unknown> => !!h && typeof h === 'object')
+    .map(h => ({
+      name: String(h.name ?? '').trim(),
+      artStyle: String(h.artStyle ?? '').trim(),
+      scenePreset: String(h.scenePreset ?? '').trim(),
+      promptPrefix: String(h.promptPrefix ?? '').trim()
+    }))
+    .filter(h => h.promptPrefix);
+  if (!heads.length) throw new Error('STYLE_HEAD_PARSE');
+  return heads;
+};
+
+/**
  * Generate a structured text-to-image prompt for an ACTION or CHARACTER block
  * (storyboard).
  *
@@ -412,6 +482,7 @@ export const generateImagePrompt = async (
   systemInstruction: string,
   settings: AppSettings,
   kind: 'action' | 'character' | 'environment' = 'action',
+  styleHead?: StyleHead,
 ): Promise<string> => {
   // Image prompts are always English, independent of scriptLanguage.
   const langInstruction = 'Respond in English only.';
@@ -462,7 +533,7 @@ ${compGuidance}
 ${matGuidance}
 6. Mood — emotional tone, atmosphere, color palette leaning.
 
-STRICT RULES:
+${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OVERRIDES your own style inference. Weave its art style, era and palette into Environment, Lighting, Material and Mood (never contradict it):\n---\n${styleHead.promptPrefix}\n---` : ''}
 - ERA INTENT — the script is the authority on its visual world. Derive the era/genre the script actually depicts (from the persona, scene heading, and beats) and follow its INTENT: period worlds get period-accurate costume, props, and architecture; but when the script deliberately mixes eras or breaks convention (time-travel 穿越, dreams, otherworldly intrusion, genre parody), preserve and emphasize that deliberate contrast — a modern-dressed protagonist in an ancient court should read instantly as intentional. The only failure is UNINTENDED drift: era-inappropriate details nobody wrote (a period warrior casually wearing a wristwatch). When genre convention and the beats disagree, follow the beats.
 - Output EXACTLY six lines, one per element, in this exact format:
   Subject: ...
@@ -524,6 +595,13 @@ Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six 
       const canon = allowed.find(a => a.toLowerCase() === label.toLowerCase()) || label;
       return `${canon}: ${rest}`;
     });
+
+  // Deterministic style consistency: the fixed head is prepended verbatim so
+  // every image for this script shares the exact same style tokens, even if
+  // the model paraphrases them inside the six lines.
+  if (styleHead?.promptPrefix?.trim()) {
+    lines.unshift(`Global Style: ${styleHead.promptPrefix.trim()}`);
+  }
 
   return lines.join('\n');
 };

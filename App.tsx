@@ -5,7 +5,8 @@ import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition } from './services/geminiService';
+import { StyleHeadModal } from './components/StyleHeadModal';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads } from './services/geminiService';
 import { Graybox3DView } from './components/Graybox3DView';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
@@ -25,7 +26,8 @@ import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetL
 import { GalleryModal } from './components/GalleryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { getAiLog } from './services/aiLog';
-import { galleryClient, syncEngine, readAllSyncStatuses } from './services/gallery';
+import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
+import type { ScriptVisibility } from './services/apiClient';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS, grayboxOverviewLine } from './utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from './utils/grayboxToBlender';
 import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
@@ -174,11 +176,13 @@ function App() {
   // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
   const [galleryUser, setGalleryUser] = useState<GalleryUser | null>(galleryClient.user);
   const [syncStatusMap, setSyncStatusMap] = useState<Record<string, SyncStatus>>(readAllSyncStatuses);
+  const [cloudVisMap, setCloudVisMap] = useState<Record<string, ScriptVisibility>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showStyleHeadModal, setShowStyleHeadModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [aiMode, setAIMode] = useState<AIMode>('CONTINUE');
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -535,7 +539,7 @@ function App() {
       const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
       const sceneBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
       try {
-        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind);
+        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead);
         // Mirror the in-app save: CHARACTER prompts propagate to same-name blocks.
         const isCharacter = b.type === 'CHARACTER';
         const charName = isCharacter ? b.content.trim() : '';
@@ -987,12 +991,6 @@ function App() {
     return off;
   }, [refreshGalleryView]);
 
-  // Returning signed-in user: reconcile with the cloud once on app start.
-  useEffect(() => {
-    if (!galleryClient.isAuthenticated) return;
-    void syncEngine.onSignedIn().then(refreshGalleryView);
-  }, [refreshGalleryView]);
-
   // App Settings Autosave
   useEffect(() => {
       localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(appSettings));
@@ -1096,9 +1094,12 @@ function App() {
     setScreenplay(newScript);
     setSelectedBlockId(blocksWithNewIds[0].id);
     setShowTemplateModal(false);
-    setSidebarOpen(false); 
-    setIsReadOnly(false); 
+    setSidebarOpen(false);
+    setIsReadOnly(false);
     setTimeout(() => setSidebarOpen(true), 300);
+    // Style head comes first: pick the visual DNA before writing, so every
+    // later image prompt locks to one consistent look.
+    if (!newScript.metadata.styleHead) setShowStyleHeadModal(true);
   };
 
   const handleLoadScript = (id: string) => {
@@ -1201,13 +1202,44 @@ function App() {
 
   // ---- Gallery account & sync handlers (SettingsModal account tab) ----
 
+  /** Cloud visibility per local script id (cloud-backed only) — powers the
+   *  Sidebar lock/globe chip. */
+  const refreshCloudVis = useCallback(async () => {
+      if (!galleryClient.isAuthenticated) { setCloudVisMap({}); return; }
+      try {
+          const list = await galleryClient.listScripts();
+          const byCloud = new Map(list.map(s => [s.id, s.visibility]));
+          const next: Record<string, ScriptVisibility> = {};
+          for (const localId of syncStore.allScreenplayIds()) {
+              const cloudId = syncStore.getSyncState(localId)?.cloudId;
+              const v = cloudId ? byCloud.get(cloudId) : undefined;
+              if (v) next[localId] = v;
+          }
+          setCloudVisMap(next);
+      } catch { /* keep last-known map */ }
+  }, []);
+
+  /** Cycle a cloud-backed script's visibility from the Sidebar chip. */
+  const handleChangeVisibility = useCallback(async (id: string, v: ScriptVisibility) => {
+      const cloudId = syncStore.getSyncState(id)?.cloudId;
+      if (!cloudId) return;
+      setCloudVisMap(prev => ({ ...prev, [id]: v })); // optimistic
+      try {
+          await galleryClient.setVisibility(cloudId, v);
+      } catch (e) {
+          setSyncError(e instanceof Error ? e.message : String(e));
+          void refreshCloudVis(); // revert to server truth
+      }
+  }, [refreshCloudVis]);
+
   const handleGalleryLogin = useCallback(async (email: string, password: string, deviceName: string) => {
       setSyncError(null);
       await galleryClient.login({ email, password, deviceName });
       setGalleryUser(galleryClient.user);
       await syncEngine.onSignedIn();
       refreshGalleryView();
-  }, [refreshGalleryView]);
+      void refreshCloudVis();
+  }, [refreshGalleryView, refreshCloudVis]);
 
   const handleGalleryRegister = useCallback(async (email: string, password: string, displayName: string, deviceName: string) => {
       setSyncError(null);
@@ -1215,12 +1247,15 @@ function App() {
       setGalleryUser(galleryClient.user);
       await syncEngine.onSignedIn();
       refreshGalleryView();
-  }, [refreshGalleryView]);
+      void refreshCloudVis();
+  }, [refreshGalleryView, refreshCloudVis]);
 
   const handleGalleryLogout = useCallback(async () => {
       await galleryClient.logout();
       setGalleryUser(null);
+      setCloudVisMap({});
   }, []);
+
 
   /** One-click sync for a single script (sidebar badge click). */
   const handleSyncScript = useCallback(async (id: string) => {
@@ -1230,7 +1265,10 @@ function App() {
           await syncEngine.syncNow(id);
       } catch { /* already surfaced via the engine event listener */ }
       refreshGalleryView();
-  }, [refreshGalleryView]);
+      void refreshCloudVis();
+  }, [refreshGalleryView, refreshCloudVis]);
+
+
 
   /** Push every script in the index (account tab button). */
   const handleSyncAll = useCallback(async () => {
@@ -1242,7 +1280,14 @@ function App() {
           }
       } catch { /* surfaced via events */ }
       refreshGalleryView();
-  }, [savedScripts, refreshGalleryView]);
+      void refreshCloudVis();
+  }, [savedScripts, refreshGalleryView, refreshCloudVis]);
+  // Returning signed-in user: reconcile with the cloud once on app start.
+  useEffect(() => {
+    if (!galleryClient.isAuthenticated) return;
+    void syncEngine.onSignedIn().then(() => { refreshGalleryView(); void refreshCloudVis(); });
+  }, [refreshGalleryView, refreshCloudVis]);
+
 
   // Unified export dispatcher. The ExportMenu picks a format + options; this
   // routes to the right backend (print pipeline for PDF, Blob download for
@@ -1385,7 +1430,7 @@ function App() {
         }
         const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
         const kind = currentBlock.type === 'CHARACTER' ? 'character' : currentBlock.type === 'SCENE_HEADING' ? 'environment' : 'action';
-        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind);
+        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead);
       } else if (effectiveMode === 'GRAYBOX') {
         // Graybox: structured 3D previs JSON (scene layout or shot camera).
         // Mirrors the STORYBOARD scene-slice, but emits a GrayboxData object
@@ -1635,6 +1680,15 @@ function App() {
                 return;
             }
         }
+        if (checkShortcut(e, appSettings.shortcuts.syncCloud)) {
+            e.preventDefault();
+            if (!galleryClient.isAuthenticated) {
+                setSyncError(t.gallery_signInToSync);
+                return;
+            }
+            void handleSyncScript(screenplay.id);
+            return;
+        }
         if (checkShortcut(e, appSettings.shortcuts.aiGraybox)) {
             // Trigger on SCENE_HEADING (layout + blocking), ACTION, or DIALOGUE
             // (camera/运镜). CHARACTER is excluded — it owns the image-prompt
@@ -1718,7 +1772,7 @@ function App() {
         setSelectedBlockId(screenplay.blocks[currentIndex + 1].id);
     }
 
-  }, [screenplay.blocks, handleTypeChange, isReadOnly, appSettings.shortcuts, executeAI]);
+  }, [screenplay.blocks, handleTypeChange, isReadOnly, appSettings.shortcuts, executeAI, handleSyncScript, screenplay.id, t]);
 
   const scrollToBlock = (id: string) => {
     setSelectedBlockId(id);
@@ -1933,6 +1987,8 @@ function App() {
             syncStatus={syncStatusMap}
             gallerySignedIn={!!galleryUser}
             onSyncScript={handleSyncScript}
+            cloudVisibility={cloudVisMap}
+            onChangeVisibility={handleChangeVisibility}
             onOpenGallery={() => setShowGallery(true)}
         />
       </div>
@@ -2429,7 +2485,29 @@ function App() {
             t={t}
             isReadOnly={isReadOnly}
             onToggleReadOnly={() => setIsReadOnly(!isReadOnly)}
+            styleHeadName={screenplay.metadata.styleHead?.name}
+            onOpenStyleHead={() => setShowStyleHeadModal(true)}
         />
+
+        {showStyleHeadModal && (
+            <StyleHeadModal
+                current={screenplay.metadata.styleHead}
+                blocks={screenplay.blocks}
+                templateId={screenplay.metadata.templateId}
+                scriptLanguage={screenplay.metadata.scriptLanguage}
+                appSettings={appSettings}
+                t={t}
+                onClose={() => setShowStyleHeadModal(false)}
+                onApply={(head) => {
+                    setScreenplay(prev => ({
+                        ...prev,
+                        metadata: { ...prev.metadata, styleHead: head },
+                        lastModified: Date.now()
+                    }));
+                    setShowStyleHeadModal(false);
+                }}
+            />
+        )}
 
         {/* AI Modal */}
         {showAIModal && (
