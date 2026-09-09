@@ -158,6 +158,17 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
     }
   };
 
+  const doDelete = async (cloudId: string) => {
+    if (!window.confirm(t.confirmDelete)) return;
+    setError(null);
+    try {
+      await galleryClient.deleteScript(cloudId);
+      syncStore.setSyncState(cloudId, null);
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  };
+
   const changeVisibility = async (cloudId: string, v: ScriptVisibility) => {
     setError(null);
     try {
@@ -362,6 +373,13 @@ export const GalleryModal: React.FC<Props> = ({ isOpen, onClose, signedIn, onLoc
                     className="text-gray-400 hover:text-indigo-500 p-1"
                   >
                     <Users className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => void doDelete(s.id)}
+                    title={t.deleteScript}
+                    className="text-gray-400 hover:text-red-500 p-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                   <select
                     value={s.visibility}
