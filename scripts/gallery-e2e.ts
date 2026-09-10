@@ -42,8 +42,10 @@ async function main() {
   const bob = new GalleryClient(new HttpGalleryApi(BASE));
   const t = Date.now();
 
-  await alice.register({ email: `ga-${t}@t.dev`, password: 'password123', displayName: 'Alice', deviceName: 'e2e' });
-  await bob.register({ email: `gb-${t}@t.dev`, password: 'password123', displayName: 'Bob', deviceName: 'e2e' });
+  // 4A 完全替代: identity comes from the sso_token exchange. The server must
+  // run with AUTH_VERIFY_URL pointing at a stub that accepts these tokens.
+  await alice.ssoExchange(`ga-${t}`);
+  await bob.ssoExchange(`gb-${t}`);
 
   // Alice publishes a script
   const created = await alice.createScript(mk('P2 Public Piece', 'e2e-marker-42'), crypto.randomUUID());

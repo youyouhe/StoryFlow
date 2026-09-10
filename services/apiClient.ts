@@ -87,8 +87,8 @@ export interface AuthResult {
 }
 
 export interface GalleryApi {
-  register(input: RegisterInput): Promise<AuthResult>;
-  login(input: LoginInput): Promise<AuthResult>;
+  /** Exchange the 4A sso_token for a gallery session (4A is the only IdP). */
+  ssoExchange(ssoToken: string): Promise<AuthResult>;
   refresh(refreshToken: string): Promise<AuthResult>;
   logout(accessToken: string, refreshToken: string): Promise<void>;
   listScripts(accessToken: string): Promise<CloudScript[]>;
@@ -233,12 +233,8 @@ export class HttpGalleryApi implements GalleryApi {
     return body as T;
   }
 
-  register(input: RegisterInput) {
-    return this.req<AuthResult>('POST', '/auth/register', { body: input });
-  }
-
-  login(input: LoginInput) {
-    return this.req<AuthResult>('POST', '/auth/login', { body: input });
+  ssoExchange(ssoToken: string) {
+    return this.req<AuthResult>('POST', '/auth/sso', { body: { ssoToken, deviceName: navigator.userAgent.slice(0, 60) } });
   }
 
   refresh(refreshToken: string) {
@@ -477,23 +473,15 @@ export class MockGalleryApi implements GalleryApi {
     };
   }
 
-  async register(input: RegisterInput): Promise<AuthResult> {
+  /** Mock 4A: any ssoToken maps to one deterministic dev user. */
+  async ssoExchange(ssoToken: string): Promise<AuthResult> {
     await this.lag();
     const c = this.load();
-    if (c.users[input.email]) throw new GalleryApiError('EMAIL_TAKEN', 'Email already registered', 409);
-    const user = { id: newId(), email: input.email, displayName: input.displayName, password: input.password };
-    c.users[input.email] = user;
-    const tokens = this.issueTokens(c, user.id);
-    this.save(c);
-    return { user: { id: user.id, email: user.email, displayName: user.displayName }, tokens };
-  }
-
-  async login(input: LoginInput): Promise<AuthResult> {
-    await this.lag();
-    const c = this.load();
-    const user = c.users[input.email];
-    if (!user || user.password !== input.password) {
-      throw new GalleryApiError('BAD_CREDENTIALS', 'Invalid email or password', 401);
+    const email = `4a-dev@sso.local`;
+    let user = c.users[email];
+    if (!user) {
+      user = { id: newId(), email, displayName: '4A Dev User', password: '' };
+      c.users[email] = user;
     }
     const tokens = this.issueTokens(c, user.id);
     this.save(c);
@@ -928,12 +916,9 @@ export class GalleryClient {
     return !!this.auth;
   }
 
-  async register(input: RegisterInput): Promise<GalleryUser> {
-    return this.completeAuth(await this.api.register(input));
-  }
-
-  async login(input: LoginInput): Promise<GalleryUser> {
-    return this.completeAuth(await this.api.login(input));
+  /** Exchange the browser's 4A sso_token for a gallery session. */
+  async ssoExchange(ssoToken: string): Promise<GalleryUser> {
+    return this.completeAuth(await this.api.ssoExchange(ssoToken));
   }
 
   private completeAuth(r: AuthResult): GalleryUser {

@@ -13,45 +13,20 @@ interface SettingsModalProps {
   // ---- Gallery account (P1) ----
   galleryUser?: GalleryUser | null;
   syncError?: string | null;
-  onGalleryLogin?: (email: string, password: string, deviceName: string) => Promise<void>;
-  onGalleryRegister?: (email: string, password: string, displayName: string, deviceName: string) => Promise<void>;
+  onSsoLogin?: () => void;
+  onSsoLogoutEverywhere?: () => void;
   onGalleryLogout?: () => Promise<void>;
   onSyncAll?: () => Promise<void>;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onGalleryLogin, onGalleryRegister, onGalleryLogout, onSyncAll }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll }) => {
   const [metaDataForm, setMetaDataForm] = useState<ScriptMetadata>(metadata);
   const [appSettingsForm, setAppSettingsForm] = useState<AppSettings>(appSettings);
   const [activeTab, setActiveTab] = useState<'script' | 'ai' | 'appearance' | 'shortcuts' | 'account'>('script');
   const [recordingKey, setRecordingKey] = useState<keyof KeyboardShortcuts | null>(null);
 
-  // Gallery auth form state (imperative — not part of the settings save).
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authDisplayName, setAuthDisplayName] = useState('');
-  const [authDevice] = useState(() => (/android|iphone|ipad/i.test(navigator.userAgent) ? 'Mobile' : 'Web'));
-  const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [syncAllBusy, setSyncAllBusy] = useState(false);
-
-  const handleAuth = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (authBusy) return;
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      if (authMode === 'signin') {
-        await onGalleryLogin?.(authEmail.trim(), authPassword, authDevice);
-      } else {
-        await onGalleryRegister?.(authEmail.trim(), authPassword, authDisplayName.trim() || authEmail.split('@')[0], authDevice);
-      }
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setAuthBusy(false);
-    }
-  };
 
   const handleSignOut = async () => {
     setAuthError(null);
@@ -566,60 +541,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         >
                             {t.gallerySignOut}
                         </button>
+                        <button
+                            type="button"
+                            onClick={onSsoLogoutEverywhere}
+                            title={t.gallery4aLogoutEverywhereHint}
+                            className="px-3 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-lg"
+                        >
+                            {t.gallery4aLogoutEverywhere}
+                        </button>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex gap-4 text-xs font-bold">
-                        <button type="button" onClick={() => setAuthMode('signin')}
-                            className={authMode === 'signin' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 pb-0.5' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}>
-                            {t.gallerySignIn}
-                        </button>
-                        <button type="button" onClick={() => setAuthMode('signup')}
-                            className={authMode === 'signup' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 pb-0.5' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}>
-                            {t.gallerySignUp}
-                        </button>
-                    </div>
-                    {authMode === 'signup' && (
-                        <input
-                            type="text"
-                            value={authDisplayName}
-                            onChange={e => setAuthDisplayName(e.target.value)}
-                            placeholder={t.galleryDisplayName}
-                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-sm"
-                        />
-                    )}
-                    <input
-                        type="email"
-                        required
-                        value={authEmail}
-                        onChange={e => setAuthEmail(e.target.value)}
-                        placeholder={t.galleryEmail}
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-sm"
-                    />
-                    <input
-                        type="password"
-                        required
-                        value={authPassword}
-                        onChange={e => setAuthPassword(e.target.value)}
-                        placeholder={t.galleryPassword}
-                        className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-sm"
-                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {t.gallery4aHint}
+                    </p>
                     <button
                         type="button"
-                        onClick={handleAuth}
-                        disabled={authBusy || !authEmail.trim() || !authPassword}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-lg"
+                        onClick={onSsoLogin}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
                     >
-                        {authBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        {authMode === 'signin' ? t.gallerySignIn : t.gallerySignUp}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                        className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline"
-                    >
-                        {authMode === 'signin' ? t.gallerySwitchToSignUp : t.gallerySwitchToSignIn}
+                        <User className="w-4 h-4" />
+                        {t.gallery4aSignIn}
                     </button>
                   </div>
                 )}

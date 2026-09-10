@@ -77,11 +77,9 @@ async function main() {
   const events: SyncEvent[] = [];
   engine.on(e => events.push(e));
 
-  const creds = { email: 'smoke@test.dev', password: 'secret123', deviceName: 'smoke-runner' };
-
-  // 1. register + first push
-  const user = await client.register({ ...creds, displayName: 'Smoke Writer' });
-  check('register → signed in', user.displayName === 'Smoke Writer' && client.isAuthenticated);
+  // 1. SSO exchange (Mock 4A: any token maps to the dev user) + first push
+  const user = await client.ssoExchange(`smoke-${Date.now()}`);
+  check('ssoExchange → signed in', client.isAuthenticated);
 
   const spA = mk('a', 'Script A');
   store.putScreenplay(spA);
@@ -119,7 +117,7 @@ async function main() {
   check('conflict-forked event fired', events.some(e => e.type === 'conflict-forked'));
 
   // 4. multi-device pull
-  mock.debugCreateExternal(creds.email, mk('c', 'Script C'));
+  mock.debugCreateExternal('4a-dev@sso.local', mk('c', 'Script C'));
   await engine.pullAll();
   const pulled = store.allScreenplayIds().map(id => store.getScreenplay(id)!).find(s => s.metadata.title === 'Script C');
   check('cloud-only script pulled', !!pulled && engine.statusOf(pulled.id) === 'synced');
@@ -137,7 +135,7 @@ async function main() {
   await engine.flush();
   check("flush skipped while signed out (stays 'dirty')", engine.statusOf(spA.id) === 'dirty');
 
-  await client.login(creds);
+  await client.ssoExchange(`smoke-${Date.now()}`);
   await engine.onSignedIn();
   check('sign-in drains outbox → revision 5', engine.statusOf(spA.id) === 'synced' && store.getSyncState(spA.id)?.baseRevision === 5);
 

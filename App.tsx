@@ -27,6 +27,7 @@ import { GalleryModal } from './components/GalleryModal';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { getAiLog } from './services/aiLog';
 import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
+import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
 import type { ScriptVisibility } from './services/apiClient';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS, grayboxOverviewLine } from './utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from './utils/grayboxToBlender';
@@ -174,6 +175,9 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
+  // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
+  // shared cookie) so the exchange effect below can establish the session.
+  initSSO();
   const [galleryUser, setGalleryUser] = useState<GalleryUser | null>(galleryClient.user);
   const [syncStatusMap, setSyncStatusMap] = useState<Record<string, SyncStatus>>(readAllSyncStatuses);
   const [cloudVisMap, setCloudVisMap] = useState<Record<string, ScriptVisibility>>({});
@@ -1232,26 +1236,34 @@ function App() {
       }
   }, [refreshCloudVis]);
 
-  const handleGalleryLogin = useCallback(async (email: string, password: string, deviceName: string) => {
+  /** 4A SSO: exchange the browser's sso_token for a gallery session. */
+  const handleSSOExchange = useCallback(async () => {
+      const ssoToken = getSsoToken();
+      if (!ssoToken || galleryClient.isAuthenticated) return;
       setSyncError(null);
-      await galleryClient.login({ email, password, deviceName });
-      setGalleryUser(galleryClient.user);
-      await syncEngine.onSignedIn();
-      refreshGalleryView();
-      void refreshCloudVis();
+      try {
+          await galleryClient.ssoExchange(ssoToken);
+          setGalleryUser(galleryClient.user);
+          await syncEngine.onSignedIn();
+          refreshGalleryView();
+          void refreshCloudVis();
+      } catch (e) {
+          setSyncError(e instanceof Error ? e.message : String(e));
+      }
   }, [refreshGalleryView, refreshCloudVis]);
 
-  const handleGalleryRegister = useCallback(async (email: string, password: string, displayName: string, deviceName: string) => {
-      setSyncError(null);
-      await galleryClient.register({ email, password, displayName, deviceName });
-      setGalleryUser(galleryClient.user);
-      await syncEngine.onSignedIn();
-      refreshGalleryView();
-      void refreshCloudVis();
-  }, [refreshGalleryView, refreshCloudVis]);
+  // SSO token arriving via URL/cookie (login redirect or cross-subdomain):
+  // exchange it into a gallery session once, on mount.
+  useEffect(() => {
+      if (!getSsoToken()) return;
+      void handleSSOExchange();
+  }, [handleSSOExchange]);
 
+  /** App-level logout: drop the 4A token + gallery session. */
   const handleGalleryLogout = useCallback(async () => {
-      await galleryClient.logout();
+      const auth = galleryClient.isAuthenticated;
+      if (auth) await galleryClient.logout();
+      clearToken();
       setGalleryUser(null);
       setCloudVisMap({});
   }, []);
@@ -2734,8 +2746,8 @@ function App() {
                 t={t}
                 galleryUser={galleryUser}
                 syncError={syncError}
-                onGalleryLogin={handleGalleryLogin}
-                onGalleryRegister={handleGalleryRegister}
+                onSsoLogin={() => requireLogin()}
+                onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
                 onGalleryLogout={handleGalleryLogout}
                 onSyncAll={handleSyncAll}
             />

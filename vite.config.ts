@@ -11,8 +11,11 @@ export default defineConfig(({ mode }) => {
         strictPort: true,
       },
       plugins: [react()],
-      clearScreen: false,
-      envPrefix: ['VITE_'],
+      build: {
+        // 'assets/' collides with the gallery API route /assets/* when the
+        // gallery hosts this SPA — bundle files live under /static/ instead.
+        assetsDir: 'static',
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

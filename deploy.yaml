@@ -1,0 +1,10 @@
+name: StoryFlow
+slug: storyflow-web
+stack: static
+branch: main
+build: npm run build
+# Build output: dist/ (Vite). The wizard serves it as a static site.
+env:
+  # API base baked into the bundle at build time ('same-origin' = the gallery
+  # service hosts this SPA and its API on one domain).
+  VITE_GALLERY_URL: same-origin

@@ -91,9 +91,16 @@ export const syncStore: SyncStoreAdapter = {
 // Default: MockGalleryApi (offline dev, zero backend). To run against a real
 // server, set VITE_GALLERY_URL in .env.local (gitignored), e.g.:
 //   VITE_GALLERY_URL=http://127.0.0.1:8787
+// 'same-origin' = the gallery hosts this SPA and its API on one domain
+// (production topology); requests go to relative /auth /scripts … paths.
 import { HttpGalleryApi } from './apiClient';
 const galleryUrl = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_GALLERY_URL ?? '').trim();
-const api = galleryUrl ? new HttpGalleryApi(galleryUrl) : new MockGalleryApi();
+const SAME_ORIGIN = galleryUrl.toLowerCase() === 'same-origin';
+const api = SAME_ORIGIN
+  ? new HttpGalleryApi('')
+  : galleryUrl
+    ? new HttpGalleryApi(galleryUrl)
+    : new MockGalleryApi();
 
 /** What the account tab displays so dev builds are unmistakable. */
 export const GALLERY_BACKEND: 'mock' | 'http' = galleryUrl ? 'http' : 'mock';

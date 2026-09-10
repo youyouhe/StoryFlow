@@ -71,14 +71,13 @@ async function main() {
   const store = new MemoryStore();
   const engine = new SyncEngine(client, store, { flushDelayMs: 20 });
 
-  const email = `e2e-${Date.now()}@test.dev`;
-  const user = await client.register({
-    email,
-    password: 'password123',
-    displayName: 'E2E Runner',
-    deviceName: 'e2e'
-  });
-  check('register over HTTP', user.displayName === 'E2E Runner');
+  const user = await client.ssoExchange(`e2e-${Date.now()}`);
+  check('ssoExchange over HTTP', client.isAuthenticated);
+
+  // second "device": its own client session (fresh exchange), pushing behind the engine's back
+  const second = new GalleryClient(new HttpGalleryApi(BASE));
+  await second.ssoExchange(`e2e-2-${Date.now()}`);
+  check('second device logged in', second.isAuthenticated);
 
   // create + first push
   const spA = mk('a', 'E2E Script');
@@ -93,10 +92,7 @@ async function main() {
   while (engine.statusOf(spA.id) !== 'synced' && Date.now() - t0 < 3000) await sleep(20);
   check('edit auto-flushed → rev2', store.getSyncState(spA.id)?.baseRevision === 2);
 
-  // second "device": its own client session (login), pushing behind the engine's back
-  const second = new GalleryClient(new HttpGalleryApi(BASE));
-  await second.login({ email, password: 'password123', deviceName: 'device-2' });
-  check('second device logged in', second.isAuthenticated);
+  // (second device session already established above via ssoExchange)
   await second.pushScript(engine.cloudIdOf(spA.id)!, 2, {
     ...mk('x', 'E2E Script'),
     blocks: [{ id: 'x1', type: 'ACTION', content: 'from device 2' }]
