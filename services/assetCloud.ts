@@ -8,6 +8,7 @@
  * so the server never touches full-size media.
  */
 import { galleryClient } from './gallery';
+import { isGalleryApiError } from './apiClient';
 import type { AssetKind, CloudAsset } from './apiClient';
 
 const MAP_KEY = 'asset_cloud_map';
@@ -115,8 +116,25 @@ export async function uploadLocalAsset(src: UploadSource): Promise<{ cloudId: st
 }
 
 /** Fetch raw bytes of a cloud asset as a Blob (for import into the local library). */
-export async function downloadCloudBlob(cloudId: string): Promise<{ blob: Blob; asset: CloudAsset | null }> {
-  const bytes = await galleryClient.assetBytes(cloudId, false);
+export async function downloadCloudBlob(cloudId: string): Promise<{
+  blob: Blob; asset: CloudAsset | null;
+  /** Set when the fetch was credit-gated: consume ran first, then the retry. */
+  purchased?: boolean;
+  /** Thrown as GalleryApiError('INSUFFICIENT_CREDITS') when balance is short. */
+}> {
+  const attempt = (grant?: string) => galleryClient.assetBytes(cloudId, false, grant);
+  let bytes: Uint8Array;
+  let purchased = false;
+  try {
+    bytes = await attempt();
+  } catch (e) {
+    if (!isGalleryApiError(e) || e.code !== 'CREDITS_REQUIRED') throw e;
+    // Gated asset: consume credits (server releases the grant), then retry.
+    const consume = await galleryClient.consumeCredit(cloudId);
+    if (!consume.grantToken) throw e; // free/owner race — shouldn't happen
+    purchased = consume.charged;
+    bytes = await attempt(consume.grantToken);
+  }
   let asset: CloudAsset | null = null;
   try {
     const all = await galleryClient.listAssets();
@@ -124,7 +142,8 @@ export async function downloadCloudBlob(cloudId: string): Promise<{ blob: Blob; 
   } catch { /* meta is optional for the download itself */ }
   return {
     blob: new Blob([bytes as unknown as BlobPart], { type: asset?.mime ?? 'application/octet-stream' }),
-    asset
+    asset,
+    purchased
   };
 }
 

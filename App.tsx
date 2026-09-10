@@ -28,6 +28,7 @@ import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Sub
 import { getAiLog } from './services/aiLog';
 import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
 import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
+import { isGalleryApiError } from './services/apiClient';
 import type { ScriptVisibility } from './services/apiClient';
 import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS, grayboxOverviewLine } from './utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from './utils/grayboxToBlender';
@@ -182,6 +183,7 @@ function App() {
   const [syncStatusMap, setSyncStatusMap] = useState<Record<string, SyncStatus>>(readAllSyncStatuses);
   const [cloudVisMap, setCloudVisMap] = useState<Record<string, ScriptVisibility>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -1248,6 +1250,12 @@ function App() {
           refreshGalleryView();
           void refreshCloudVis();
       } catch (e) {
+          // 4A rejected the token (expired / revoked / superseded by another
+          // device): drop it and return to anonymous instead of retrying a
+          // dead token on every reload.
+          if (isGalleryApiError(e) && (e.code === 'INVALID_TOKEN' || e.code === 'AUTH_REQUIRED')) {
+              clearToken();
+          }
           setSyncError(e instanceof Error ? e.message : String(e));
       }
   }, [refreshGalleryView, refreshCloudVis]);
@@ -1266,6 +1274,16 @@ function App() {
       clearToken();
       setGalleryUser(null);
       setCloudVisMap({});
+  }, []);
+
+  // Session dropped at runtime (refresh rejected after supersede/revoke):
+  // reflect the anonymous state immediately instead of waiting for a reload.
+  useEffect(() => {
+      galleryClient.onAuthLost = () => {
+          setGalleryUser(null);
+          setCloudVisMap({});
+      };
+      return () => { galleryClient.onAuthLost = null; };
   }, []);
 
 
@@ -1300,6 +1318,13 @@ function App() {
     void syncEngine.onSignedIn().then(() => { refreshGalleryView(); void refreshCloudVis(); });
   }, [refreshGalleryView, refreshCloudVis]);
 
+  // P5: keep the credit balance in sync with the signed-in 4A identity.
+  useEffect(() => {
+    if (!galleryUser) { setCreditBalance(null); return; }
+    galleryClient.getCreditBalance()
+      .then(r => setCreditBalance(r.balance))
+      .catch(() => setCreditBalance(null));
+  }, [galleryUser]);
 
   // Unified export dispatcher. The ExportMenu picks a format + options; this
   // routes to the right backend (print pipeline for PDF, Blob download for
@@ -2746,6 +2771,7 @@ function App() {
                 t={t}
                 galleryUser={galleryUser}
                 syncError={syncError}
+                creditBalance={creditBalance}
                 onSsoLogin={() => requireLogin()}
                 onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
                 onGalleryLogout={handleGalleryLogout}

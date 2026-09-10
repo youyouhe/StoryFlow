@@ -91,12 +91,24 @@ export function getSsoToken(): string | null {
 }
 
 export function clearToken(): void {
+  // Audit notice token: localStorage first, shared cookie as fallback.
+  const token = localStorage.getItem(TOKEN_KEY) || getCookie('sso_token');
   localStorage.removeItem(TOKEN_KEY);
   deleteSsoCookie();
   try {
     sessionStorage.setItem(LOGOUT_FLAG_KEY, '1');
   } catch {
     /* ignore */
+  }
+  if (token) {
+    // Best-effort audit to 4A via our backend's same-origin proxy — a direct
+    // cross-origin POST would die in CORS preflight (skill pitfall #3).
+    // 4A counts 401 as success; failures never block logout.
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(3000),
+    }).catch(() => {});
   }
 }
 

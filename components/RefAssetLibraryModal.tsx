@@ -11,6 +11,7 @@ import {
   cloudObjectUrl
 } from '../services/assetCloud';
 import { addRefImage } from '../services/refImageStore';
+import { isGalleryApiError } from '../services/apiClient';
 import type { CloudAsset } from '../services/apiClient';
 /**
  * RefAssetLibraryModal — the management surface for the white-model
@@ -59,6 +60,16 @@ interface Labels {
   downloading: string;
   transcode: string;
   transcoding: string;
+  // ---- credits (P5) ----
+  creditChip: (n: number) => string;
+  priceFree: string;
+  priceSmall: string;
+  setPrice: string;
+  priceMedium: string;
+  priceLarge: string;
+  needCreditsTitle: (balance: number, price: number) => string;
+  needCreditsHint: string;
+  purchased: string;
 }
 
 export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
@@ -100,6 +111,15 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     downloading: 'Downloading…',
     transcode: 'Transcode to 1080p proxy',
     transcoding: 'Queued…',
+    creditChip: n => `⭐ ${(n / 1000).toFixed(0)}`,
+    priceFree: 'Free',
+    priceSmall: '10 cr',
+    setPrice: 'Set download price (credits)',
+    priceMedium: '30 cr',
+    priceLarge: '100 cr',
+    needCreditsTitle: (balance, price) => `Not enough credits — balance ${(balance / 1000).toFixed(0)}, this asset costs ${(price / 1000).toFixed(0)}.`,
+    needCreditsHint: 'Earn credits by running a community storage node (scripts/community-node.mjs).',
+    purchased: 'Purchased with credits ✓',
   },
   zh: {
     title: '参考资产库',
@@ -139,6 +159,15 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     downloading: '下载中…',
     transcode: '转码为 1080p 代理档',
     transcoding: '已入队…',
+    creditChip: n => `⭐ ${(n / 1000).toFixed(0)}`,
+    priceFree: '免费',
+    priceSmall: '10 积分',
+    setPrice: '设置下载定价（积分）',
+    priceMedium: '30 积分',
+    priceLarge: '100 积分',
+    needCreditsTitle: (balance, price) => `积分不足——余额 ${(balance / 1000).toFixed(0)}，该资产需 ${(price / 1000).toFixed(0)}。`,
+    needCreditsHint: '运行社区存储节点即可赚积分（scripts/community-node.mjs）。',
+    purchased: '已用积分购买 ✓',
   },
 };
 
@@ -218,6 +247,17 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
   const [downloading, setDownloading] = useState<string | null>(null);
   const [transcoding, setTranscoding] = useState<string | null>(null);
   const [cloudUrls, setCloudUrls] = useState<Record<string, string>>({});
+  // ---- credits (P5): balance chip, purchase banner, per-asset pricing ----
+  const [credits, setCredits] = useState<number | null>(null);
+  const [needCredits, setNeedCredits] = useState<{ balance: number; price: number } | null>(null);
+  const [creditMsg, setCreditMsg] = useState<string | null>(null);
+
+  const loadCredits = useCallback(async () => {
+    if (!galleryClient.isAuthenticated) { setCredits(null); return; }
+    try { setCredits((await galleryClient.getCreditBalance()).balance); }
+    catch { setCredits(null); }
+  }, []);
+  useEffect(() => { void loadCredits(); }, [loadCredits]);
 
   const refreshCloud = useCallback(async () => {
     if (!galleryClient.isAuthenticated) { setCloud(null); return; }
@@ -277,17 +317,39 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
   const handleDownload = useCallback(async (asset: CloudAsset) => {
     if (downloading) return;
     setDownloading(asset.id);
+    setNeedCredits(null);
+    setCreditMsg(null);
     try {
-      const { blob } = await downloadCloudBlob(asset.id);
+      const { blob, purchased } = await downloadCloudBlob(asset.id);
       // panorama3d assets import with the panorama mime so the local preview
       // lightbox routes them into the 360° viewer (same as direct uploads).
       const type = asset.kind === 'panorama3d' ? 'image/panorama' : asset.mime;
       const file = new File([blob], asset.name || `asset-${asset.id.slice(0, 8)}`, { type });
       await addRefImage(file, { source: 'upload', name: asset.name || undefined });
       onRescan(); // reload local library state in App
-    } catch { /* keep the button clickable for a retry */ }
+      if (purchased) {
+        setCreditMsg(labels.purchased);
+        void loadCredits();
+      }
+    } catch (e) {
+      if (isGalleryApiError(e) && e.code === 'INSUFFICIENT_CREDITS') {
+        setNeedCredits({
+          balance: Number(e.extra?.balance ?? 0),
+          price: Number(e.extra?.price ?? 0)
+        });
+      }
+      /* otherwise keep the button clickable for a retry */
+    }
     setDownloading(null);
-  }, [downloading, onRescan]);
+  }, [downloading, onRescan, labels, loadCredits]);
+
+  const handleSetPricing = useCallback(async (assetId: string, tier: string) => {
+    try {
+      if (tier === 'free') await galleryClient.clearAssetPricing(assetId);
+      else await galleryClient.setAssetPricing(assetId, tier);
+      await refreshCloud();
+    } catch { /* surfaced by the tile staying as-is */ }
+  }, [refreshCloud]);
 
   const handleTranscode = useCallback(async (asset: CloudAsset) => {
     if (transcoding) return;
@@ -387,6 +449,11 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
             </button>
           ) : (
             <span className="text-[9px] text-gray-400" title={labels.signInFirst}>☁︎</span>
+          )}
+          {signedIn && credits !== null && (
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" title={labels.needCreditsHint}>
+              {labels.creditChip(credits)}
+            </span>
           )}
           {syncMsg && <span className="text-[9px] text-gray-500 dark:text-gray-400">{syncMsg}</span>}
           <input
@@ -544,7 +611,21 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                 <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">☁ {labels.cloudSection}</span>
                 <span className="text-[10px] text-gray-400">{cloud?.length ?? ''}</span>
                 {cloudLoading && <span className="text-[10px] text-gray-400">{labels.cloudLoading}</span>}
+                {credits !== null && <span className="text-[10px] text-amber-600 dark:text-amber-400">{labels.creditChip(credits)}</span>}
               </div>
+              {needCredits && (
+                <div className="mb-2 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                  <div className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                    {labels.needCreditsTitle(needCredits.balance, needCredits.price)}
+                  </div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{labels.needCreditsHint}</div>
+                </div>
+              )}
+              {creditMsg && (
+                <div className="mb-2 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  {creditMsg}
+                </div>
+              )}
               {!cloud ? null : cloud.length === 0 ? (
                 <p className="text-xs text-gray-400">{labels.cloudEmpty}</p>
               ) : (
@@ -585,6 +666,18 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                             </button>
                           )}
                         </div>
+                        {/* P5: credit gate (owner marks the price tier) */}
+                        <select
+                          value={a.pricing?.tier ?? 'free'}
+                          onChange={e => void handleSetPricing(a.id, e.target.value)}
+                          title={labels.setPrice}
+                          className="mt-1 w-full px-1 py-0.5 rounded border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[9px] text-gray-600 dark:text-gray-300 outline-none"
+                        >
+                          <option value="free">{labels.priceFree}</option>
+                          <option value="small">{labels.priceSmall}</option>
+                          <option value="medium">{labels.priceMedium}</option>
+                          <option value="large">{labels.priceLarge}</option>
+                        </select>
                       </div>
                     </div>
                   ))}

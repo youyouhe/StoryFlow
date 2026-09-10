@@ -32,6 +32,8 @@ export type GalleryErrorCode =
   | 'FORBIDDEN'
   | 'NETWORK'
   | 'RATE_LIMITED'
+  | 'CREDITS_REQUIRED'
+  | 'INSUFFICIENT_CREDITS'
   | 'SERVER';
 
 export class GalleryApiError extends Error {
@@ -40,7 +42,9 @@ export class GalleryApiError extends Error {
     message: string,
     readonly status = 0,
     /** Server's latest revision, present on REVISION_CONFLICT. */
-    readonly serverRevision?: number
+    readonly serverRevision?: number,
+    /** Server's extra envelope fields (e.g. {balance, price} on credit errors). */
+    readonly extra?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'GalleryApiError';
@@ -118,7 +122,11 @@ export interface GalleryApi {
   assetTranscodes(accessToken: string, assetId: string): Promise<TranscodeJob[]>;
   deleteAsset(accessToken: string, assetId: string): Promise<void>;
   /** Fetch raw/thumb bytes with auth (caller turns them into an object URL). */
-  assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array>;
+  assetBytes(accessToken: string, assetId: string, thumb: boolean, grant?: string): Promise<Uint8Array>;
+  getCreditBalance(accessToken: string): Promise<{ balance: number; todayEarned: number }>;
+  consumeCredit(accessToken: string, assetId: string): Promise<{ charged: boolean; grantToken: string | null; expiresAt: number | null; balance: number }>;
+  setAssetPricing(accessToken: string, assetId: string, tier: string): Promise<{ assetId: string; tier: string; price: number }>;
+  clearAssetPricing(accessToken: string, assetId: string): Promise<{ unmarked: boolean }>;
 }
 
 export type AssetKind = 'image' | 'video' | 'panorama3d';
@@ -156,10 +164,13 @@ export interface CloudAsset {
   size: number;
   width: number | null;
   height: number | null;
+  duration?: number | null;
   status: string;
   createdAt: number;
   /** P4: video proxy transcode state (none|queued|running|ready|failed). */
   transcodeStatus?: string;
+  /** P5: present when the creator marked this asset credit-gated. */
+  pricing?: { tier: string; price: number } | null;
 }
 
 export interface TranscodeJob {
@@ -221,14 +232,15 @@ export class HttpGalleryApi implements GalleryApi {
     if (res.status === 204) return undefined as T;
     const body = await res.json().catch(() => null);
     if (!res.ok) {
-      const err = (body?.error ?? {}) as { code?: GalleryErrorCode; message?: string; serverRevision?: number };
+      const err = (body?.error ?? {}) as { code?: GalleryErrorCode; message?: string; serverRevision?: number; extra?: Record<string, unknown> };
       const fallback: GalleryErrorCode =
         res.status === 401 ? 'INVALID_TOKEN'
         : res.status === 404 ? 'NOT_FOUND'
         : res.status === 409 ? 'REVISION_CONFLICT'
         : res.status === 429 ? 'RATE_LIMITED'
+        : res.status === 402 ? 'CREDITS_REQUIRED'
         : 'SERVER';
-      throw new GalleryApiError(err.code ?? fallback, err.message ?? res.statusText, res.status, err.serverRevision);
+      throw new GalleryApiError(err.code ?? fallback, err.message ?? res.statusText, res.status, err.serverRevision, err.extra);
     }
     return body as T;
   }
@@ -345,13 +357,42 @@ export class HttpGalleryApi implements GalleryApi {
     return this.req<TranscodeJob[]>('GET', `/assets/${assetId}/transcodes`, { token: accessToken });
   }
 
-  async assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array> {
+  async assetBytes(accessToken: string, assetId: string, thumb: boolean, grant?: string): Promise<Uint8Array> {
     const res = await fetch(`${this.baseUrl}/assets/${assetId}/${thumb ? 'thumb' : 'raw'}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(grant ? { 'X-Credit-Grant': grant } : {})
+      },
       redirect: 'follow'
     });
-    if (!res.ok) throw new GalleryApiError(res.status === 404 ? 'NOT_FOUND' : 'SERVER', `Asset fetch failed: ${res.status}`, res.status);
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null))?.error as { code?: GalleryErrorCode } | undefined;
+      const code: GalleryErrorCode = res.status === 404 ? 'NOT_FOUND'
+        : res.status === 402 ? (err?.code ?? 'CREDITS_REQUIRED')
+        : 'SERVER';
+      throw new GalleryApiError(code, `Asset fetch failed: ${res.status}`, res.status);
+    }
     return new Uint8Array(await res.arrayBuffer());
+  }
+
+  getCreditBalance(accessToken: string) {
+    return this.req<{ balance: number; todayEarned: number }>('GET', '/credit/balance', { token: accessToken });
+  }
+
+  consumeCredit(accessToken: string, assetId: string) {
+    return this.req<{ charged: boolean; grantToken: string | null; expiresAt: number | null; balance: number }>(
+      'POST', '/credit/consume', { token: accessToken, body: { assetId } }
+    );
+  }
+
+  setAssetPricing(accessToken: string, assetId: string, tier: string) {
+    return this.req<{ assetId: string; tier: string; price: number }>(
+      'POST', `/assets/${assetId}/pricing`, { token: accessToken, body: { tier } }
+    );
+  }
+
+  clearAssetPricing(accessToken: string, assetId: string) {
+    return this.req<{ unmarked: boolean }>('DELETE', `/assets/${assetId}/pricing`, { token: accessToken });
   }
 }
 
@@ -378,6 +419,8 @@ interface MockCloud {
   scripts: MockScript[];
   groups?: MockGroup[];
   assets?: MockAsset[];
+  /** P5: 4A-id-less mock — keyed by mock user id. Milli-credits. */
+  creditBalances?: Record<string, number>;
 }
 
 interface MockGroup {
@@ -403,6 +446,8 @@ interface MockAsset {
   status: 'pending' | 'ready';
   createdAt: number;
   deletedAt?: number;
+  /** P5: credit gate (system tiers, mock mirrors the backend contract). */
+  pricing?: { tier: string; price: number } | null;
 }
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -805,7 +850,8 @@ export class MockGalleryApi implements GalleryApi {
         id: a.id, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
         width: a.width ?? null, height: a.height ?? null, duration: a.duration ?? null,
         meta: a.meta, status: a.status, createdAt: a.createdAt,
-        transcodeStatus: (a as { transcodeStatus?: string }).transcodeStatus ?? 'none'
+        transcodeStatus: (a as { transcodeStatus?: string }).transcodeStatus ?? 'none',
+        pricing: a.pricing ?? null
       }));
   }
 
@@ -827,13 +873,69 @@ export class MockGalleryApi implements GalleryApi {
     13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
   ]);
 
-  async assetBytes(accessToken: string, assetId: string, thumb: boolean): Promise<Uint8Array> {
+  async assetBytes(accessToken: string, assetId: string, thumb: boolean, grant?: string): Promise<Uint8Array> {
     await this.lag();
     const c = this.load();
-    this.userFromAccess(c, accessToken);
+    const user = this.userFromAccess(c, accessToken);
     const a = c.assets?.find(x => x.id === assetId && x.status === 'ready' && !x.deletedAt);
     if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    const pricing = a.pricing;
+    if (!thumb && pricing && a.ownerId !== user.id && grant !== `mock-grant-${assetId}`) {
+      throw new GalleryApiError('CREDITS_REQUIRED', 'This asset requires credits to download', 402);
+    }
     return thumb || a.kind !== 'video' ? MockGalleryApi.PLACEHOLDER_PNG : MockGalleryApi.PLACEHOLDER_PNG;
+  }
+
+  async getCreditBalance(accessToken: string): Promise<{ balance: number; todayEarned: number }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const balance = c.creditBalances?.[user.id] ?? 30000;
+    return { balance, todayEarned: 0 };
+  }
+
+  async consumeCredit(accessToken: string, assetId: string): Promise<{ charged: boolean; grantToken: string | null; expiresAt: number | null; balance: number }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const balances = c.creditBalances ?? (c.creditBalances = {});
+    const balance = balances[user.id] ?? 30000;
+    const a = c.assets?.find(x => x.id === assetId && x.status === 'ready' && !x.deletedAt);
+    const pricing = a?.pricing;
+    if (!pricing || a?.ownerId === user.id) {
+      return { charged: false, grantToken: null, expiresAt: null, balance };
+    }
+    if (balance < pricing.price) {
+      throw new GalleryApiError('INSUFFICIENT_CREDITS', 'Not enough credits for this asset', 402);
+    }
+    balances[user.id] = balance - pricing.price;
+    this.save(c);
+    return { charged: true, grantToken: `mock-grant-${assetId}`, expiresAt: Date.now() + 600_000, balance: balances[user.id] };
+  }
+
+  async setAssetPricing(accessToken: string, assetId: string, tier: string): Promise<{ assetId: string; tier: string; price: number }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const a = c.assets?.find(x => x.id === assetId && x.ownerId === user.id && !x.deletedAt);
+    if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    const tiers: Record<string, number> = { small: 10000, medium: 30000, large: 100000 };
+    const price = tiers[tier];
+    if (!price) throw new GalleryApiError('VALIDATION', `tier must be one of ${Object.keys(tiers).join('/')}`, 422);
+    a.pricing = { tier, price };
+    this.save(c);
+    return { assetId, tier, price };
+  }
+
+  async clearAssetPricing(accessToken: string, assetId: string): Promise<{ unmarked: boolean }> {
+    await this.lag();
+    const c = this.load();
+    const user = this.userFromAccess(c, accessToken);
+    const a = c.assets?.find(x => x.id === assetId && x.ownerId === user.id && !x.deletedAt);
+    if (!a) throw new GalleryApiError('NOT_FOUND', 'Asset not found', 404);
+    delete a.pricing;
+    this.save(c);
+    return { unmarked: true };
   }
 
   assetTranscode(accessToken: string, assetId: string): Promise<{ jobId: string; status: string; deduplicated?: boolean }> {
@@ -899,6 +1001,9 @@ interface AuthPersist {
 export class GalleryClient {
   private auth: AuthPersist | null;
   private refreshInFlight: Promise<boolean> | null = null;
+  /** UI hook: invoked when the stored session is dropped after a failed
+   *  refresh (superseded/revoked token) so the app can return to anonymous. */
+  onAuthLost: (() => void) | null = null;
 
   constructor(private api: GalleryApi) {
     try {
@@ -1027,8 +1132,24 @@ export class GalleryClient {
     return this.authed(t => this.api.assetTranscodes(t, assetId));
   }
 
-  assetBytes(assetId: string, thumb: boolean) {
-    return this.authed(t => this.api.assetBytes(t, assetId, thumb));
+  assetBytes(assetId: string, thumb: boolean, grant?: string) {
+    return this.authed(t => this.api.assetBytes(t, assetId, thumb, grant));
+  }
+
+  getCreditBalance() {
+    return this.authed(t => this.api.getCreditBalance(t));
+  }
+
+  consumeCredit(assetId: string) {
+    return this.authed(t => this.api.consumeCredit(t, assetId));
+  }
+
+  setAssetPricing(assetId: string, tier: string) {
+    return this.authed(t => this.api.setAssetPricing(t, assetId, tier));
+  }
+
+  clearAssetPricing(assetId: string) {
+    return this.authed(t => this.api.clearAssetPricing(t, assetId));
   }
 
   /** Run an authenticated call; on token rejection refresh once and retry. */
@@ -1056,9 +1177,8 @@ export class GalleryClient {
         } catch {
           this.auth = null;
           localStorage.removeItem(AUTH_KEY);
+          this.onAuthLost?.();
           return false;
-        } finally {
-          this.refreshInFlight = null;
         }
       })();
     }

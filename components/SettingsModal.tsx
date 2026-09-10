@@ -17,9 +17,11 @@ interface SettingsModalProps {
   onSsoLogoutEverywhere?: () => void;
   onGalleryLogout?: () => Promise<void>;
   onSyncAll?: () => Promise<void>;
+  /** P5: milli-credit balance for the signed-in 4A identity. */
+  creditBalance?: number | null;
 }
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance }) => {
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll }) => {
   const [metaDataForm, setMetaDataForm] = useState<ScriptMetadata>(metadata);
   const [appSettingsForm, setAppSettingsForm] = useState<AppSettings>(appSettings);
   const [activeTab, setActiveTab] = useState<'script' | 'ai' | 'appearance' | 'shortcuts' | 'account'>('script');
@@ -523,6 +525,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">{t.gallerySignedInAs}</div>
                         <div className="font-bold text-gray-800 dark:text-gray-100">{galleryUser.displayName}</div>
                         <div className="text-xs text-gray-500">{galleryUser.email}</div>
+                        {typeof creditBalance === 'number' && (
+                            <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-semibold">
+                                ⭐ {t.galleryCredits}: {(creditBalance / 1000).toFixed(0)}
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button
