@@ -6,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads, generateOpenings, OpeningCandidate } from './services/geminiService';
 import { Graybox3DView } from './components/Graybox3DView';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
@@ -187,6 +187,11 @@ function App() {
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [openingPicker, setOpeningPicker] = useState<ScriptTemplate | null>(null);
+  const [openingOptions, setOpeningOptions] = useState<OpeningCandidate[] | null>(null);
+  const [openingsLoading, setOpeningsLoading] = useState(false);
+  const [openingsError, setOpeningsError] = useState<string | null>(null);
+  const [chosenOpening, setChosenOpening] = useState<number | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showStyleHeadModal, setShowStyleHeadModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -1065,18 +1070,42 @@ function App() {
     }));
   }, [isReadOnly]);
 
-  const handleCreateFromTemplate = (templateId: string) => {
+  /** P5-openings: template card click opens the opening picker instead of
+   *  creating instantly — the user picks the template default or an
+   *  AI-invented random opening. */
+  const openOpeningPicker = (template: ScriptTemplate) => {
+    setOpeningPicker(template);
+    setOpeningOptions(null);
+    setOpeningsError(null);
+    setChosenOpening(null);
+    setOpeningsLoading(true);
+    let newScriptLanguage = screenplay.metadata.scriptLanguage;
+    if (newScriptLanguage === 'en' && lang === 'zh') newScriptLanguage = 'zh';
+    generateOpenings(
+      t.templates[template.nameKey as keyof typeof t.templates] || template.id,
+      template.systemPrompt,
+      newScriptLanguage,
+      appSettings
+    )
+      .then(setOpeningOptions)
+      .catch(e => setOpeningsError(String(e?.message || e)))
+      .finally(() => setOpeningsLoading(false));
+  };
+
+  const handleCreateFromTemplate = (templateId: string, opening?: OpeningCandidate) => {
     const template = TEMPLATES.find(t => t.id === templateId) || TEMPLATES[0];
-    
+
+    let initialBlocks: Array<Omit<ScriptBlock, 'id'>> = template.initialBlocks;
+
     let newScriptLanguage = screenplay.metadata.scriptLanguage;
     if (newScriptLanguage === 'en' && lang === 'zh') {
         newScriptLanguage = 'zh';
     }
 
-    let initialBlocks = template.initialBlocks;
     if ((newScriptLanguage === 'zh' || newScriptLanguage === 'dual') && template.initialBlocksZh) {
         initialBlocks = template.initialBlocksZh;
     }
+    if (opening) initialBlocks = opening.blocks;
 
     const blocksWithNewIds = initialBlocks.map(b => ({
         ...b,
@@ -1100,6 +1129,7 @@ function App() {
     setScreenplay(newScript);
     setSelectedBlockId(blocksWithNewIds[0].id);
     setShowTemplateModal(false);
+    setOpeningPicker(null);
     setSidebarOpen(false);
     setIsReadOnly(false);
     setTimeout(() => setSidebarOpen(true), 300);
@@ -2826,7 +2856,7 @@ function App() {
                           className="relative flex flex-col items-start p-4 rounded-xl border border-gray-200 dark:border-zinc-800 hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-lg hover:shadow-indigo-500/10 hover:bg-gray-50 dark:hover:bg-zinc-900 transition-all text-left group"
                        >
                           <button 
-                            onClick={() => handleCreateFromTemplate(tpl.id)}
+                            onClick={() => openOpeningPicker(tpl)}
                             className="absolute inset-0 w-full h-full z-0 cursor-pointer"
                             aria-label={`Select ${t.templates[tpl.nameKey as keyof typeof t.templates]}`}
                           />
@@ -2891,6 +2921,94 @@ function App() {
           </div>
         )}
 
+        {/* Opening Picker (P5-openings) — template default vs AI-invented cold opens */}
+        {openingPicker && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-gray-200 dark:border-zinc-800">
+              <div className="p-4 border-b border-gray-100 dark:border-zinc-800 shrink-0">
+                <div className="font-bold text-gray-900 dark:text-white">🎲 {t.openingTitle}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {t.templates[openingPicker.nameKey as keyof typeof t.templates]} · {t.openingAiHint}
+                </div>
+              </div>
+              <div className="p-4 overflow-y-auto space-y-3">
+                {/* Template default opening */}
+                <button
+                  type="button"
+                  onClick={() => setChosenOpening(null)}
+                  className={`w-full text-left p-3 rounded-xl border transition-all ${
+                    chosenOpening === null
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                      : 'border-gray-200 dark:border-zinc-800 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-gray-900 dark:text-white mb-1">{t.openingDefault}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {(() => {
+                      const base = (openingPicker.initialBlocksZh && ['zh', 'dual'].includes(screenplay.metadata.scriptLanguage))
+                        ? openingPicker.initialBlocksZh
+                        : openingPicker.initialBlocks;
+                      return base.slice(0, 2).map(b => b.content).join(' — ');
+                    })()}
+                  </div>
+                </button>
+
+                {openingsLoading && (
+                  <div className="p-3 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-800 text-xs text-indigo-600 dark:text-indigo-400 animate-pulse">
+                    {t.openingLoading}
+                  </div>
+                )}
+                {openingsError && (
+                  <div className="p-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-[11px] text-red-600 dark:text-red-400 break-all">
+                    {openingsError}
+                  </div>
+                )}
+                {(openingOptions ?? []).map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setChosenOpening(i)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${
+                      chosenOpening === i
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                        : 'border-gray-200 dark:border-zinc-800 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-gray-900 dark:text-white mb-1">{opt.logline || `#${i + 1}`}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
+                      {opt.blocks.slice(0, 3).map(b => b.content).join(' — ')}
+                    </div>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => openOpeningPicker(openingPicker)}
+                  disabled={openingsLoading}
+                  className="w-full p-2 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 text-xs text-gray-500 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors disabled:opacity-50"
+                >
+                  {openingsLoading ? t.openingLoading : t.openingReroll}
+                </button>
+              </div>
+              <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0">
+                <button onClick={() => setOpeningPicker(null)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!openingPicker) return;
+                    handleCreateFromTemplate(
+                      openingPicker.id,
+                      chosenOpening !== null && openingOptions ? openingOptions[chosenOpening] : undefined
+                    );
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm disabled:opacity-50"
+                >
+                  {t.openingConfirm}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

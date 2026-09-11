@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { logAiCall, classifyError } from "./aiLog";
-import { ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead } from "../types";
+import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead } from "../types";
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -460,6 +460,90 @@ Return ONLY a JSON array (no markdown fences, no commentary):
     .filter(h => h.promptPrefix);
   if (!heads.length) throw new Error('STYLE_HEAD_PARSE');
   return heads;
+};
+
+export interface OpeningCandidate {
+  logline: string;
+  blocks: Array<{ type: BlockType; content: string }>;
+}
+
+/** Classify [TYPE]-tagged lines into screenplay blocks — same classification
+ *  rules as the WebMCP import parser (tags, INT./EXT. heuristics, fallback
+ *  ACTION). Drops empty lines. */
+const parseTypedLines = (text: string): OpeningCandidate['blocks'] => {
+  const blocks: OpeningCandidate['blocks'] = [];
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const m = t.match(/^\[?([A-Za-z-]+)\]?\s*[:：]?\s*(.*)$/);
+    const tag = (m?.[1] ?? '').toUpperCase().replace(/-/g, '_');
+    const rest = (m?.[2] ?? t).trim();
+    if (tag === 'SCENE' || /^(INT\.|EXT\.|内\.|外\.|内景|外景)/.test(t)) {
+      blocks.push({ type: 'SCENE_HEADING', content: rest || t });
+    } else if (tag === 'ACTION') {
+      blocks.push({ type: 'ACTION', content: rest || t });
+    } else if (tag === 'CHARACTER' || (/^[A-Z一-龥 ]{1,20}$/.test(t) && !t.includes('.'))) {
+      blocks.push({ type: 'CHARACTER', content: rest || t });
+    } else if (tag === 'DIALOGUE') {
+      blocks.push({ type: 'DIALOGUE', content: rest || t });
+    } else if (tag === 'PARENTHETICAL' || /^\(.*\)$/.test(t)) {
+      blocks.push({ type: 'PARENTHETICAL', content: rest || t });
+    } else if (tag === 'TRANSITION') {
+      blocks.push({ type: 'TRANSITION', content: rest || t });
+    } else {
+      blocks.push({ type: 'ACTION', content: t });
+    }
+  }
+  return blocks.filter(b => b.content);
+};
+
+/**
+ * Generate 3 DISTINCT cold-open candidates for a NEW screenplay (replaces the
+ * fixed template opening when the user wants a random start). Returns each
+ * candidate as a logline plus ready-to-insert typed blocks.
+ */
+export const generateOpenings = async (
+  templateName: string,
+  systemInstruction: string,
+  scriptLanguage: ScriptLanguage,
+  settings: AppSettings,
+): Promise<OpeningCandidate[]> => {
+  const langInstruction = getLanguageInstruction(scriptLanguage);
+  const systemPrompt = `You are a staff writer pitching alternate openings for a screenplay.\n${systemInstruction}\n${langInstruction}`;
+
+  const userPrompt = `Invent 3 DISTINCT cold-open choices for a NEW "${templateName}" screenplay. The script does not exist yet — invent freely inside the genre.
+
+Requirements:
+- Each opening is 3-6 short lines: one scene heading ([SCENE]) plus action/character/dialogue ([ACTION]/[CHARACTER]/[DIALOGUE]) that hooks immediately.
+- The 3 openings must use DIFFERENT hook strategies (e.g. in-media-res vs. quiet character beat vs. mystery teaser) — not minor rephrasing.
+- "logline": one sentence, in the script's language, teasing this opening's hook.
+- "script": the opening itself — one block per line, each line starting with its [SCENE]/[ACTION]/[CHARACTER]/[DIALOGUE] tag, in the script's language.
+
+Return ONLY a JSON array (no markdown fences, no commentary):
+[{"logline":"...","script":"[SCENE] ...\\n[ACTION] ..."}, ...] exactly 3 items.`;
+
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'openings');
+
+  const cleaned = responseText.replace(/```(?:json)?/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start < 0 || end <= start) throw new Error('OPENINGS_PARSE');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new Error('OPENINGS_PARSE');
+  }
+  if (!Array.isArray(parsed)) throw new Error('OPENINGS_PARSE');
+  const candidates = parsed
+    .filter((o): o is Record<string, unknown> => !!o && typeof o === 'object')
+    .map(o => ({
+      logline: String(o.logline ?? '').trim(),
+      blocks: parseTypedLines(String(o.script ?? ''))
+    }))
+    .filter(o => o.blocks.length >= 2);
+  if (!candidates.length) throw new Error('OPENINGS_PARSE');
+  return candidates;
 };
 
 /**
