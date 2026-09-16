@@ -66,6 +66,13 @@ export interface GrayboxCamera {
   movement: {
     type: 'static' | 'pan' | 'tilt' | 'dolly' | 'tracking' | 'orbit' | 'crane' | 'handheld';
     duration: number;                      // seconds
+    /** STORY target length, seconds — decouples the shot's screen time from the
+     *  video model's fixed output length. H3 output is hard-locked to integer
+     *  4–15s (single segment ≤15s, reference video ≤15s), so a beat that reads
+     *  5s / 7s / 30s over the story must be planned into one or more generation
+     *  segments (see utils/grayboxPlan.ts). When absent, targetSeconds defaults
+     *  to `duration` (the authored camera clock) and behavior is unchanged. */
+    targetSeconds?: number;                // seconds (story length; ≥1)
     /** ordered path points the camera BODY follows. For 'static' a single-point
      *  array = [position]. For dolly/tracking/orbit/crane = the polyline.
      *  For pan/tilt the body is stationary, so path = [position, position]
@@ -306,6 +313,19 @@ export interface H3Task {
   resolution: '768P' | '2K';
   videoSeconds: number;           // input white-model length (billed!)
   outputSeconds: number;
+  /** Story length this task's real-screen time sits inside. When > the model
+   *  max (15s) or when the planner split one beat into a chain, multiple
+   *  tasks share one `rank` group; `segmentIndex`/`segmentCount` order them. */
+  targetSeconds?: number;
+  /** 1-based index within the planned generation chain for this shot, and the
+   *  chain's total (1 when single-segment). Displayed as "2/3" on the task. */
+  segmentIndex?: number;
+  segmentCount?: number;
+  /** Identifies tasks that belong to one planned generation chain (the shot's
+   *  blockId + plan fingerprint). Chains poll independently; when a segment
+   *  succeeds its URL is offered for manual concat — H3 does not deliver
+   *  frame-continuous continuation, so stitching is left to the user. */
+  chainId?: string;
   estimatedCost: number;          // CNY, pre-submit estimate
   resultUrl?: string;             // signed video URL when succeeded
   createdAt: number;

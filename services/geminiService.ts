@@ -845,20 +845,25 @@ const normalizeGraybox = (parsed: any, kind: 'scene' | 'shot'): GrayboxData => {
       const dur = typeof movementRaw.duration === 'number'
         ? movementRaw.duration
         : parseFloat(movementRaw.duration);
+      const targ = typeof movementRaw.targetSeconds === 'number'
+        ? movementRaw.targetSeconds
+        : parseFloat(movementRaw.targetSeconds);
       const lookPathRaw = Array.isArray(movementRaw.lookPath) ? movementRaw.lookPath : undefined;
       const lookPath: [number, number, number][] | undefined = lookPathRaw
         ? lookPathRaw.slice(0, 40).map((p: any) => asVec3(p))
         : undefined;
+      const movement: GrayboxCamera['movement'] = {
+        type: oneOf(movementRaw.type, VALID_MOVE_TYPES, 'static'),
+        duration: Number.isFinite(dur) && dur > 0 ? dur : 3,
+        path: path && path.length ? path : undefined,
+        lookPath: lookPath && lookPath.length ? lookPath : undefined,
+      };
+      if (Number.isFinite(targ) && targ > 0) movement.targetSeconds = targ;
       const camera: GrayboxCamera = {
         shotType: oneOf(cam.shotType, VALID_SHOT_TYPES, 'medium'),
         position: asVec3(cam.position, [0, 1.6, 5]),
         lookAt: asVec3(cam.lookAt),
-        movement: {
-          type: oneOf(movementRaw.type, VALID_MOVE_TYPES, 'static'),
-          duration: Number.isFinite(dur) && dur > 0 ? dur : 3,
-          path: path && path.length ? path : undefined,
-          lookPath: lookPath && lookPath.length ? lookPath : undefined,
-        },
+        movement,
       };
       if (typeof cam.shotDescription === 'string' && cam.shotDescription.trim()) {
         camera.shotDescription = cam.shotDescription.trim().slice(0, 160);
@@ -1027,6 +1032,7 @@ Output STRICT JSON and nothing else, in this exact shape:
     "movement": {
       "type": "static" | "pan" | "tilt" | "dolly" | "tracking" | "orbit" | "crane" | "handheld",
       "duration": seconds,
+      "targetSeconds": seconds,
       "path": [[x,y,z], ...],
       "lookPath": [[x,y,z], ...]
     },
@@ -1035,7 +1041,8 @@ Output STRICT JSON and nothing else, in this exact shape:
 }
 
 Rules:
-- movement.duration in seconds (1-20).
+- movement.duration in seconds (1-20). It is the CAMERA's animation clock — how long the move takes to play.
+- movement.targetSeconds: the STORY length this shot should occupy ON SCREEN (its screen time), in seconds (1-60). THIS is what later maps to video-generation output, NOT duration. Separate concerns: duration is the camera move; targetSeconds is how long the audience stays in the shot. The two usually differ — a slow 6s dolly can still be a 5s target, and a fast 2s whip-pan can play inside an 8s target with head/tail hold. Choose targetSeconds from the beat's dramatic weight (dialogue beats often run 3-8s, an establishing wide 4-10s, a punchy action beat 2-5s), independent of the move's own length. If you do not set targetSeconds explicitly, it defaults to the movement duration downstream.
 - shotDescription: always one concise sentence capturing the shot's intent — why this size/move/aim serves this beat. Keep it practical, not poetic.
 - path: body waypoints. static → [position]; pan/tilt → a single held point or omit; dolly/tracking/orbit/crane → the polyline.
 - lookPath: lens-aim waypoints — the composition anchor, not just a motion curve. Set it whenever the lens sweeps (pan/tilt/looking around) OR to lock the aim onto a fixed subject; omit only when you are sure the default forward aim already points at the subject. When in doubt, give the aim.

@@ -809,6 +809,10 @@ function App() {
     resolution: '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
+    targetSeconds?: number;
+    segmentIndex?: number;
+    segmentCount?: number;
+    chainId?: string;
   }): Promise<{ ok: true; taskId: string } | { ok: false; error: string }> => {
     if (!appSettings.minimaxApiKey.trim()) {
       return { ok: false, error: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。' };
@@ -847,6 +851,10 @@ function App() {
       resolution: payload.resolution,
       videoSeconds: payload.videoSeconds,
       outputSeconds: payload.outputSeconds,
+      ...(payload.targetSeconds != null ? { targetSeconds: payload.targetSeconds } : {}),
+      ...(payload.segmentIndex != null ? { segmentIndex: payload.segmentIndex } : {}),
+      ...(payload.segmentCount != null ? { segmentCount: payload.segmentCount } : {}),
+      ...(payload.chainId ? { chainId: payload.chainId } : {}),
       estimatedCost,
       createdAt: Date.now(),
     };
@@ -2326,6 +2334,11 @@ function App() {
                           onUploadRefImage={handleUploadRefImage}
                           onRemoveRefImage={handleRemoveRefImage}
                           onOpenAssetLibrary={() => setShowAssetLibrary(true)}
+                          onGrayboxChange={(next) => setScreenplay(prev => ({
+                            ...prev,
+                            blocks: prev.blocks.map(x => x.id === panelBlock.id ? { ...x, graybox: next } : x),
+                            lastModified: Date.now(),
+                          }))}
                           blockId={panelBlock.id}
                           onSubmitH3={handleSubmitH3}
                           h3Tasks={h3Tasks}

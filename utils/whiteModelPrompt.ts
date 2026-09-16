@@ -58,6 +58,15 @@ export interface WhiteModelPromptInput {
   characterImages?: Record<string, string>;
   /** Bound environment/style image file name (takes the last slot). */
   environmentImage?: string;
+  /** Real-screen seconds this prompt's generation covers. For a single shot
+   *  this is the story target (defaults to the camera clock when no target is
+   *  authored); for a planned chain, each segment passes its own output
+   *  length so the beat line is timed to that segment, not the whole story. */
+  beatDuration?: number;
+  /** Chain position — set ONLY when this prompt is one segment of a planned
+   *  multi-segment generation. Drives the head/tail-hold seam guidance. */
+  segmentIndex?: number;
+  segmentCount?: number;
 }
 
 /** Style presets for the prompt modal (product spec appendix B). The zh
@@ -80,11 +89,25 @@ const fmtSeconds = (s: number): string => {
   return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}s`;
 };
 
+/** The real-screen span this prompt's generation covers, in seconds. Priority:
+ *  explicit segment beatDuration (chains) → story targetSeconds → camera clock. */
+const beatSpan = (input: WhiteModelPromptInput): number => {
+  if (typeof input.beatDuration === 'number' && input.beatDuration > 0) return input.beatDuration;
+  const t = input.camera.movement?.targetSeconds;
+  if (typeof t === 'number' && t > 0) return t;
+  return Math.max(0.5, input.camera.movement?.duration ?? 0);
+};
+
 /** One timestamped action line shared by both templates. DIALOGUE beats are
  *  framed as SPOKEN lines — H3 generates native audio with lip sync, so the
- *  verbatim line + delivery intent is what voices the character. */
+ *  verbatim line + delivery intent is what voices the character.
+ *
+ *  Timing: a single shot is timed `0–target`; a planned chain segment is
+ *  timed `0–segment`, so every generation of a long beat is timed to ITS OWN
+ *  span instead of the whole story clock (the segments stitch head-to-tail).
+ */
 const beatLine = (input: WhiteModelPromptInput): string => {
-  const dur = Math.max(0.5, input.camera.movement?.duration ?? 0);
+  const dur = beatSpan(input);
   const desc = input.camera.shotDescription?.trim();
   const beat = input.beatContent.trim();
   if (input.beatType === 'DIALOGUE') {
@@ -94,6 +117,13 @@ const beatLine = (input: WhiteModelPromptInput): string => {
   const core = desc ? `${beat}（镜头意图：${desc}）` : beat;
   return `0-${fmtSeconds(dur)}：${core}`;
 };
+
+/** Head/tail hold guidance appended when the generation is one segment of a
+ *  planned chain — each segment should open/close on a held frame of the same
+ *  move rather than restart the motion, so the stitched result reads as one
+ *  continuous shot. Called only when segmentCount is set and > 1. */
+const chainHoldLine = (input: WhiteModelPromptInput): string =>
+  `（第${input.segmentIndex ?? 1}/${input.segmentCount}段：本段只覆盖该镜头的第${input.segmentIndex ?? 1}段时长。请以运镜中段的同机位画面开场与收尾，保持角色与机位与前一段一致，便于无缝拼接。）`;
 
 /** H3 renders native stereo audio — one guiding soundscape line. */
 const soundscapeLine = (input: WhiteModelPromptInput): string =>
@@ -190,6 +220,7 @@ export const buildH3Prompt = (input: WhiteModelPromptInput): string => {
     '',
     beatLine(input),
     soundscapeLine(input),
+    (input.segmentCount && input.segmentCount > 1 ? chainHoldLine(input) : ''),
     '',
     `请严格保持参考视频的运镜轨迹、机位节奏与角色站位；场景风格参考图片${envNo}${envName}${input.sceneHeading?.trim() ? `（${input.sceneHeading.trim()}）` : ''}。`,
     `全程保持角色形象、服装与比例一致，输出${styleOf(input)}；画面中不出现网格、轨迹线或任何辅助元素。`,

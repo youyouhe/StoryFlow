@@ -8,6 +8,8 @@ import { checkGrayboxHealth, HealthReport } from '../utils/grayboxHealth';
 import { resolveRefBindings, writeRefBindings } from '../utils/refBindings';
 import { ReferenceBindingPanel, REF_BINDING_LABELS } from './ReferenceBindingPanel';
 import { estimateH3Cost } from '../services/minimaxService';
+import type { GrayboxPlan } from '../utils/grayboxPlan';
+import { planSegments, defaultTargetSeconds, GenSegment } from '../utils/grayboxPlan';
 
 /**
  * Graybox3DView — renders a GrayboxData payload as an interactive 3D previs.
@@ -76,6 +78,9 @@ interface Graybox3DViewProps {
   onRemoveRefImage?: (id: string) => void;
   /** Opens the global asset-library management modal. */
   onOpenAssetLibrary?: () => void;
+  /** Persist an edited graybox back to the owning block (App owns state). Used
+   *  when the user edits the STORY target length in the H3 panel. */
+  onGrayboxChange?: (graybox: GrayboxData) => void;
   /** Current screenplay id — assets pinned to it rank first. */
   scriptId?: string;
   /** Originating block id — scopes H3 task records to this shot. */
@@ -90,6 +95,14 @@ interface Graybox3DViewProps {
     resolution: '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
+    /** STORY length this segment sits inside — carried into the task record. */
+    targetSeconds?: number;
+    /** Chain position (segmentIndex 1-based, segmentCount), when a long beat
+     *  was planned into multiple generations. Chains poll independently and
+     *  the view offers manual concat of the outputs. */
+    segmentIndex?: number;
+    segmentCount?: number;
+    chainId?: string;
   }) => Promise<{ ok: boolean; taskId?: string; error?: string }>;
   /** H3 task records (all blocks; filtered to this blockId for display). */
   h3Tasks?: H3Task[];
@@ -813,10 +826,11 @@ const UI_LABELS = {
     style: 'Style',
     h3Submit: 'Submit to H3', h3NeedKey: 'No MiniMax API key — add it in Settings → Video Generation.',
     h3Tasks: 'Generation tasks', h3Download: 'Download video', h3Res: 'Resolution',
-    h3Confirm: (cost: number, inS: number, outS: number, imgs: number) =>
-      `Submit to MiniMax H3?\nEstimated cost ≈ ¥${cost.toFixed(2)} (input ${inS.toFixed(1)}s + output ${outS}s, ${imgs} ref image(s) — input video is billed too).\nThe white model will be recorded first (~${inS.toFixed(0)}s).`,
+    h3Confirm: (cost: number, inS: number, outS: number, imgs: number, plan: GrayboxPlan) =>
+      `Submit to MiniMax H3?\nEstimated cost ≈ ¥${cost.toFixed(2)} (input ${inS.toFixed(1)}s + output ${outS}s, ${imgs} ref image(s) — input video is billed too).\nStory target ${plan.targetSeconds.toFixed(1)}s → ${plan.segments.length === 1 ? `1× ${plan.segments[0].outputSeconds}s` : `${plan.segments.length}× ${plan.segments.map((s) => s.outputSeconds).join('+')}s`} ${plan.strategy !== 'single' ? `(${plan.segments.length === 1 ? 'near-miss, trim/speed in post' : 'chained generations — stitch outputs manually'})` : ''}\nThe white model will be recorded first (~${inS.toFixed(0)}s).`,
     h3Status: { uploading: 'Uploading video…', submitting: 'Creating task…', queued: 'Queued', running: 'Generating…', succeeded: 'Done', failed: 'Failed' } as Record<string, string>,
     promptLen: (n: number) => `${n} chars${n > 7000 ? ' — over the H3 7000-char limit!' : ''}`,
+    targetLabel: 'Story length', targetHint: 'Seconds this shot should occupy on screen. Planned into 4–15s generation segment(s).',
   },
   zh: {
     pov: '镜头视角', orbit: '轨道视角', exportBtn: '导出白模视频', recording: '录制中…',
@@ -832,14 +846,15 @@ const UI_LABELS = {
     style: '风格',
     h3Submit: '提交 H3 生成', h3NeedKey: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。',
     h3Tasks: '生成任务', h3Download: '下载成片', h3Res: '分辨率',
-    h3Confirm: (cost: number, inS: number, outS: number, imgs: number) =>
-      `提交到 MiniMax H3？\n预估费用 ≈ ¥${cost.toFixed(2)}（输入 ${inS.toFixed(1)}s + 输出 ${outS}s，参考图 ${imgs} 张——输入视频同样计费）。\n将先录制白模视频（约 ${inS.toFixed(0)} 秒）。`,
+    h3Confirm: (cost: number, inS: number, outS: number, imgs: number, plan: GrayboxPlan) =>
+      `提交到 MiniMax H3？\n预估费用 ≈ ¥${cost.toFixed(2)}（输入 ${inS.toFixed(1)}s + 输出 ${outS}s，参考图 ${imgs} 张——输入视频同样计费）。\n故事目标 ${plan.targetSeconds.toFixed(1)}s → ${plan.segments.length === 1 ? `1× ${plan.segments[0].outputSeconds}s` : `${plan.segments.length}× ${plan.segments.map((s) => s.outputSeconds).join('+')}s`}${plan.strategy !== 'single' ? (plan.segments.length === 1 ? '（非整秒，需后期变速/裁切）' : '（拆分多段独立生成，输出需手动拼接）') : ''}。\n将先录制白模视频（约 ${inS.toFixed(0)} 秒）。`,
     h3Status: { uploading: '上传视频中…', submitting: '创建任务…', queued: '排队中', running: '生成中…', succeeded: '已完成', failed: '失败' } as Record<string, string>,
     promptLen: (n: number) => `${n} 字符${n > 7000 ? '——超出 H3 7000 字符上限！' : ''}`,
+    targetLabel: '故事时长', targetHint: '该镜头在成片中的时长（秒）。将映射到 4–15s 的生成段：>15s 拆链、<4s 或非整秒后期补齐。',
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, beatCastNames, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en', scriptId }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, beatCastNames, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, onGrayboxChange, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en', scriptId }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -863,6 +878,26 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   // H3 submission state
   const [h3Resolution, setH3Resolution] = useState<'768P' | '2K'>('768P');
   const [h3Error, setH3Error] = useState<string | null>(null);
+  // STORY target length (editable in the H3 panel). Defaults to the authored
+  // target, else the camera duration. Persisted back to the block when
+  // changed, so the planner always plans the story time, not the move clock.
+  const [targetInput, setTargetInput] = useState<string>(() => {
+    if (!graybox.camera) return '';
+    return String(defaultTargetSeconds(graybox.camera));
+  });
+  useEffect(() => {
+    if (graybox.camera) setTargetInput(String(defaultTargetSeconds(graybox.camera)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graybox.camera?.movement?.duration, graybox.camera?.movement?.targetSeconds]);
+
+  // The duration plan for this shot: one/output segment (exact/snapped) or a
+  // chain. Recomputes whenever the target input parses to a number.
+  const plan: GrayboxPlan | null = useMemo(() => {
+    if (!isShot || !graybox.camera) return null;
+    const v = parseFloat(targetInput);
+    if (!Number.isFinite(v) || v <= 0) return null;
+    return planSegments(v);
+  }, [isShot, graybox.camera, targetInput]);
   // Costume variants: bind per-scene instead of script-wide
   const [sceneOnly, setSceneOnly] = useState(false);
   const effBindings = useMemo(
@@ -947,7 +982,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   // Shared input builder so the modal preview and the H3 submission always
   // agree (submission forces the H3 dialect regardless of the open tab).
   // Declared before startH3Submit to keep TDZ order valid.
-  const promptInputFor = useCallback((target: 'seedance' | 'h3') => {
+  const promptInputFor = useCallback((target: 'seedance' | 'h3', seg?: GenSegment) => {
     const styleHint = WHITE_MODEL_STYLE_TEMPLATES.find(s => s.id === styleId)?.keywords;
     const imageById = (id?: string) => refImages.find((img) => img.id === id);
     const boundChars = effBindings && refImages.length
@@ -967,10 +1002,11 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       sceneHeading,
       styleHint,
       target,
+      ...(seg ? { beatDuration: seg.outputSeconds, segmentIndex: seg.index, segmentCount: plan?.segments.length } : {}),
       ...(hasAnyBinding ? { characterImages: boundChars } : {}),
       ...(hasAnyBinding || envImage ? { environmentImage: envImage } : {}),
     };
-  }, [styleId, refImages, effBindings, beat, castChars, sceneHeading, graybox.camera]);
+  }, [styleId, refImages, effBindings, beat, castChars, sceneHeading, graybox.camera, plan]);
 
   // ---- white-model export: record the POV playback as a reference video ----
   // `h3Payload` switches the tail from "download the file" to "hand the blob
@@ -982,6 +1018,10 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     resolution: '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
+    targetSeconds?: number;
+    segmentIndex?: number;
+    segmentCount?: number;
+    chainId?: string;
   }) => {
     if (exporting || !isShot || !graybox.camera || !wrapRef.current) return;
     if (!exportSupported) return;
@@ -1058,17 +1098,16 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     }, 450);
   }, [exporting, isShot, graybox, exportSupported, healthBlocksExport, onSubmitH3]);
 
-  // ---- H3 submission: confirm cost → record white model → submit ----
+  // ---- H3 submission: plan target → confirm cost → record white model → submit ----
   const startH3Submit = useCallback(() => {
-    if (!onSubmitH3 || !isShot || !graybox.camera || !blockId) return;
+    if (!onSubmitH3 || !isShot || !graybox.camera || !blockId || !plan) return;
     if (!h3Ready) { setH3Error(L.h3NeedKey); return; }
     const cam = graybox.camera;
     const durSec = (cam.movement?.duration ?? 0) > 0 ? cam.movement.duration : EXPORT_FALLBACK_SECONDS;
     if (durSec > 15) {
-      setH3Error(`H3 参考视频上限 15s——当前 ${durSec.toFixed(1)}s，请先缩短镜头 duration。`);
+      setH3Error(`H3 参考视频上限 15s——当前镜头运镜 ${durSec.toFixed(1)}s，请先缩短 movement.duration。`);
       return;
     }
-    const outputSeconds = Math.max(4, Math.min(15, Math.round(durSec)));
     // bound reference images in scene order + env last (matches the prompt mapping)
     const refImageUrls: string[] = [];
     for (const c of castChars) {
@@ -1078,24 +1117,40 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     const envImg = refImages.find((i) => i.id === effBindings.environment);
     if (envImg) refImageUrls.push(envImg.url);
 
+    // Persist the edited target back to the block (planner always runs on the
+    // story length, not the move clock). Skip when it matches what's authored.
+    const authTarget = cam.movement?.targetSeconds ?? defaultTargetSeconds(cam);
+    if (Math.abs((authTarget) - plan.targetSeconds) > 0.01 && onGrayboxChange) {
+      onGrayboxChange({ ...graybox, camera: { ...cam, movement: { ...cam.movement, targetSeconds: plan.targetSeconds } } });
+    }
+
+    // cost + confirm across the whole plan (single output or the full chain)
+    const totalOutput = plan.segments.reduce((a, s) => a + s.outputSeconds, 0);
     const cost = estimateH3Cost({
       videoSeconds: durSec,
-      outputSeconds,
+      outputSeconds: totalOutput,
       referenceImages: refImageUrls.map((_, i) => ({ name: `ref-${i}`, blob: new Blob() })),
       resolution: h3Resolution,
     });
-    if (!window.confirm(L.h3Confirm(cost, durSec, outputSeconds, refImageUrls.length))) return;
+    const imageCount = refImageUrls.length;
+    if (!window.confirm(L.h3Confirm(cost, durSec, totalOutput, imageCount, plan))) return;
 
     setH3Error(null);
-    startExport({
-      blockId,
-      blockContent: beat?.content ?? '',
-      prompt: buildH3Prompt(promptInputFor('h3')),
-      resolution: h3Resolution,
-      outputSeconds,
-      referenceImageUrls: refImageUrls,
-    });
-  }, [onSubmitH3, isShot, graybox.camera, blockId, h3Ready, castChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor]);
+    const isChain = plan.segments.length > 1;
+    const chainId = isChain ? `${blockId}::${plan.targetSeconds.toFixed(1)}::${Date.now()}` : undefined;
+    for (const seg of plan.segments) {
+      startExport({
+        blockId,
+        blockContent: beat?.content ?? '',
+        prompt: buildH3Prompt(promptInputFor('h3', seg)),
+        resolution: h3Resolution,
+        outputSeconds: seg.outputSeconds,
+        referenceImageUrls: refImageUrls,
+        targetSeconds: plan.targetSeconds,
+        ...(isChain ? { segmentIndex: seg.index, segmentCount: plan.segments.length, chainId } : {}),
+      });
+    }
+  }, [onSubmitH3, onGrayboxChange, isShot, graybox, blockId, h3Ready, castChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor, plan]);
 
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';
@@ -1304,6 +1359,31 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
               {/* H3 direct submission (browser BYOK) + this shot's task list */}
               {onSubmitH3 && blockId && (
                 <div className="mt-3 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.targetLabel}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.5}
+                      value={targetInput}
+                      onChange={(e) => setTargetInput(e.target.value)}
+                      className="w-20 rounded-md border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200 tabular-nums"
+                    />
+                    <span className="text-[10px] text-gray-400">s</span>
+                    {plan && (
+                      <span className="ml-auto text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+                        {plan.segments.length === 1 ? `→ ${plan.segments[0].outputSeconds}s` : `→ ${plan.segments.map(s => s.outputSeconds).join('+')}s (×${plan.segments.length})`}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mb-1.5 text-[10px] leading-snug text-gray-400 dark:text-gray-500">{L.targetHint}</p>
+                  {plan && plan.warnings.length > 0 && (
+                    <ul className="mb-2 space-y-0.5">
+                      {plan.warnings.map((w, i) => (
+                        <li key={i} className="text-[10px] leading-snug text-amber-600 dark:text-amber-400">⚠ {w}</li>
+                      ))}
+                    </ul>
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.h3Res}</span>
                     <select
@@ -1345,6 +1425,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                               </span>
                               <span className="text-gray-600 dark:text-gray-300 truncate flex-1">
                                 {L.h3Status[t.status] ?? t.status} · {t.resolution} · ¥{t.estimatedCost.toFixed(2)}
+                                {t.segmentCount && t.segmentCount > 1 ? ` · ${t.segmentIndex ?? 1}/${t.segmentCount}` : ''}
                               </span>
                               {t.status === 'succeeded' && t.resultUrl && (
                                 <a
