@@ -6,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads, generateOpenings, OpeningCandidate } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads, generateOpenings, OpeningCandidate, analyzeDubbing } from './services/geminiService';
 import { Graybox3DView } from './components/Graybox3DView';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
@@ -1705,6 +1705,23 @@ function App() {
           setAIState({ isLoading: false, suggestion: JSON.stringify(graybox, null, 2), error: null, decision: null, grayboxDraft: graybox, batchProgress: null });
         }
         return;
+      } else if (effectiveMode === 'DUB') {
+        // Dub sheet: analyze EVERY dialogue line in the script and write each
+        // block's dubEmotion back in place. Batch — runs across the whole
+        // screenplay, not a selected window.
+        const dubMap = await analyzeDubbing(screenplay.blocks, systemInstruction, appSettings);
+        const total = screenplay.blocks.filter(b => b.type === 'DIALOGUE').length;
+        const applied = Object.keys(dubMap).length;
+        if (applied === 0) {
+          setAIState({ isLoading: false, suggestion: null, error: t.aiErrorGeneric, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+        }
+        setScreenplay(prev => ({
+          ...prev,
+          blocks: prev.blocks.map(b => dubMap[b.id] ? { ...b, dubEmotion: dubMap[b.id] } : b),
+          lastModified: Date.now(),
+        }));
+        result = `Dubbing direction written to ${applied}/${total} dialogue line${total === 1 ? '' : 's'}. (emotion + delivery + intensity per line)`;
       }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {
@@ -2605,7 +2622,7 @@ function App() {
                     
                     <div className="p-6 space-y-6">
                         <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
-                            {(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX'] as const).map(m => (
+                            {[...(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX', 'DUB'] as const)].map(m => (
                                 <button
                                     key={m}
                                     onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}}
@@ -2621,6 +2638,7 @@ function App() {
                                     {m === 'REWRITE' && t.modes.rewrite}
                                     {m === 'STORYBOARD' && t.modes.storyboard}
                                     {m === 'GRAYBOX' && t.modes.graybox}
+                                    {m === 'DUB' && t.modes.dub}
                                 </button>
                             ))}
                         </div>
@@ -2658,6 +2676,7 @@ function App() {
                                     {aiMode === 'REWRITE' && t.prompts.rewrite}
                                     {aiMode === 'STORYBOARD' && t.prompts.storyboard}
                                     {aiMode === 'GRAYBOX' && t.prompts.graybox}
+                                    {aiMode === 'DUB' && t.prompts.dub}
                                 </p>
                                 {aiMode === 'GRAYBOX' && (
                                     <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-6 px-4 leading-relaxed">

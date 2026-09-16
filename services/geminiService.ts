@@ -1,6 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { logAiCall, classifyError } from "./aiLog";
-import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead } from "../types";
+import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion } from "../types";
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -1109,5 +1109,89 @@ Output only the shot graybox JSON.`;
     return normalizeGraybox(parsed, kind);
   } catch {
     return { kind, error: `Could not parse AI output: ${raw.trim().slice(0, 200) || 'empty response'}` };
+  }
+};
+/**
+ * Analyze a screenplay's dialogue for DUBBING metadata — one structured entry
+ * per DIALOGUE block (emotion + delivery + intensity). Same jsonMode pattern
+ * as generateGraybox; returns a map keyed by block id so the caller can write
+ * each block's `dubEmotion` back in place. On any failure returns an empty
+ * map and lets the caller surface a generic error.
+ */
+export const analyzeDubbing = async (
+  blocks: ScriptBlock[],
+  systemInstruction: string,
+  settings: AppSettings,
+): Promise<Record<string, DubEmotion>> => {
+  const dialogueLines = blocks
+    .map((b, i) => `${i}\t${b.type}\t${b.content.replace(/\n/g, ' \\n ')}`)
+    .join('\n');
+
+  const systemPrompt = `You are a Dubbing Director / voice coach for animation and film.
+${systemInstruction}
+
+Read every dialogue line and judge how each should be VOICED for a stable, consistent dub. Output STRICT JSON with no other text, in this exact shape:
+
+{
+  "lines": [
+    {
+      "index": <the line index you were given>,
+      "emotion": "<one primary emotion, lowercase English, from this closed vocabulary: anger, joy, sadness, fear, surprise, disgust, neutral, tenderness, menace, excitement, confusion, determination, sorrow, amusement, intensity>",
+      "delivery": "<a short, TTS-actionable voicing direction in English, e.g. 'low, slow, threatening' | 'bright and fast' | 'breathy whisper' | 'teary, breaking'>",
+      "intensity": <1-10>,
+      "parenthetical": "<if the line has an explicit (parenthetical) direction, copy it verbatim here; else omit>"
+    }
+  ]
+}
+
+Rules:
+- One entry per DIALOGUE line (index = the number in the input). Ignore non-DIALOGUE blocks.
+- emotion must come from the CLOSED vocabulary above so a future TTS maps it to a stable emotional preset. Never invent free-form emotion names.
+- delivery is how the VOICE performs it — short (<=8 words), concrete, so a voice actor (human or TTS) can act it without ambiguity. It drives pacing and energy.
+- intensity 1-10: how strong the delivery is (1 = near-whisper, 10 = shout). Correlate with punctuation, caps, and the scene's stakes.
+- A character's voice (tone/timbre) is stable across the whole script — you only judge THIS line's EMOTION and DELIVERY, never the identity of the voice.
+- The parenthetical (e.g. "(whispering)", "(coldly)") is a strong signal — fold its intent into delivery and copy the original into parenthetical.
+- Keep every line contiguous with the input order. Do NOT drop lines or reorder.
+
+Keep the emotion/delivery in English regardless of the script language — a dubbing tool will map them to local TTS.`;
+
+  const userPrompt = `Analyze these blocks for dubbing direction (index<TAB>type<TAB>content):
+---
+${dialogueLines}
+---
+
+Output only the JSON.`;
+
+  let raw = '';
+  try {
+    raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'dub');
+  } catch (err: any) {
+    console.warn('analyzeDubbing failed:', err);
+    return {};
+  }
+
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = match ? JSON.parse(match[0]) : JSON.parse(raw);
+    const lines = Array.isArray(parsed?.lines) ? parsed.lines : [];
+    const result: Record<string, DubEmotion> = {};
+    for (const l of lines) {
+      const idx = Number(l?.index);
+      const b = idx >= 0 ? blocks[idx] : undefined;
+      if (!b || b.type !== 'DIALOGUE') continue;
+      const emotion = typeof l?.emotion === 'string' && l.emotion.trim() ? l.emotion.trim() : 'neutral';
+      const delivery = typeof l?.delivery === 'string' && l.delivery.trim() ? l.delivery.trim() : '';
+      const intensity = Number(l?.intensity);
+      const entry: DubEmotion = {
+        emotion,
+        delivery,
+        intensity: Number.isFinite(intensity) ? Math.max(1, Math.min(10, Math.round(intensity))) : 5,
+      };
+      if (typeof l?.parenthetical === 'string' && l.parenthetical.trim()) entry.parenthetical = l.parenthetical.trim().slice(0, 80);
+      result[b.id] = entry;
+    }
+    return result;
+  } catch {
+    return {};
   }
 };

@@ -661,6 +661,7 @@ export const TRANSLATIONS = {
     exportGrayboxJson: "JSON",
     exportGrayboxSummary: "Summary",
     exportGrayboxAlwaysJson: "JSON format always includes full graybox JSON.",
+    exportIncludeDubbing: "Dubbing direction (emotion/delivery/intensity)",
     exportIncludeBlockIds: "Block type + id annotations",
     exportJson: "JSON",
     exportMarkdown: "Markdown",
@@ -765,6 +766,7 @@ export const TRANSLATIONS = {
       rewrite: "Rewrite",
       storyboard: "Storyboard",
       graybox: "Graybox",
+      dub: "Dub sheet",
       syncCloud: "Sync to cloud"
     },
     styleHeadTitle: "Style Head",
@@ -786,7 +788,8 @@ export const TRANSLATIONS = {
       ideas: "Generate plot twists or creative directions.",
       rewrite: "Polish the selected block.",
       storyboard: "Generate a text-to-image prompt for this action or character (six visual elements).",
-      graybox: "Generate a 3D graybox (spatial layout for a scene, or camera/运镜 for a shot)."
+      graybox: "Generate a 3D graybox (spatial layout for a scene, or camera/运镜 for a shot).",
+      dub: "Infer per-line dubbing direction (emotion + delivery + intensity) for every dialogue block, saved for a stable-voice dubbing sheet."
     },
     placeholders: {
       SCENE_HEADING: 'INT./EXT. LOCATION - TIME',
@@ -929,6 +932,7 @@ export const TRANSLATIONS = {
     exportGrayboxJson: "JSON",
     exportGrayboxSummary: "摘要",
     exportGrayboxAlwaysJson: "JSON 格式始终包含完整灰模 JSON。",
+    exportIncludeDubbing: "配音方向（情绪 / 口吻 / 强度）",
     exportIncludeBlockIds: "区块类型 + ID 标注",
     exportJson: "JSON",
     exportMarkdown: "Markdown",
@@ -1033,6 +1037,7 @@ export const TRANSLATIONS = {
       rewrite: "润色",
       storyboard: "分镜",
       graybox: "灰模",
+      dub: "配音表",
       syncCloud: "同步到云端"
     },
     styleHeadTitle: "风格头",
@@ -1054,7 +1059,8 @@ export const TRANSLATIONS = {
       ideas: "为下一场戏生成情节转折或创意方向。",
       rewrite: "润色选定的段落。",
       storyboard: "为该动作或角色生成文生图提示词（六大视觉要素）。",
-      graybox: "生成 3D 灰模（场景的空间布局，或镜头的运镜）。"
+      graybox: "生成 3D 灰模（场景的空间布局，或镜头的运镜）。",
+      dub: "为每句对白推断配音方向（情绪 + 口吻 + 强度）并保存，供稳定的音色配音表导出。"
     },
     placeholders: {
       SCENE_HEADING: '内/外 场景 - 时间',

@@ -149,6 +149,11 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
                 </p>
               )}
               <CheckRow
+                checked={!!opts.includeDubbing}
+                onChange={(v) => set({ includeDubbing: v })}
+                label={t.exportIncludeDubbing || 'Dubbing direction (emotion/delivery/intensity)'}
+              />
+              <CheckRow
                 checked={!!opts.includeBlockIds}
                 onChange={(v) => set({ includeBlockIds: v })}
                 label={t.exportIncludeBlockIds || 'Block type + id annotations'}

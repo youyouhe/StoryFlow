@@ -111,7 +111,8 @@ const renderPayloadsMarkdown = (block: ScriptBlock, opts: ExportOptions, index: 
   const lines: string[] = [];
   const wantPrompt = opts.includeImagePrompts && block.imagePrompt?.trim();
   const wantGraybox = opts.includeGraybox && block.graybox;
-  if (!wantPrompt && !wantGraybox) return '';
+  const wantDub = opts.includeDubbing && !!block.dubEmotion;
+  if (!wantPrompt && !wantGraybox && !wantDub) return '';
 
   const anchor = opts.includeBlockIds ? ` #${block.id}` : '';
   lines.push(`<details><summary>AI payloads (block ${index + 1} · ${BLOCK_TYPE_LABEL[block.type] ?? block.type}${anchor})</summary>`);
@@ -132,6 +133,11 @@ const renderPayloadsMarkdown = (block: ScriptBlock, opts: ExportOptions, index: 
       lines.push(JSON.stringify(block.graybox, null, 2));
       lines.push('```');
     }
+  }
+  if (wantDub && block.dubEmotion) {
+    const d = block.dubEmotion;
+    lines.push('');
+    lines.push(`**Dubbing:** ${d.emotion} · intensity ${d.intensity}/10 · ${d.delivery || '—'}${d.parenthetical ? ` (${d.parenthetical})` : ''}`);
   }
   lines.push('');
   lines.push('</details>');
@@ -210,17 +216,16 @@ export const exportMarkdown = (sp: Screenplay, opts: ExportOptions): void => {
  *  `imagePrompt` + `graybox` as stored, so this is a lossless dump — ideal for
  *  backup or for handing the whole AI-payload set to an evaluator. */
 export const screenplayToJSON = (sp: Screenplay, opts: ExportOptions): string => {
-  // When the user asks to exclude payloads, strip them so the JSON export
-  // honors the same option gates as the other formats.
-  if (!opts.includeImagePrompts && !opts.includeGraybox) {
-    return JSON.stringify(sp, null, 2);
-  }
+  // Always strip to honor the per-format gates — the source screenplay can carry
+  // imagePrompt/graybox/dubEmotion, so returning `sp` raw would leak any payload
+  // the user chose to exclude. Copy only the included ones.
   const stripped: Screenplay = {
     ...sp,
     blocks: sp.blocks.map(b => {
       const nb: ScriptBlock = { id: b.id, type: b.type, content: b.content };
       if (opts.includeImagePrompts && b.imagePrompt) nb.imagePrompt = b.imagePrompt;
       if (opts.includeGraybox && b.graybox) nb.graybox = b.graybox;
+      if (opts.includeDubbing && b.dubEmotion) nb.dubEmotion = b.dubEmotion;
       return nb;
     }),
   };
@@ -243,6 +248,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   includeGraybox: true,
   grayboxFormat: 'json',
   includeBlockIds: true,
+  includeDubbing: true,
 };
 
 // re-export for the PDF appendix path

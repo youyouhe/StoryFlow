@@ -12,6 +12,10 @@ export interface ScriptBlock {
   content: string;
   /** Optional text-to-image prompt attached to ACTION blocks (storyboard). */
   imagePrompt?: string;
+  /** AI-inferred dubbing metadata for a DIALOGUE block — emotion + delivery
+   *  + intensity, saved so a dubbing sheet can be exported with stable
+   *  voice-direction per character. Populated by the DUB analysis mode. */
+  dubEmotion?: DubEmotion;
   /** Optional 3D gray-box (previs) payload.
    *  SCENE_HEADING stores a 'scene' graybox (layout + characters);
    *  ACTION/DIALOGUE store a 'shot' graybox (camera). Phase-1: data + AI only;
@@ -186,8 +190,9 @@ export interface KeyboardShortcuts {
 
 /** AI assistant operating modes.
  *  STORYBOARD generates a text-to-image prompt;
- *  GRAYBOX generates a structured 3D previs JSON (scene layout or shot camera). */
-export type AIMode = 'CONTINUE' | 'IDEAS' | 'REWRITE' | 'STORYBOARD' | 'GRAYBOX';
+ *  GRAYBOX generates a structured 3D previs JSON (scene layout or shot camera);
+ *  DUB infers per-line dubbing metadata (emotion/delivery/intensity). */
+export type AIMode = 'CONTINUE' | 'IDEAS' | 'REWRITE' | 'STORYBOARD' | 'GRAYBOX' | 'DUB';
 
 export interface AppSettings {
   provider: LLMProvider;
@@ -208,8 +213,23 @@ export interface AppSettings {
   aiOutputBlocks: number;
 }
 
-/** AI's scene-transition judgment for the CONTINUE two-step flow.
- *  Produced by `decideSceneTransition` before a continuation is written. */
+/** AI-inferred dubbing metadata for a DIALOGUE line. Stored on the block so
+ *  the same emotion/delivery persists across exports and re-analysis, keeping
+ *  a character's voice direction stable. Fields are free-form but constrained
+ *  to short, TTS-actionable phrasing. */
+export interface DubEmotion {
+  /** Primary emotion label, e.g. "anger", "sadness", "joy" — drives the TTS
+   *  emotional preset, so keep to a small stable vocabulary. */
+  emotion: string;
+  /** Delivery direction: how to vocalize — e.g. "low, slow, threatening",
+   *  "bright and fast", "breathy whisper". */
+  delivery: string;
+  /** 1–10 intensity of the delivery, mapped to TTS speed/energy. */
+  intensity: number;
+  /** Parenthetical/director cue baked in (may be empty). */
+  parenthetical?: string;
+}
+
 export interface SceneTransitionDecision {
   action: 'continue' | 'transition';
   reason: string;
@@ -338,6 +358,9 @@ export interface ExportOptions {
   includeGraybox?: boolean;
   grayboxFormat?: 'json' | 'summary';
   includeBlockIds?: boolean;
+  /** Bundle per-DIALOGUE dubbing direction (emotion/delivery/intensity) so a
+   *  dubbing sheet can be exported for stable-voice voice work. */
+  includeDubbing?: boolean;
 }
 
 // ── Gallery cloud sync (P1) ────────────────────────────────────────────────
