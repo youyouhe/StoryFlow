@@ -577,6 +577,11 @@ Return ONLY a JSON array (no markdown fences, no commentary):
  *
  * `wardrobe` — the character's costume/age state within its Sequence (from the
  * split). Injected so a shot depicts the right outfit/age at this story point.
+ *
+ * `variant` — a costume VARIANT (from `张三（浴袍）`). When set for a CHARACTER,
+ * the model generates a variant design sheet: reuse the base person EXACTLY
+ * and only change to this costume. When set for an ACTION batch frame, the
+ * wardrobe note names the variant so the shot shows the right outfit.
  */
 export const generateImagePrompt = async (
   sceneBlocks: ScriptBlock[],
@@ -589,6 +594,7 @@ export const generateImagePrompt = async (
   globalCharDesigns?: Map<string, string>,
   wardrobe?: { costume?: string; age?: string },
   charName?: string,
+  variant?: string,
 ): Promise<string> => {
   // Image prompts are always English, independent of scriptLanguage.
   const langInstruction = 'Respond in English only.';
@@ -683,19 +689,17 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
     : '';
 
   // When generating a CHARACTER VARIANT (isCharacter) whose base design already
-  // exists, keep the same person and only swap costume/age — not a new design.
-  const selfDesignForChar = isCharacter && charName && charDesigns.has(charName)
-    ? charDesigns.get(charName)!
-    : '';
+  // exists, keep the same person and only swap costume — not a new design.
+  const selfDesignForChar = isCharacter && charName ? (charDesigns.get(charName) ?? '') : '';
   const variantSection =
     (kind === 'character' && selfDesignForChar)
-      ? `\nThis is a VARIANT of the established design above. Reuse the person EXACTLY (same face, body, hair style/color) and change ONLY the ${wardrobe?.age ? `age (to ${wardrobe.age})` : 'costume'}${wardrobe?.costume ? ` and wardrobe (${wardrobe.costume})` : ''} per the story. Do NOT alter the base identity.\n`
+      ? `\nThis is a VARIANT of the established design above. Reuse the person EXACTLY (same face, body, hair style/color) and change ONLY the ${variant ? `costume (${variant})` : (wardrobe?.age ? `age (to ${wardrobe.age})` : 'costume/age')}${!variant && wardrobe?.costume ? ` and wardrobe (${wardrobe.costume})` : ''} per the story. Do NOT alter the base identity.\n`
       : '';
 
-  // Sequence wardrobe/age note for action/dialogue frames.
+  // Sequence wardrobe/age / costume variant note for action/dialogue frames.
   const wardrobeNote =
-    (kind !== 'character' && (wardrobe?.costume || wardrobe?.age))
-      ? `\nAt this story point the character is ${[wardrobe.age, wardrobe.costume].filter(Boolean).join(', ')}. Portray that state (outfit/age) for ${charName ?? 'the subject'}, keeping the established identity.\n`
+    (kind !== 'character' && (wardrobe?.costume || wardrobe?.age || variant))
+      ? `\nAt this story point the character is ${[variant, wardrobe?.age, wardrobe?.costume].filter(Boolean).join(', ')}. Portray that state (outfit/age) for ${charName ?? 'the subject'}, keeping the established identity.\n`
       : '';
 
   const targetNoun = isCharacter ? 'TARGET CHARACTER' : isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';

@@ -1,4 +1,5 @@
 import { ScriptBlock, ScriptSequence, CharacterWardrobe } from '../types';
+import { baseCharName } from './beatCast';
 
 /**
  * Sequence segmentation + wardrobe/age resolution.
@@ -23,11 +24,11 @@ const keyedScenes = (blocks: ScriptBlock[]) =>
     .map(b => b.content.trim())
     .filter((v, i, a) => v && a.indexOf(v) === i);
 
-/** Lead character names (distinct CHARACTER cues), oldest first. */
+/** Lead character names (distinct CHARACTER base names), oldest first. */
 const keyedChars = (blocks: ScriptBlock[]) =>
   blocks
     .filter(b => b.type === 'CHARACTER')
-    .map(b => b.content.trim())
+    .map(b => baseCharName(b.content.trim()))
     .filter((v, i, a) => v && a.indexOf(v) === i);
 
 /** Build a compact context the LLM reads once to judge sequence boundaries.
@@ -51,7 +52,7 @@ export const buildSequenceContext = (blocks: ScriptBlock[]): string => {
         }
         continue;
       }
-      if (inScene && b.type === 'CHARACTER') present.push(b.content.trim());
+      if (inScene && b.type === 'CHARACTER') present.push(baseCharName(b.content.trim()));
     }
     lines.push(`Scene ${i + 1}: "${s}" — present: ${present.length ? present.join('、') : '—'}`);
   });

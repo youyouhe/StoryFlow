@@ -17,6 +17,7 @@ import { buildSeedancePrompt, buildH3Prompt } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth } from '../utils/grayboxHealth';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
+import { parseCharacterName, baseCharName, resolveBeatVariant } from '../utils/beatCast';
 
 /** Summary of one saved script (the App's localStorage index rows). */
 interface ScriptSummary {
@@ -375,21 +376,26 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         const globalCharDesigns = new Map<string, string>();
         for (const sb of screenplay.blocks) {
           if (sb.type === 'CHARACTER' && sb.imagePrompt?.trim()) {
-            const n = sb.content.trim();
+            const n = baseCharName(sb.content.trim());
             if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sb.imagePrompt!.trim());
           }
         }
-        const charName = b.type === 'CHARACTER' ? b.content.trim() : undefined;
+        const pc = b.type === 'CHARACTER' ? parseCharacterName(b.content.trim()) : { base: '' };
+        const charName = b.type === 'CHARACTER' ? pc.base : undefined;
+        const variant = b.type === 'CHARACTER' ? pc.variant : undefined;
         const wardrobe = charName ? wardrobeIn(sequenceAt(screenplay.sequences, idx), charName) : undefined;
-        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName);
+        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName, variant);
         // Mirror the in-app save: CHARACTER prompts propagate to same-name blocks.
         const isCharacter = b.type === 'CHARACTER';
-        const charNameOut = isCharacter ? b.content.trim() : '';
+        // A variant cue propagates only to same BASE-and-variant blocks, so the
+        // bathrobe sheet doesn't overwrite the base 张三 sheet.
+        const charNameOut = isCharacter ? pc.base : '';
+        const charVariantOut = isCharacter ? pc.variant : undefined;
         setScreenplay(prev => ({
           ...prev,
           blocks: prev.blocks.map(x => {
             if (x.id === b.id) return { ...x, imagePrompt: prompt };
-            if (isCharacter && x.type === 'CHARACTER' && x.content.trim() === charNameOut) return { ...x, imagePrompt: prompt };
+            if (isCharacter && x.type === 'CHARACTER' && baseCharName(x.content.trim()) === charNameOut && parseCharacterName(x.content.trim()).variant === charVariantOut) return { ...x, imagePrompt: prompt };
             return x;
           }),
           lastModified: Date.now(),
@@ -417,9 +423,9 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         // cast sheet + env backdrop.
         let frameRefs: { character?: RefImage; environment?: RefImage } = {};
         if (b.type === 'CHARACTER') {
-          const name = b.content.trim();
-          const age = wardrobeIn(seq, name).age;
-          frameRefs = { character: resolveCharacterSheet(name, screenplay.referenceBindings, refImages, sceneHead, age) };
+          const pc = parseCharacterName(b.content.trim());
+          const age = wardrobeIn(seq, pc.base).age;
+          frameRefs = { character: resolveCharacterSheet(pc.base, screenplay.referenceBindings, refImages, sceneHead, age, pc.variant) };
         } else if (b.type === 'ACTION') {
           const sceneNames: string[] = [];
           for (let i = idx; i >= 0; i--) {
@@ -435,18 +441,19 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
             return { ok: false, error: `角色「${res.characterName}」还没有设定图——请先生成该角色的 image，再进行本镜的图生图。` };
           }
           if (res.kind === 'ready') {
-            frameRefs = resolveFrameRefs('action', res.characterName, sceneHead, screenplay.referenceBindings, refImages, age);
+            frameRefs = resolveFrameRefs('action', res.characterName, sceneHead, screenplay.referenceBindings, refImages, age, res.variant);
           }
         } else if (b.type === 'DIALOGUE') {
           // dialogue: nearest cue name
           let diagName = '';
           for (let i = idx - 1; i >= 0; i--) {
             if (screenplay.blocks[i].type === 'SCENE_HEADING') break;
-            if (screenplay.blocks[i].type === 'CHARACTER') { diagName = screenplay.blocks[i].content.trim(); break; }
+            if (screenplay.blocks[i].type === 'CHARACTER') { diagName = baseCharName(screenplay.blocks[i].content.trim()); break; }
           }
           if (diagName) {
             const age = wardrobeIn(seq, diagName).age;
-            frameRefs = resolveFrameRefs('dialogue', diagName, sceneHead, screenplay.referenceBindings, refImages, age);
+            const diagVar = resolveBeatVariant(screenplay.blocks, idx, diagName);
+            frameRefs = resolveFrameRefs('dialogue', diagName, sceneHead, screenplay.referenceBindings, refImages, age, diagVar);
           }
         }
         let subjectRef: Blob | undefined;

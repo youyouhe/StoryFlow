@@ -1,5 +1,5 @@
 import { RefBindings, RefImage, ScriptBlock } from '../types';
-import { computeBeatCast, collectCharacterNames } from './beatCast';
+import { computeBeatCast, collectCharacterNames, resolveBeatVariant } from './beatCast';
 
 /** Outcome of resolving a character reference image for an ACTION (storyboard)
  *  beat. ACTION generation is image-to-image — the whole point is to keep a
@@ -15,8 +15,8 @@ import { computeBeatCast, collectCharacterNames } from './beatCast';
  *  Falls back to text-to-image only via `no-character`, which the caller
  *  surfaces as a blocked state instead of generating. */
 export type ActionRefResolution =
-  | { kind: 'ready'; characterName: string; image: RefImage }
-  | { kind: 'needs-image'; characterName: string }
+  | { kind: 'ready'; characterName: string; variant?: string; image: RefImage }
+  | { kind: 'needs-image'; characterName: string; variant?: string }
   | { kind: 'no-character' };
 
 /** A frame's reference images: the PRIMARY character identity sheet (① 基础或
@@ -27,12 +27,13 @@ export interface FrameRefs {
   environment?: RefImage;
 }
 
-/** Resolve a primary character sheet for a beat or a hit, with age-awareness
- *  and (optionally) sequence wardrobe. Precedence:
+/** Resolve a primary character sheet for a beat or a hit, with age-awareness,
+ *  optional costume VARIANT, and (optionally) sequence wardrobe. Precedence:
  *    1. explicit binding for this character (per-scene override already merged)
- *    2. an age-tagged asset (subject `名字/年纪`) when the sequence/context
- *       asks for that age (or the newest age asset)
- *    3. the base design sheet (subject === name or name/…)
+ *    2. the exact VARIANT asset (subject `名字/变体`) when one is asked for
+ *    3. an age-tagged asset (subject `名字/年纪`) when the sequence/context
+ *       asks for that age
+ *    4. the base design sheet (subject === name)
  *  Returns the RefImage or undefined when none exists. */
 export const resolveCharacterSheet = (
   name: string,
@@ -40,6 +41,7 @@ export const resolveCharacterSheet = (
   refImages: RefImage[],
   sceneHeading?: string,
   age?: string,
+  variant?: string,
 ): RefImage | undefined => {
   const eff = resolveRefBindings(bindings, sceneHeading);
   const boundId = eff.characters[name];
@@ -50,6 +52,10 @@ export const resolveCharacterSheet = (
   const owned = refImages.filter(r =>
     (r.subject ?? '') === name || (r.subject ?? '').startsWith(name + '/'));
   if (!owned.length) return undefined;
+  if (variant) {
+    const tagged = owned.find(r => (r.subject ?? '').startsWith(`${name}/${variant}`));
+    if (tagged) return tagged;
+  }
   if (age) {
     const tagged = owned.find(r => (r.subject ?? '').startsWith(`${name}/${age}`));
     if (tagged) return tagged;
@@ -59,8 +65,8 @@ export const resolveCharacterSheet = (
 };
 
 /** Resolve a frame's references from a beat/CHARACTER target: the primary
- *  character sheet (①, age-aware) and, for scene-bearing blocks, the scene
- *  environment sheet (③) when one is bound/available. Never a character
+ *  character sheet (①, variant/age-aware) and, for scene-bearing blocks, the
+ *  scene environment sheet (③) when one is bound/available. Never a character
  *  backdrop for CHARACTER blocks (独立背景). */
 export const resolveFrameRefs = (
   kind: 'action' | 'dialogue' | 'character',
@@ -69,8 +75,9 @@ export const resolveFrameRefs = (
   bindings: RefBindings | undefined,
   refImages: RefImage[],
   age?: string,
+  variant?: string,
 ): FrameRefs => {
-  const character = resolveCharacterSheet(name, bindings, refImages, sceneHeading, age);
+  const character = resolveCharacterSheet(name, bindings, refImages, sceneHeading, age, variant);
   let environment: RefImage | undefined;
   if (kind !== 'character' && sceneHeading) {
     const eff = resolveRefBindings(bindings, sceneHeading);
@@ -119,14 +126,13 @@ export const resolveActionRef = (
   if (!cast.length) return { kind: 'no-character' };
 
   const primary = cast[0];
-  const eff = resolveRefBindings(bindings, sceneHeading);
-  const boundId = eff.characters[primary];
-  const image =
-    (boundId ? refImages.find((r) => r.id === boundId) : undefined) ??
-    refImages.find((r) => (r.subject ?? '') === primary || (r.subject ?? '').startsWith(primary + '/'));
+  // In-scene 换装: the variant named on the nearest preceding cue for this base
+  // (e.g. `张三（浴袍）` cues the action below to resolve the bathrobe sheet).
+  const variant = resolveBeatVariant(blocks, beatIndex, primary);
+  const image = resolveCharacterSheet(primary, bindings, refImages, sceneHeading, undefined, variant);
 
-  if (!image) return { kind: 'needs-image', characterName: primary };
-  return { kind: 'ready', characterName: primary, image };
+  if (!image) return { kind: 'needs-image', characterName: primary, variant };
+  return { kind: 'ready', characterName: primary, variant, image };
 };
 
 /** Resolve the EFFECTIVE bindings for a scene: per-scene costume overrides

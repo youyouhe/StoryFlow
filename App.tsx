@@ -16,6 +16,7 @@ import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
+import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -1182,26 +1183,29 @@ function App() {
           const globalCharDesigns = new Map<string, string>();
           for (const b of screenplay.blocks) {
             if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
-              const n = b.content.trim();
+              const n = baseCharName(b.content.trim());
               if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
             }
           }
 
-          // Ordered work: env → distinct characters → actions. Each entry only
-          // if the block lacks a prompt already.
-          const jobs: { blockId: string; kind: 'environment' | 'character' | 'action'; charName?: string }[] = [];
+          // Ordered work: env → distinct characters (by BASE name, tracking the
+          // costume variant per slot) → actions. Each entry only if the block
+          // lacks a prompt already. A `张三（浴袍）` slot is its OWN sheet — env/
+          // char/other variants not merged.
+          const jobs: { blockId: string; kind: 'environment' | 'character' | 'action'; charName?: string; variant?: string }[] = [];
           const sceneHeadingBlock = screenplay.blocks[sceneStart];
           if (sceneHeadingBlock && !sceneHeadingBlock.imagePrompt?.trim()) {
             jobs.push({ blockId: sceneHeadingBlock.id, kind: 'environment' });
           }
-          const seenChars = new Set<string>();
+          const seenCharSlots = new Set<string>();
           for (let i = sceneStart + 1; i < sceneEnd; i++) {
             const b = screenplay.blocks[i];
             if (b.type === 'CHARACTER') {
-              const name = b.content.trim();
-              if (!name || seenChars.has(name)) continue;
-              seenChars.add(name);
-              if (!b.imagePrompt?.trim()) jobs.push({ blockId: b.id, kind: 'character', charName: name });
+              const pc = parseCharacterName(b.content);
+              const slotKey = b.content.trim();
+              if (!pc.base || seenCharSlots.has(slotKey)) continue;
+              seenCharSlots.add(slotKey);
+              if (!b.imagePrompt?.trim()) jobs.push({ blockId: b.id, kind: 'character', charName: pc.base, variant: pc.variant });
             }
           }
           for (let i = sceneStart + 1; i < sceneEnd; i++) {
@@ -1234,6 +1238,7 @@ function App() {
                 globalCharDesigns,
                 job.kind === 'character' || job.kind === 'action' ? wardrobeIn(sequenceAt(screenplay.sequences, screenplay.blocks.findIndex(b => b.id === job.blockId)), job.charName ?? '') : undefined,
                 job.kind === 'character' || job.kind === 'action' ? job.charName : undefined,
+                job.kind === 'character' ? job.variant : undefined,
               );
               // A blank/empty response is a failed job, not a success to persist
               // (it would light an empty chip). Count it and move on.
@@ -1243,13 +1248,15 @@ function App() {
                 console.warn(`Storyboard for block ${job.blockId} returned empty`);
                 continue;
               }
-              // Write live. CHARACTER prompts propagate to same-name blocks so
-              // there's one shared design sheet per character.
+              // Write live. CHARACTER prompts propagate to the same BASE+variant
+              // slot only — so the bathrobe sheet doesn't overwrite the base
+              // 张三 sheet.
               setScreenplay(prev => ({
                 ...prev,
                 blocks: prev.blocks.map(b => {
                   if (b.id === job.blockId) return { ...b, imagePrompt: prompt };
-                  if (job.kind === 'character' && job.charName && b.type === 'CHARACTER' && b.content.trim() === job.charName) {
+                  if (job.kind === 'character' && job.charName && b.type === 'CHARACTER' &&
+                      baseCharName(b.content.trim()) === job.charName && parseCharacterName(b.content.trim()).variant === job.variant) {
                     return { ...b, imagePrompt: prompt };
                   }
                   return b;
@@ -1295,15 +1302,17 @@ function App() {
         const globalCharDesigns = new Map<string, string>();
         for (const b of screenplay.blocks) {
           if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
-            const n = b.content.trim();
+            const n = baseCharName(b.content.trim());
             if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
           }
         }
-        const charName = kind === 'character' ? currentBlock.content.trim() : undefined;
+        const pc = kind === 'character' ? parseCharacterName(currentBlock.content.trim()) : { base: '' };
+        const charName = kind === 'character' ? pc.base : undefined;
+        const variant = kind === 'character' ? pc.variant : undefined;
         const wardrobe = (kind === 'character' || kind === 'action') && charName
           ? wardrobeIn(sequenceAt(screenplay.sequences, targetIdx), charName)
           : undefined;
-        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName);
+        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName, variant);
       } else if (effectiveMode === 'GRAYBOX') {
         // Graybox: structured 3D previs JSON (scene layout or shot camera).
         // Mirrors the STORYBOARD scene-slice, but emits a GrayboxData object

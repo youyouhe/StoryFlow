@@ -6,7 +6,7 @@ import type { ScriptBlock, Screenplay, GrayboxData, RefImage, RefBindings, H3Tas
 import { Graybox3DView } from './Graybox3DView';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
-import { computeBeatCast } from '../utils/beatCast';
+import { computeBeatCast, parseCharacterName, resolveBeatVariant } from '../utils/beatCast';
 import { grayboxOverviewLine } from '../utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from '../utils/grayboxToBlender';
 import { generateImages } from '../services/minimaxService';
@@ -100,6 +100,14 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   const hasPrompt = !!panelBlock.imagePrompt?.trim();
   const hasGraybox = !!panelBlock.graybox;
   if (!hasPrompt && !hasGraybox) return null;
+
+  // CHARACTER identity for a variant cue: `张三（浴袍）` → store base 张三 with
+  // variant 浴袍 so the sheet lands in the right slot (subject 张三/浴袍).
+  const parseIntCtxChar = (b: ScriptBlock, subj: string) => {
+    const p = parseCharacterName(b.content.trim());
+    const nm = p.base || subj;
+    return { kind: 'character' as const, charName: nm, ...(p.variant ? { variant: p.variant } : {}) };
+  };
 
   // When both exist, the chip that opened the panel decides the
   // initial view; the segmented control below lets the user switch.
@@ -356,20 +364,27 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     if (screenplay.blocks[i].type === 'SCENE_HEADING') { envScene = screenplay.blocks[i].content; break; }
                   }
                   const seq = sequenceAt(screenplay.sequences, panelBlockIdx);
-                  const charName = panelBlock.type === 'CHARACTER'
-                    ? panelBlock.content.trim()
-                    : (panelActionRef?.kind === 'ready' ? panelActionRef.characterName : (panelActionRef?.kind === 'needs-image' ? panelActionRef.characterName : ''));
-                  const ageCtx = seq && charName ? wardrobeIn(seq, charName).age : undefined;
+                  const parsedName = panelBlock.type === 'CHARACTER'
+                    ? parseCharacterName(panelBlock.content)
+                    : (panelActionRef?.kind === 'ready' || panelActionRef?.kind === 'needs-image')
+                      ? parseCharacterName(panelActionRef.characterName || (panelActionRef.kind==='needs-image' ? panelActionRef.characterName : ''))
+                      : parseCharacterName('');
+                  const base = parsedName.base;
+                  const variant = panelBlock.type === 'CHARACTER'
+                    ? parsedName.variant
+                    : (panelBlock.type === 'ACTION' && panelActionRef?.kind === 'ready' ? panelActionRef.variant : undefined);
+                  const ageCtx = seq && base ? wardrobeIn(seq, base).age : undefined;
                   let frameRefs: { character?: RefImage; environment?: RefImage } = {};
                   if (panelBlock.type === 'CHARACTER') {
-                    const cs = resolveCharacterSheet(charName, screenplay.referenceBindings, refImages, envScene, ageCtx);
+                    const cs = resolveCharacterSheet(base, screenplay.referenceBindings, refImages, envScene, ageCtx, variant);
                     frameRefs = { character: cs };
                   } else if (panelBlock.type === 'ACTION' && panelActionRef?.kind === 'ready') {
-                    const fr = resolveFrameRefs('action', panelActionRef.characterName, envScene, screenplay.referenceBindings, refImages, ageCtx);
+                    const fr = resolveFrameRefs('action', panelActionRef.characterName, envScene, screenplay.referenceBindings, refImages, ageCtx, panelActionRef.variant);
                     frameRefs = fr;
                   } else if (panelBlock.type === 'DIALOGUE') {
                     const castDiag = panelBeatCast?.[0];
-                    if (castDiag) frameRefs = resolveFrameRefs('dialogue', castDiag, envScene, screenplay.referenceBindings, refImages, ageCtx);
+                    const diagVar = castDiag ? resolveBeatVariant(screenplay.blocks, panelBlockIdx, castDiag) : undefined;
+                    if (castDiag) frameRefs = resolveFrameRefs('dialogue', castDiag, envScene, screenplay.referenceBindings, refImages, ageCtx, diagVar);
                   }
                   // Character context (textual ① backdrop for the prompt) comes
                   // from the block's own imagePrompt already; env ③ is folded
@@ -415,7 +430,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                       panelBlock.imagePrompt,
                       'ai-generate',
                       panelBlock.type === 'CHARACTER'
-                        ? { kind: 'character', charName: subject }
+                        ? parseIntCtxChar(panelBlock, subject)
                         : panelBlock.type === 'SCENE_HEADING'
                           ? { kind: 'environment', sceneKey: envScene }
                           : { kind: 'action', sceneKey: envScene },
