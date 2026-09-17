@@ -1904,6 +1904,7 @@ function App() {
                   draft: 'First Draft',
               },
               blocks: newBlocks,
+              sourcePrompt: promptSource,
               lastModified: Date.now(),
           };
           setScreenplay(newScript);

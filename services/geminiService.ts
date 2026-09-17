@@ -200,16 +200,28 @@ Rules:
 1. One [SCENE] per location/time. A fixed-camera single-location video is exactly ONE [SCENE]; derive INT./EXT., location and time from the prompt's scene description.
 2. Walk the timeline in order. Each beat becomes blocks in this labeled format:
      [SCENE] INT./EXT. LOCATION - TIME
-     [ACTION] staging, movement, entrances/exits, camera-stable business
+     [ACTION] staging, movement, entrances/exits
      [CHARACTER] NAME — or NAME（COSTUME）when that character is wearing a named costume
      [DIALOGUE] the spoken line, VERBATIM from the prompt
      [PARENTHETICAL] (delivery/voice direction, when the prompt gives one)
-3. Costume changes: when the prompt changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter — derive a SHORT label from the outfit description (e.g. 女主（学院风）). The base name must stay IDENTICAL across the whole script. Do NOT write the full outfit paragraph into the cue — keep cue labels short; the outfit detail belongs in the [ACTION] line.
-4. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim.
-5. Dialogue must be transcribed VERBATIM. Do not paraphrase, translate, add, or drop lines.
-6. Do NOT invent characters, lines, scenes, or camera moves the prompt does not contain. Do not merge or skip timeline beats.
-7. Describe the scene environment once in the first [ACTION] (or the [SCENE] heading) so the environment image can be derived.
-8. Output ONLY labeled blocks — no markdown, no explanations, no headings of your own.
+3. STORY ONLY — the single most important rule. Production prompts contain large non-story sections that exist to constrain the video model, NOT to appear on screen as story beats. Do NOT transcribe them as blocks — not even once, not condensed, not as a summary:
+     - visual-style / 画面风格 sections (超真实、电影级、录屏质感…)
+     - camera rules (固定机位、一镜到底、不切镜不推拉摇移变焦…)
+     - reference-image layout instructions (左右分屏、参考图区域、左侧用于锁定场景…)
+     - character-consistency rules (不换脸、不改变年龄/发型/身份…)
+     - subtitle/字幕 UI rules and rendering notes (字幕位置、字体、颜色、扬声器图标、音频波形…)
+     - audio engineering rules (音效、脚步声、口型同步、不要背景音乐…)
+     - global acting style sections (表演风格、自然克制…)
+     - 画面一致性 sections, NEGATIVE lists
+   What survives into the script is ONLY what a viewer sees as story: who is present, what they do, what they say.
+   Exception: a delivery note that belongs to ONE specific spoken line goes in that line's [PARENTHETICAL] (e.g. （语气俏皮，带展示感）).
+4. NEVER write subtitle/waveform rendering notes (字幕逐字显示…、波形随声音跳动…) — not once, and not after every line. Subtitle behavior is a video-model rule, already excluded by rule 3.
+5. Costume changes: when the prompt changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter. Derive ONE short label per outfit from its most distinctive feature (e.g. 女主（学院风JK）), and reuse THE SAME label every time that outfit is worn. The base name stays IDENTICAL. At the beat where the outfit FIRST appears, write the FULL outfit description into that beat's [ACTION] (e.g. 已换成第一套学院风服装：蓝黑格纹百褶短裙、白色过膝袜…); afterwards use only the short label.
+6. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim.
+7. Dialogue must be transcribed VERBATIM. Do not paraphrase, translate, add, or drop lines.
+8. Do NOT invent characters, lines, scenes, or camera moves the prompt does not contain. Exactly ONE block-group per timeline beat — never split one beat into overlapping blocks, never describe the same beat twice.
+9. If the prompt has timestamps, keep each beat's time range at the START of its [ACTION] (e.g. "00:10-00:14。她…"), so shot durations survive.
+10. Output ONLY labeled blocks — no markdown, no explanations, no section headings of your own.
 
 Production prompt:
 ---

@@ -166,6 +166,11 @@ export interface Screenplay {
    *  same wardrobe reference instead of drifting. Determined by
    *  utils/sequence.ts. Persisted with the script. */
   sequences?: ScriptSequence[];
+  /** FROM_PROMPT origin: the raw production prompt the script was transcribed
+   *  from. The transcription deliberately drops the video-model constraint
+   *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
+   *  the final video-generation prompt can reuse them verbatim. */
+  sourcePrompt?: string;
 }
 
 /** One segment's per-character costume/age continuity state. */
