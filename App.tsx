@@ -17,6 +17,7 @@ import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
+import { sanitizeParsedBlocks } from './utils/scriptParse';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -1885,17 +1886,21 @@ function App() {
 
           return { id: generateId(), type, content };
       });
+      // Structural repair for LLM output: drop empties, collapse consecutive
+      // duplicates, guarantee a leading SCENE_HEADING. Deterministic — no model
+      // behavior trusted here.
+      const safeBlocks = sanitizeParsedBlocks(newBlocks);
 
       // FROM_PROMPT: the transcribed screenplay becomes a NEW script — the
       // pasted production prompt is a whole work, not a continuation of
       // whatever is currently open. Title derives from the first scene heading
       // so the sidebar shows something meaningful.
       if (aiMode === 'FROM_PROMPT') {
-          if (!newBlocks.length) {
+          if (!safeBlocks.length) {
               setAIState({ isLoading: false, suggestion: null, error: t.aiErrorGeneric, decision: null, grayboxDraft: null, batchProgress: null });
               return;
           }
-          const firstScene = newBlocks.find(b => b.type === 'SCENE_HEADING')?.content?.trim();
+          const firstScene = safeBlocks.find(b => b.type === 'SCENE_HEADING')?.content?.trim();
           const newScript: Screenplay = {
               id: generateId(),
               metadata: {
@@ -1903,12 +1908,12 @@ function App() {
                   title: firstScene ? firstScene.slice(0, 40) : (screenplay.metadata.title || 'Prompt Script'),
                   draft: 'First Draft',
               },
-              blocks: newBlocks,
+              blocks: safeBlocks,
               sourcePrompt: promptSource,
               lastModified: Date.now(),
           };
           setScreenplay(newScript);
-          setSelectedBlockId(newBlocks[0].id);
+          setSelectedBlockId(safeBlocks[0].id);
           setShowAIModal(false);
           setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;

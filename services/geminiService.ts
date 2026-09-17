@@ -194,11 +194,28 @@ ${langInstruction}`;
 
   const userPrompt = `Convert the production prompt below into a screenplay.
 
-The prompt is ALREADY a finished creative work — your job is transcription into block format, not rewriting. Preserve its story, dialogue, order, and staging exactly.
+The input may take ANY shape — adapt to what you receive:
+  - a formal production brief (scene + camera + costumes + timeline + NEGATIVE), OR
+  - an informal description, a voice-memo brain dump, a few fragmentary sentences, OR
+  - dialogue-only, action-only, a treatment outline, or any mix, in any language.
+It may lack a timeline, lack costume info, lack character names, or refer to the
+same person inconsistently (她 / 女孩 / 女主). Handle all of it:
+  - No timeline → still output beats, in narrative order, without timestamps.
+  - No costume info → plain NAME cues everywhere; never invent a costume.
+  - Same person referred to inconsistently → normalize to ONE base name (the most
+    specific proper name used); do this silently, never comment on it.
+  - Dialogue embedded inside narration (她说："……") → split into [CHARACTER] + [DIALOGUE].
+  - Multiple locations/times → multiple [SCENE] blocks, in narrative order.
+  - Very short input → a valid minimal script (one scene, one or two beats).
+  - Long input with repetition → one block-group per distinct story step; dedupe.
+Never refuse, never ask questions, never output an empty script. Whatever the
+input quality, you always produce a valid labeled-block screenplay.
+
+The prompt is a finished creative work — your job is faithful transcription into block format, not rewriting. Preserve its story, dialogue, order, and staging exactly. Where the input is vague, stay vague — do not invent detail to fill gaps.
 
 Rules:
-1. One [SCENE] per location/time. A fixed-camera single-location video is exactly ONE [SCENE]; derive INT./EXT., location and time from the prompt's scene description.
-2. Walk the timeline in order. Each beat becomes blocks in this labeled format:
+1. One [SCENE] per location/time — only if the input actually has them. A fixed-camera single-location video is exactly ONE [SCENE]. If the input never states a location/time, derive the most plausible one from context.
+2. Walk the story in order (follow the timeline if the input has one; otherwise the narrative flow). Each beat becomes blocks in this labeled format:
      [SCENE] INT./EXT. LOCATION - TIME
      [ACTION] staging, movement, entrances/exits
      [CHARACTER] NAME — or NAME（COSTUME）when that character is wearing a named costume
@@ -216,11 +233,11 @@ Rules:
    What survives into the script is ONLY what a viewer sees as story: who is present, what they do, what they say.
    Exception: a delivery note that belongs to ONE specific spoken line goes in that line's [PARENTHETICAL] (e.g. （语气俏皮，带展示感）).
 4. NEVER write subtitle/waveform rendering notes (字幕逐字显示…、波形随声音跳动…) — not once, and not after every line. Subtitle behavior is a video-model rule, already excluded by rule 3.
-5. Costume changes: when the prompt changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter. Derive ONE short label per outfit from its most distinctive feature (e.g. 女主（学院风JK）), and reuse THE SAME label every time that outfit is worn. The base name stays IDENTICAL. At the beat where the outfit FIRST appears, write the FULL outfit description into that beat's [ACTION] (e.g. 已换成第一套学院风服装：蓝黑格纹百褶短裙、白色过膝袜…); afterwards use only the short label.
+5. Costume changes: when the input changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter. Derive ONE short label per outfit from its most distinctive feature (e.g. 女主（学院风JK）), and reuse THE SAME label every time that outfit is worn. The base name stays IDENTICAL. At the beat where the outfit FIRST appears, write the FULL outfit description into that beat's [ACTION] (e.g. 已换成第一套学院风服装：蓝黑格纹百褶短裙、白色过膝袜…); afterwards use only the short label.
 6. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim.
 7. Dialogue must be transcribed VERBATIM. Do not paraphrase, translate, add, or drop lines.
-8. Do NOT invent characters, lines, scenes, or camera moves the prompt does not contain. Exactly ONE block-group per timeline beat — never split one beat into overlapping blocks, never describe the same beat twice.
-9. If the prompt has timestamps, keep each beat's time range at the START of its [ACTION] (e.g. "00:10-00:14。她…"), so shot durations survive.
+8. Do NOT invent characters, lines, scenes, or camera moves the input does not contain. Exactly ONE block-group per story beat — never split one beat into overlapping blocks, never describe the same beat twice.
+9. If the input has timestamps, keep each beat's time range at the START of its [ACTION] (e.g. "00:10-00:14。她…"), so shot durations survive.
 10. Output ONLY labeled blocks — no markdown, no explanations, no section headings of your own.
 
 Production prompt:
