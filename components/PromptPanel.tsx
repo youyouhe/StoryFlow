@@ -168,6 +168,45 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
       )
     : null;
 
+  // Reference-lock preview: what the Generate button will condition this frame
+  // on — ① the character identity sheet (variant/age-aware) and ③ the scene
+  // environment backdrop. Surfaced as visible chips so a MISSING lock is seen
+  // BEFORE spending a generation, instead of silently degrading to text-to-image
+  // and producing 穿帮.
+  const refPreview = (() => {
+    if (showingGraybox || !panelBlock.imagePrompt) return null;
+    const seq = sequenceAt(screenplay.sequences, panelIdx);
+    if (panelBlock.type === 'CHARACTER') {
+      const pc = parseCharacterName(panelBlock.content);
+      const sheet = resolveCharacterSheet(pc.base, screenplay.referenceBindings, refImages, panelSceneHeading, wardrobeIn(seq, pc.base).age, pc.variant);
+      return {
+        character: sheet,
+        characterLabel: pc.variant ? `${pc.base}（${pc.variant}）` : pc.base,
+        environment: undefined as RefImage | undefined,
+        needsImage: false,
+      };
+    }
+    if (panelBlock.type === 'ACTION') {
+      if (panelActionRef?.kind === 'ready') {
+        const age = wardrobeIn(seq, panelActionRef.characterName).age;
+        const fr = resolveFrameRefs('action', panelActionRef.characterName, panelSceneHeading, screenplay.referenceBindings, refImages, age, panelActionRef.variant);
+        return { ...fr, characterLabel: panelActionRef.characterName + (panelActionRef.variant ? `（${panelActionRef.variant}）` : ''), needsImage: false };
+      }
+      if (panelActionRef?.kind === 'needs-image') {
+        return { character: null, environment: undefined as RefImage | undefined, characterLabel: panelActionRef.characterName, needsImage: true };
+      }
+      return { character: undefined, environment: undefined as RefImage | undefined, characterLabel: '', needsImage: false }; // empty shot
+    }
+    if (panelBlock.type === 'DIALOGUE') {
+      const name = panelBeatCast?.[0];
+      if (!name) return null;
+      const diagVar = resolveBeatVariant(screenplay.blocks, panelIdx, name);
+      const fr = resolveFrameRefs('dialogue', name, panelSceneHeading, screenplay.referenceBindings, refImages, wardrobeIn(seq, name).age, diagVar);
+      return { ...fr, characterLabel: name + (diagVar ? `（${diagVar}）` : ''), needsImage: false };
+    }
+    return null;
+  })();
+
   // Generated-result thumbnail: prefer the just-generated session object, else
   // the PERSISTED prompt→asset link resolved against the live library. Object
   // urls are session-scoped, so only the id is stored on the block; we look the
@@ -288,6 +327,37 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
           <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
             {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : panelBlock.imagePrompt}
           </pre>
+        </div>
+      )}
+      {/* Reference-lock chips: make the ①/③ conditioning visible. A gray/amber
+          chip here is the answer to "为什么这张图穿帮" — the lock was missing. */}
+      {refPreview && !showingGraybox && (
+        <div className="px-4 pt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="text-gray-400 dark:text-gray-500">{t.refLockLabel}</span>
+          {refPreview.character ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              <img src={refPreview.character.url} alt="" className="w-3.5 h-3.5 rounded-sm object-cover" />
+              ① {refPreview.characterLabel}
+            </span>
+          ) : refPreview.needsImage ? (
+            <span className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+              ① {refPreview.characterLabel} · {t.refLockNoSheet}
+            </span>
+          ) : panelBlock.type !== 'SCENE_HEADING' ? (
+            <span className="px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-zinc-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-zinc-700">
+              ① {t.refLockNoCharacter}
+            </span>
+          ) : null}
+          {panelBlock.type !== 'CHARACTER' && (refPreview.environment ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <img src={refPreview.environment.url} alt="" className="w-3.5 h-3.5 rounded-sm object-cover" />
+              ③ {t.refLockEnv}
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-zinc-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-zinc-700" title={t.refLockNoEnvHint}>
+              ③ {t.refLockNoEnv}
+            </span>
+          ))}
         </div>
       )}
       <div className="relative p-4 border-t border-gray-100 dark:border-zinc-800 flex flex-wrap items-center gap-2">
