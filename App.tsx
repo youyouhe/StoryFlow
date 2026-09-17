@@ -6,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing, generateSequences } from './services/geminiService';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
@@ -15,6 +15,7 @@ import { createWebMcpAccessor } from './services/webmcpAccessor';
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveActionRef } from './utils/refBindings';
+import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -535,6 +536,8 @@ function App() {
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
+  // Guards the one-time background sequence refresh on first scene-level Alt+G.
+  const hasSequenceRun = useRef(false);
   useEffect(() => {
     const active = h3Tasks.filter(t => (t.status === 'queued' || t.status === 'running') && t.taskId);
     if (!active.length || !h3Ready) return;
@@ -1155,9 +1158,152 @@ function App() {
         for (let i = targetIdx; i >= 0; i--) {
             if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
         }
+
+        // --- Cascading batch: Alt+S on a SCENE_HEADING ---
+        // Generate this scene's ENVIRONMENT image (the heading), then a
+        // CHARACTER design sheet for every distinct character acting/speaking,
+        // then an ACTION storyboard frame for every action beat — each only
+        // when its block lacks an imagePrompt. Mirrors GRAYBOX's Alt+G cascade:
+        // every result is written straight back to its block live so progress
+        // is durable and the chips light up as each lands. Single-block Alt+S
+        // on ACTION/CHARACTER/SCENE_HEADING still works (no cascade).
+        if (currentBlock.type === 'SCENE_HEADING') {
+          let sceneEnd = screenplay.blocks.length;
+          for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneEnd = i; break; }
+          }
+          const sceneFull = screenplay.blocks.slice(sceneStart, sceneEnd);
+
+          // SCRIPT-WIDE character identity table (① text): every CHARACTER
+          // block in the whole screenplay that carries a design sheet. Fed to
+          // every prompt so a character defined in an EARLIER scene still
+          // resolves here (cross-scene consistency) — the per-scene slice alone
+          // would forget it.
+          const globalCharDesigns = new Map<string, string>();
+          for (const b of screenplay.blocks) {
+            if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+              const n = b.content.trim();
+              if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
+            }
+          }
+
+          // Ordered work: env → distinct characters → actions. Each entry only
+          // if the block lacks a prompt already.
+          const jobs: { blockId: string; kind: 'environment' | 'character' | 'action'; charName?: string }[] = [];
+          const sceneHeadingBlock = screenplay.blocks[sceneStart];
+          if (sceneHeadingBlock && !sceneHeadingBlock.imagePrompt?.trim()) {
+            jobs.push({ blockId: sceneHeadingBlock.id, kind: 'environment' });
+          }
+          const seenChars = new Set<string>();
+          for (let i = sceneStart + 1; i < sceneEnd; i++) {
+            const b = screenplay.blocks[i];
+            if (b.type === 'CHARACTER') {
+              const name = b.content.trim();
+              if (!name || seenChars.has(name)) continue;
+              seenChars.add(name);
+              if (!b.imagePrompt?.trim()) jobs.push({ blockId: b.id, kind: 'character', charName: name });
+            }
+          }
+          for (let i = sceneStart + 1; i < sceneEnd; i++) {
+            const b = screenplay.blocks[i];
+            if (b.type === 'ACTION' && !b.imagePrompt?.trim()) jobs.push({ blockId: b.id, kind: 'action' });
+          }
+
+          const total = jobs.length;
+          if (total === 0) {
+            // Whole scene already storyboarded — nothing to generate.
+            setShowAIModal(false);
+            setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+            return;
+          }
+
+          let failures = 0;
+          let firstError: string | null = null;
+          for (let s = 0; s < total; s++) {
+            const job = jobs[s];
+            const jobBlock = screenplay.blocks.find(b => b.id === job.blockId);
+            setAIState({ isLoading: true, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: { current: s + 1, total } });
+            try {
+              // Full-scene context so each prompt sees all beats; ACTION frames
+              // get their own shot graybox as composition lock (option A).
+              const shotGraybox = job.kind === 'action' && jobBlock?.graybox?.kind === 'shot' && !jobBlock.graybox.error
+                ? jobBlock.graybox : undefined;
+              const prompt = await generateImagePrompt(
+                sceneFull, job.blockId, systemInstruction, appSettings, job.kind,
+                screenplay.metadata.styleHead, shotGraybox,
+                globalCharDesigns,
+                job.kind === 'character' || job.kind === 'action' ? wardrobeIn(sequenceAt(screenplay.sequences, screenplay.blocks.findIndex(b => b.id === job.blockId)), job.charName ?? '') : undefined,
+                job.kind === 'character' || job.kind === 'action' ? job.charName : undefined,
+              );
+              // A blank/empty response is a failed job, not a success to persist
+              // (it would light an empty chip). Count it and move on.
+              if (!prompt || !prompt.trim()) {
+                failures++;
+                if (!firstError) firstError = t.aiErrorGeneric;
+                console.warn(`Storyboard for block ${job.blockId} returned empty`);
+                continue;
+              }
+              // Write live. CHARACTER prompts propagate to same-name blocks so
+              // there's one shared design sheet per character.
+              setScreenplay(prev => ({
+                ...prev,
+                blocks: prev.blocks.map(b => {
+                  if (b.id === job.blockId) return { ...b, imagePrompt: prompt };
+                  if (job.kind === 'character' && job.charName && b.type === 'CHARACTER' && b.content.trim() === job.charName) {
+                    return { ...b, imagePrompt: prompt };
+                  }
+                  return b;
+                }),
+                lastModified: Date.now(),
+              }));
+            } catch (err: any) {
+              failures++;
+              if (!firstError) firstError = err?.message || t.aiErrorGeneric;
+              console.warn(`Storyboard for block ${job.blockId} failed:`, err);
+            }
+          }
+
+          // Done. Everything already saved live. If anything failed, keep the
+          // modal open with the error (or partial note); else close — the one
+          // click is complete and needs no accept.
+          if (firstError) {
+            setAIState({
+              isLoading: false,
+              suggestion: null,
+              error: failures === total ? (firstError || t.aiErrorGeneric) : t.storyboardBatchPartial.replace('{failed}', String(failures)).replace('{total}', String(total)),
+              decision: null, grayboxDraft: null, batchProgress: null,
+            });
+            return;
+          }
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+        }
+
         const sceneBlocks = screenplay.blocks.slice(sceneStart, targetIdx + 1);
-        const kind = currentBlock.type === 'CHARACTER' ? 'character' : currentBlock.type === 'SCENE_HEADING' ? 'environment' : 'action';
-        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead);
+        // After the SCENE_HEADING batch branch above returned, only ACTION /
+        // CHARACTER remain here. kind: character vs action.
+        const kind = currentBlock.type === 'CHARACTER' ? 'character' : 'action';
+        // Composition lock: if this beat already has a SHOT graybox, feed it so
+        // the image prompt reproduces the same camera (graybox is the framing
+        // source of truth). Only ACTION beats carry a shot camera.
+        const shotGraybox = kind === 'action' && currentBlock.graybox?.kind === 'shot' && !currentBlock.graybox.error
+          ? currentBlock.graybox
+          : undefined;
+        // Global identity table (①) so even the single-block path sees a
+        // character defined in an earlier scene.
+        const globalCharDesigns = new Map<string, string>();
+        for (const b of screenplay.blocks) {
+          if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+            const n = b.content.trim();
+            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
+          }
+        }
+        const charName = kind === 'character' ? currentBlock.content.trim() : undefined;
+        const wardrobe = (kind === 'character' || kind === 'action') && charName
+          ? wardrobeIn(sequenceAt(screenplay.sequences, targetIdx), charName)
+          : undefined;
+        result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName);
       } else if (effectiveMode === 'GRAYBOX') {
         // Graybox: structured 3D previs JSON (scene layout or shot camera).
         // Mirrors the STORYBOARD scene-slice, but emits a GrayboxData object
@@ -1443,6 +1589,23 @@ function App() {
                 setAIMode('GRAYBOX');
                 setShowAIModal(true);
                 executeAI('GRAYBOX');
+                // Refresh the script's Sequence segmentation + per-character
+                // wardrobe/age in the background whenever a scene-level previs
+                // runs. This keeps `screenplay.sequences` fresh so later frames
+                // (frame gen / storyboard) read the right costume/age. Fires
+                // only on a SCENE_HEADING target; single-shot / other targets
+                // skip the (relatively costly) full-script continuity pass.
+                if (currentBlock.type === 'SCENE_HEADING' && screenplay.blocks.length > 0 && !hasSequenceRun.current) {
+                    hasSequenceRun.current = true;
+                    void (async () => {
+                        try {
+                            const seqs = await generateSequences(screenplay.blocks, appSettings);
+                            if (seqs.length) {
+                                setScreenplay(prev => ({ ...prev, sequences: seqs, lastModified: Date.now() }));
+                            }
+                        } catch { /* sequence refresh is best-effort — frames degrade to no-wardrobe */ }
+                    })();
+                }
                 return;
             }
         }

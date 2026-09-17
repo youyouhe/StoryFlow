@@ -159,6 +159,35 @@ export interface Screenplay {
    *  screenplay so exports/imports carry it — assets stay in the shared
    *  library (folder or IndexedDB), bindings travel with the script. */
   referenceBindings?: RefBindings;
+  /** Sequence segmentation + per-sequence wardrobe/age state. A Sequence is a
+   *  bigger continuity granule than a scene: costume/age stay stable across it
+   *  (LLM judges the change points from the narrative, e.g. muddy outdoors →
+   *  bathing indoors = a new sequence), so frames in one sequence reuse the
+   *  same wardrobe reference instead of drifting. Determined by
+   *  utils/sequence.ts. Persisted with the script. */
+  sequences?: ScriptSequence[];
+}
+
+/** One segment's per-character costume/age continuity state. */
+export interface CharacterWardrobe {
+  /** Costume this character wears throughout this sequence, e.g. "浴袍".
+   *  Absent = the character's base design (no change from the global sheet). */
+  costume?: string;
+  /** Age stage this character is at, e.g. "青年" | "中年" | "晚年". Maps to a
+   *  distinct library asset (`名字/年纪`); absent = default age. */
+  age?: string;
+}
+
+/** A continuity granule spanning multiple scenes where characters do NOT change
+ *  costume/age. `start`/`end` are block indices [start, end) over screenplay.blocks. */
+export interface ScriptSequence {
+  id: string;
+  start: number;
+  end: number;
+  /** Per-character wardrobe/age within this granule. */
+  wardrobe: Record<string, CharacterWardrobe>;
+  /** A short label, e.g. the representative scene heading. */
+  label?: string;
 }
 
 export interface ScriptTemplate {

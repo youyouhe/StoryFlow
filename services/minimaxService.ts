@@ -208,9 +208,9 @@ const clampImagePrompt = (prompt: string): string => {
  *  no 24h URL expiry. Falls back to URL download if the endpoint ignores
  *  the base64 request. */
 export const generateImages = async (
-  cfg: MiniMaxConfig & { falKey?: string; falModel?: string; falQuality?: 'low' | 'high'; provider?: ImageProvider },
+  cfg: MiniMaxConfig & { falKey?: string; falModel?: string; falQuality?: 'high' | 'low'; provider?: ImageProvider },
   prompt: string,
-  opts?: { n?: number; aspectRatio?: string; subjectReference?: Blob },
+  opts?: { n?: number; aspectRatio?: string; subjectReference?: Blob; references?: { character?: Blob; landscape?: Blob } },
 ): Promise<GeneratedImage[]> => {
   // FAL backend: queue async submit→poll, then materialize CDN blobs.
   if (cfg.provider === 'fal') {
@@ -219,6 +219,13 @@ export const generateImages = async (
     const falCfg: FalConfig = { apiKey: cfg.falKey.trim(), model: cfg.falModel?.trim() || DEFAULT_FAL_MODEL };
     const t0 = performance.now();
     let outcome: 'ok' | 'error' = 'ok';
+    // Combine all reference images for the /edit endpoint: the identity sheet
+    // first, then any scene/environment backdrop — a frame references both the
+    // character (identity lock) and the scene it stands in (背景一致).
+    const refBlobs: Blob[] = [];
+    if (opts?.subjectReference) refBlobs.push(opts.subjectReference);
+    if (opts?.references?.character) refBlobs.push(opts.references.character);
+    if (opts?.references?.landscape) refBlobs.push(opts.references.landscape);
     let result;
     try {
       result = await falTextToImage(falCfg, prompt, {
@@ -226,9 +233,8 @@ export const generateImages = async (
         quality: cfg.falQuality ?? 'low',
         numImages: opts?.n ?? 1,
         outputFormat: 'png',
-        // Identity lock: a character design sheet conditions the generation
-        // via the /edit endpoint (same role subject_reference plays on MiniMax).
-        ...(opts?.subjectReference ? { referenceImages: [opts.subjectReference] } : {}),
+        // Identity + scenery lock via the /edit endpoint (min 1 image required).
+        ...(refBlobs.length ? { referenceImages: refBlobs } : {}),
       });
     } catch (e: any) {
       outcome = 'error';
@@ -252,12 +258,16 @@ export const generateImages = async (
   // Subject reference (图生图 identity lock): array of {type:'character',
   // image_file} per the official schema — base64 Data URL natively supported,
   // single front-facing subject works best (exactly our turnaround sheets).
-  if (opts?.subjectReference) {
-    body.subject_reference = [{
-      type: 'character',
-      image_file: await asBase64DataUri(opts.subjectReference),
-    }];
+  const identityRef = opts?.subjectReference ?? opts?.references?.character;
+  if (identityRef) {
+    body.subject_reference = await asBase64DataUri(identityRef).then(uri => [{
+      type: 'character', image_file: uri,
+    }]);
   }
+  // MiniMax image-01 exposes no landscape/scenery slot (only character
+  // subject_reference). A scene backdrop on MiniMax is therefore carried in the
+  // prompt TEXT (the caller appends the scene description); FAL /edit carries it
+  // as an extra referenceImage above. Nothing further to attach here.
   const t0 = performance.now();
   let outcome: 'ok' | 'error' = 'ok';
   let errorType: string | undefined;

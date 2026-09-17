@@ -1,6 +1,7 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { logAiCall, classifyError } from "./aiLog";
-import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion } from "../types";
+import { buildSequenceContext } from '../utils/sequence';
+import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion, CharacterWardrobe, ScriptSequence } from "../types";
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -559,6 +560,23 @@ Return ONLY a JSON array (no markdown fences, no commentary):
  * `sceneBlocks` is the current-scene context (most recent SCENE_HEADING through
  * the target block, inclusive), pre-sliced by the caller. `kind` selects the
  * focus: 'action' (scene illustration) or 'character' (character design sheet).
+ *
+ * `shotGraybox` — the target beat's own SHOT graybox (camera), injected as a
+ * COMPOSITION LOCK so the generated image reproduces the same camera the
+ * graybox pipeline will render (option A: graybox is the single source of
+ * truth for framing). When present, the model's Composition line is anchored to
+ * the graybox's shotType + intent + focus instead of inventing a camera.
+ *
+ * `globalCharDesigns` — a SCRIPT-WIDE name→design-text map (from every
+ * CHARACTER block across ALL scenes, not just this scene). ACTION/DIALOGUE
+ * prompts use it so a character defined in an EARLIER scene still resolves its
+ * identity here (cross-scene consistency). For a CHARACTER (isCharacter) target
+ * that already has a design (present in this map), the prompt KEEPS that
+ * identity and only re-skins the costume variant — it must not invent a new
+ * person.
+ *
+ * `wardrobe` — the character's costume/age state within its Sequence (from the
+ * split). Injected so a shot depicts the right outfit/age at this story point.
  */
 export const generateImagePrompt = async (
   sceneBlocks: ScriptBlock[],
@@ -567,6 +585,10 @@ export const generateImagePrompt = async (
   settings: AppSettings,
   kind: 'action' | 'character' | 'environment' = 'action',
   styleHead?: StyleHead,
+  shotGraybox?: GrayboxData,
+  globalCharDesigns?: Map<string, string>,
+  wardrobe?: { costume?: string; age?: string },
+  charName?: string,
 ): Promise<string> => {
   // Image prompts are always English, independent of scriptLanguage.
   const langInstruction = 'Respond in English only.';
@@ -639,12 +661,16 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
     return `${b.type}:${tag} ${b.content}`;
   }).join('\n');
 
-  // Established character designs: CHARACTER blocks in the scene that already
-  // carry an imagePrompt (the canonical design sheets). Injected into ACTION
-  // prompts so the storyboard frame depicts THE designed character — same
-  // person, same clothes — instead of inventing a new appearance.
+  // Established character designs: CHARACTER blocks that already carry an
+  // imagePrompt (the canonical design sheets). Prefer the SCRIPT-WIDE map so a
+  // character defined in an EARLIER scene resolves here (cross-scene identity);
+  // fall back to scanning this scene (legacy path / local-only calls).
   const charDesigns = new Map<string, string>();
-  if (!isCharacter) {
+  if (globalCharDesigns && globalCharDesigns.size) {
+    for (const [n, p] of globalCharDesigns) {
+      if (p?.trim()) charDesigns.set(n, p.trim());
+    }
+  } else if (!isCharacter) {
     for (const b of sceneBlocks) {
       if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
         const name = b.content.trim();
@@ -656,11 +682,46 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
     ? `\nEstablished character designs (CANONICAL — when these characters appear in frame, reuse their identity EXACTLY: same age, hair, face, and clothing wording. Do NOT invent new appearances for them):\n---\n${[...charDesigns.entries()].map(([n, p]) => `[CHARACTER ${n}] established design:\n${p}`).join('\n\n')}\n---\n`
     : '';
 
+  // When generating a CHARACTER VARIANT (isCharacter) whose base design already
+  // exists, keep the same person and only swap costume/age — not a new design.
+  const selfDesignForChar = isCharacter && charName && charDesigns.has(charName)
+    ? charDesigns.get(charName)!
+    : '';
+  const variantSection =
+    (kind === 'character' && selfDesignForChar)
+      ? `\nThis is a VARIANT of the established design above. Reuse the person EXACTLY (same face, body, hair style/color) and change ONLY the ${wardrobe?.age ? `age (to ${wardrobe.age})` : 'costume'}${wardrobe?.costume ? ` and wardrobe (${wardrobe.costume})` : ''} per the story. Do NOT alter the base identity.\n`
+      : '';
+
+  // Sequence wardrobe/age note for action/dialogue frames.
+  const wardrobeNote =
+    (kind !== 'character' && (wardrobe?.costume || wardrobe?.age))
+      ? `\nAt this story point the character is ${[wardrobe.age, wardrobe.costume].filter(Boolean).join(', ')}. Portray that state (outfit/age) for ${charName ?? 'the subject'}, keeping the established identity.\n`
+      : '';
+
   const targetNoun = isCharacter ? 'TARGET CHARACTER' : isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';
+
+  // Composition lock (option A): when the beat already has a SHOT graybox, its
+  // camera is the single source of truth for framing. Anchor the Composition
+  // line to the graybox's shotType + intent + focus so the generated image and
+  // the graybox pipeline render the SAME camera. Only meaningful for 'action'
+  // beats (character sheets / establishing environments have their own fixed
+  // framing and no shot camera to lock to).
+  let compLock = '';
+  if (kind === 'action' && shotGraybox && shotGraybox.kind === 'shot' && shotGraybox.camera && !shotGraybox.error) {
+    const cam = shotGraybox.camera;
+    const move = cam.movement ? cam.movement.type : 'static';
+    compLock = `\nCOMPOSITION LOCK — this beat's shot is already blocked in the graybox. Anchor the Composition line EXACTLY to this camera (do not invent a different shot type, angle, or framing):\n` +
+      `- shot type: ${cam.shotType}\n` +
+      `- movement: ${move}${cam.movement?.duration ? ` (${cam.movement.duration}s)` : ''}\n` +
+      `${cam.shotDescription ? `- director's intent: ${cam.shotDescription}\n` : ''}` +
+      `${cam.focus ? `- subject in focus: ${cam.focus}\n` : ''}` +
+      `The Composition line must describe this framing and how the subject sits in it. Keep the other five lines (Subject/Environment/Lighting/Material/Mood) as the script + designs dictate.`;
+  }
+
   const userPrompt = `Scene context (the marked ${targetNoun.toLowerCase()} is the one to turn into an image prompt):
 ---
 ${context}
----${designSection}
+---${designSection}${variantSection}${wardrobeNote}${compLock}
 Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.${charDesigns.size && !isEnvironment ? ' Characters in frame MUST match the established designs above.' : ''}`;
 
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'image-prompt');
@@ -876,6 +937,92 @@ const normalizeGraybox = (parsed: any, kind: 'scene' | 'shot'): GrayboxData => {
   }
 
   return result;
+};
+
+/**
+ * Generate a 3D graybox (previs) payload for a block.
+ *
+ * - `kind='scene'` (target = SCENE_HEADING): a layout of primitive objects
+ *   (walls/floor/props as boxes) plus character blocking — who stands where,
+ *   facing which way. Origin at room center, floor at y=0.
+ * - `kind='shot'` (target = ACTION or DIALOGUE): a single camera description —
+ *   shot type, position, look-at, and a movement (运镜) path chosen to serve
+ *   the beat.
+ *
+ * Uses `jsonMode=true` so the provider returns strict JSON. Mirrors
+ * `decideSceneTransition`'s graceful-degrade pattern: on any API or parse
+ * failure it returns a `GrayboxData` carrying an `error` string, so the modal
+ * still shows something and the user can discard.
+ */
+/**
+ * Sequence boundary judgment + wardrobe/age state for the WHOLE script — one
+ * LLM pass.
+ *
+ * The LLM reads the scene map + which characters are present in each scene and
+ * decides (a) where costume/age-change boundaries fall (a new Sequence begins
+ * only when the STORY demands it — 换衣、穿越、时间跳跃 — NOT every scene change)
+ * and (b) for each sequence, each character's costume/age state within it.
+ * Returns `ScriptSequence[]` (block-index spans + wardrobe) ready to persist on
+ * `Screenplay.sequences`. On any failure returns a single implicit sequence
+ * covering the whole script (safe degrade — frames then read no change).
+ */
+export const generateSequences = async (
+  blocks: ScriptBlock[],
+  settings: AppSettings,
+): Promise<ScriptSequence[]> => {
+  const sceneFull = buildSequenceContext(blocks);
+  try {
+    const raw = await callAIProvider(settings, {
+      system: `You are a film-continuity supervisor. Judge costume/age continuity across the scene list.
+A NEW SEQUENCE begins only when the STORY demands a costume/age change (character changes clothes, leaves a location where a different outfit is worn, 穿越, a time jump). Consecutive scenes that share the same wardrobe/age form ONE sequence — do NOT split at every scene heading.
+For each sequence, also state each present character's costume and age for that span (omit a character who keeps their base design).
+Output STRICT JSON only:
+{"sequences":[{"id":"seq1","scenes":[1,2],"label":"短句","wardrobe":{"张三":{"costume":"浴袍"},"李四":{"age":"中年"}}}]}
+scenes are 1-based SCENE numbers, consecutive and non-overlapping, covering all scenes exactly once. Use the character names as they appear in the input.`,
+      user: sceneFull,
+    }, true, 'sequences');
+    const parsed = raw.match(/\{[\s\S]*\}/)?.[0] ?? raw;
+    const data = JSON.parse(parsed);
+    const list = Array.isArray(data?.sequences) ? data.sequences : [];
+    // map scene number → start block index of its first SCENE_HEADING
+    const sceneBlocks: number[] = [];
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i].type === 'SCENE_HEADING' && blocks[i].content.trim()) sceneBlocks.push(i);
+    }
+    const out: ScriptSequence[] = [];
+    for (const seq of list) {
+      const seen = Array.isArray(seq?.scenes) ? seq.scenes.map(Number).sort((a, b) => a - b) : [];
+      if (!seen.length) continue;
+      const start = sceneBlocks[Math.max(0, Math.min(seen[0] - 1, sceneBlocks.length - 1))];
+      const last = sceneBlocks[Math.max(0, Math.min(seen[seen.length - 1] - 1, sceneBlocks.length - 1))];
+      const end = last !== undefined && sceneBlocks.length
+        ? (seen[seen.length - 1] < sceneBlocks.length ? (sceneBlocks[seen[seen.length - 1]] ?? blocks.length) : blocks.length)
+        : blocks.length;
+      const wardrobe: Record<string, CharacterWardrobe> = {};
+      if (seq?.wardrobe && typeof seq.wardrobe === 'object') {
+        for (const [nm, w] of Object.entries(seq.wardrobe as Record<string, { costume?: string; age?: string }>)) {
+          if (!w) continue;
+          const cw: CharacterWardrobe = {};
+          if (w.costume?.trim()) cw.costume = w.costume.trim();
+          if (w.age?.trim()) cw.age = w.age.trim();
+          if (Object.keys(cw).length) wardrobe[nm] = cw;
+        }
+      }
+      out.push({ id: String(seq?.id ?? `seq${out.length + 1}`), start, end, wardrobe, label: seq?.label ? String(seq.label) : undefined });
+    }
+    if (!out.length) {
+      return [{ id: 'seq1', start: 0, end: blocks.length, wardrobe: {}, label: 'sequence' }];
+    }
+    // sort and clip defensively (guard against overlaps / gaps)
+    out.sort((a, b) => a.start - b.start);
+    for (let i = 1; i < out.length; i++) {
+      if (out[i].start < out[i - 1].end) out[i].start = out[i - 1].end;
+    }
+    if (out[0].start > 0) out[0].start = 0;
+    return out;
+  } catch {
+    return [{ id: 'seq1', start: 0, end: blocks.length, wardrobe: {}, label: 'sequence' }];
+  }
 };
 
 /**

@@ -19,6 +19,74 @@ export type ActionRefResolution =
   | { kind: 'needs-image'; characterName: string }
   | { kind: 'no-character' };
 
+/** A frame's reference images: the PRIMARY character identity sheet (① 基础或
+ *  表征，按序判) plus, for DIALOGUE/ACTION, the scene's environment backdrop (③).
+ *  CHARACTER setting-image generation NEVER gets a backdrop (独立背景 rule). */
+export interface FrameRefs {
+  character?: RefImage;
+  environment?: RefImage;
+}
+
+/** Resolve a primary character sheet for a beat or a hit, with age-awareness
+ *  and (optionally) sequence wardrobe. Precedence:
+ *    1. explicit binding for this character (per-scene override already merged)
+ *    2. an age-tagged asset (subject `名字/年纪`) when the sequence/context
+ *       asks for that age (or the newest age asset)
+ *    3. the base design sheet (subject === name or name/…)
+ *  Returns the RefImage or undefined when none exists. */
+export const resolveCharacterSheet = (
+  name: string,
+  bindings: RefBindings | undefined,
+  refImages: RefImage[],
+  sceneHeading?: string,
+  age?: string,
+): RefImage | undefined => {
+  const eff = resolveRefBindings(bindings, sceneHeading);
+  const boundId = eff.characters[name];
+  if (boundId) {
+    const im = refImages.find(r => r.id === boundId);
+    if (im) return im;
+  }
+  const owned = refImages.filter(r =>
+    (r.subject ?? '') === name || (r.subject ?? '').startsWith(name + '/'));
+  if (!owned.length) return undefined;
+  if (age) {
+    const tagged = owned.find(r => (r.subject ?? '').startsWith(`${name}/${age}`));
+    if (tagged) return tagged;
+  }
+  // prefer latest non-tagged base sheet if present, else the last any
+  return owned.find(r => (r.subject ?? '') === name) ?? owned[owned.length - 1];
+};
+
+/** Resolve a frame's references from a beat/CHARACTER target: the primary
+ *  character sheet (①, age-aware) and, for scene-bearing blocks, the scene
+ *  environment sheet (③) when one is bound/available. Never a character
+ *  backdrop for CHARACTER blocks (独立背景). */
+export const resolveFrameRefs = (
+  kind: 'action' | 'dialogue' | 'character',
+  name: string,
+  sceneHeading: string,
+  bindings: RefBindings | undefined,
+  refImages: RefImage[],
+  age?: string,
+): FrameRefs => {
+  const character = resolveCharacterSheet(name, bindings, refImages, sceneHeading, age);
+  let environment: RefImage | undefined;
+  if (kind !== 'character' && sceneHeading) {
+    const eff = resolveRefBindings(bindings, sceneHeading);
+    const envId = eff.environment;
+    if (envId) environment = refImages.find(r => r.id === envId);
+    if (!environment) {
+      // scene-title environment, else the generic 环境 asset
+      environment = refImages.find(r =>
+        (r.subject ?? '') === sceneHeading ||
+        (r.kind === 'environment' && r.sceneKey && sceneHeading.includes(r.sceneKey)) ||
+        (r.kind === 'environment' && (r.subject ?? '') === '环境'));
+    }
+  }
+  return { character, environment };
+};
+
 /** Resolve the reference image an ACTION beat should be generated from.
  *
  *  Cast is decided by `computeBeatCast` (beat text mentions + the preceding

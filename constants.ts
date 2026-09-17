@@ -731,6 +731,9 @@ export const TRANSLATIONS = {
     aiDeletePrompt: "Delete",
     imagePromptOpen: "View",
     storyboardHint: "Contains only the six visual elements (subject, environment, composition, lighting, material, mood). Add aspect ratio and quality boosters yourself in your image tool.",
+    storyboardBatchSceneHint: "Alt+S on a scene heading generates this scene's environment image, then a character design sheet for every distinct character and a storyboard frame for every action in it that lacks one.",
+    storyboardBatchProgress: "Generating image prompt {current}/{total}…",
+    storyboardBatchPartial: "{failed}/{total} image prompts failed; the rest were saved.",
     storyboardWrongBlock: "Select a SCENE_HEADING (environment), ACTION (storyboard frame), or CHARACTER (design sheet) block to generate an image prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
@@ -1012,6 +1015,9 @@ export const TRANSLATIONS = {
     aiDeletePrompt: "删除",
     imagePromptOpen: "查看",
     storyboardHint: "仅含六大视觉要素（主体、环境、构图、光影、材质、氛围）。画幅比例和画质词请在出图工具中自行添加。",
+    storyboardBatchSceneHint: "在场景标题上按 Alt+S 会先为该场景生成环境图，再为其中每个出现的不同角色生成设定图、为每个还没有分镜的动作块生成分镜画面。",
+    storyboardBatchProgress: "正在生成分镜提示词 {current}/{total}…",
+    storyboardBatchPartial: "{total} 个分镜提示词中有 {failed} 个失败，其余已保存。",
     storyboardWrongBlock: "请选中场景标题（环境图）、动作块（分镜画面）或角色块（设定表）再生成提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {

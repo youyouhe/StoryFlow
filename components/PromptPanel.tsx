@@ -4,7 +4,8 @@ import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 import type { ScriptBlock, Screenplay, GrayboxData, RefImage, RefBindings, H3Task, AppSettings, Language } from '../types';
 import { Graybox3DView } from './Graybox3DView';
-import { resolveActionRef } from '../utils/refBindings';
+import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
+import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { computeBeatCast } from '../utils/beatCast';
 import { grayboxOverviewLine } from '../utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from '../utils/grayboxToBlender';
@@ -344,21 +345,50 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   const subject = panelBlock.type === 'CHARACTER'
                     ? panelBlock.content.trim().slice(0, 40)
                     : '环境';
-                  // ACTION frames: visual identity lock. The beat's
-                  // own character sheet (decided by computeBeatCast,
-                  // not by whoever sits nearest) conditions the
-                  // generation. panelActionRef already forced this
-                  // to be 'ready' — the button is disabled otherwise
-                  // — so a missing sheet can never degrade silently.
+                  // Frame reference resolution: (①) the beat's/CHARACTER's own
+                  // identity sheet + (③) the scene's environment backdrop for
+                  // DIALOGUE/ACTION frames. A CHARACTER sheet generation gets
+                  // NO env reference — 独立背景 rule. Age is taken from the
+                  // sequence this block sits in.
+                  const panelBlockIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
+                  let envScene = '';
+                  for (let i = panelBlockIdx; i >= 0; i--) {
+                    if (screenplay.blocks[i].type === 'SCENE_HEADING') { envScene = screenplay.blocks[i].content; break; }
+                  }
+                  const seq = sequenceAt(screenplay.sequences, panelBlockIdx);
+                  const charName = panelBlock.type === 'CHARACTER'
+                    ? panelBlock.content.trim()
+                    : (panelActionRef?.kind === 'ready' ? panelActionRef.characterName : (panelActionRef?.kind === 'needs-image' ? panelActionRef.characterName : ''));
+                  const ageCtx = seq && charName ? wardrobeIn(seq, charName).age : undefined;
+                  let frameRefs: { character?: RefImage; environment?: RefImage } = {};
+                  if (panelBlock.type === 'CHARACTER') {
+                    const cs = resolveCharacterSheet(charName, screenplay.referenceBindings, refImages, envScene, ageCtx);
+                    frameRefs = { character: cs };
+                  } else if (panelBlock.type === 'ACTION' && panelActionRef?.kind === 'ready') {
+                    const fr = resolveFrameRefs('action', panelActionRef.characterName, envScene, screenplay.referenceBindings, refImages, ageCtx);
+                    frameRefs = fr;
+                  } else if (panelBlock.type === 'DIALOGUE') {
+                    const castDiag = panelBeatCast?.[0];
+                    if (castDiag) frameRefs = resolveFrameRefs('dialogue', castDiag, envScene, screenplay.referenceBindings, refImages, ageCtx);
+                  }
+                  // Character context (textual ① backdrop for the prompt) comes
+                  // from the block's own imagePrompt already; env ③ is folded
+                  // into the prompt text on MiniMax and as a ref image on FAL.
                   let subjectRef: Blob | undefined;
-                  if (panelBlock.type === 'ACTION' && panelActionRef?.kind === 'ready') {
-                    subjectRef = await (await fetch(panelActionRef.image.url)).blob().catch(() => undefined);
+                  if (frameRefs.character) {
+                    subjectRef = await (await fetch(frameRefs.character.url)).blob().catch(() => undefined);
+                  }
+                  // ③ env backdrop: only for DIALOGUE/ACTION (独立背景 for sheets).
+                  let envRefB: Blob | undefined;
+                  if (panelBlock.type !== 'CHARACTER' && frameRefs.environment) {
+                    envRefB = await (await fetch(frameRefs.environment.url)).blob().catch(() => undefined);
                   }
                   const imgs = await generateImages(
                     { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
                       ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
                     panelBlock.imagePrompt!,
-                    { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
+                    { n: 1, aspectRatio: '16:9', subjectReference: subjectRef,
+                      references: panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : undefined },
                   );
                   const stamp = Date.now().toString(36);
                   const name = panelBlock.type === 'CHARACTER'

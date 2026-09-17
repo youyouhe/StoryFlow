@@ -108,6 +108,11 @@ export const AIModal: React.FC<AIModalProps> = ({
                                     {t.grayboxBatchSceneHint}
                                 </p>
                             )}
+                            {aiMode === 'STORYBOARD' && (
+                                <p className="text-[11px] text-indigo-600 dark:text-indigo-400 mb-6 px-4 leading-relaxed">
+                                    {t.storyboardBatchSceneHint}
+                                </p>
+                            )}
                             <button
                                 onClick={onExecute}
                                 disabled={aiState.isLoading}

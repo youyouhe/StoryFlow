@@ -15,7 +15,8 @@ import { generateImages } from './minimaxService';
 import { getAiLog } from './aiLog';
 import { buildSeedancePrompt, buildH3Prompt } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth } from '../utils/grayboxHealth';
-import { resolveActionRef } from '../utils/refBindings';
+import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
+import { sequenceAt, wardrobeIn } from '../utils/sequence';
 
 /** Summary of one saved script (the App's localStorage index rows). */
 interface ScriptSummary {
@@ -366,15 +367,29 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
       const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
       const sceneBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
       try {
-        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead);
+        // Composition lock: feed the beat's own SHOT graybox so the image
+        // prompt reproduces the same camera indexing. ACTION beats only.
+        const shotGraybox = kind === 'action' && b.graybox?.kind === 'shot' && !b.graybox.error ? b.graybox : undefined;
+        // Global identity table (①) so even the tool path sees a character
+        // defined in an earlier scene.
+        const globalCharDesigns = new Map<string, string>();
+        for (const sb of screenplay.blocks) {
+          if (sb.type === 'CHARACTER' && sb.imagePrompt?.trim()) {
+            const n = sb.content.trim();
+            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sb.imagePrompt!.trim());
+          }
+        }
+        const charName = b.type === 'CHARACTER' ? b.content.trim() : undefined;
+        const wardrobe = charName ? wardrobeIn(sequenceAt(screenplay.sequences, idx), charName) : undefined;
+        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName);
         // Mirror the in-app save: CHARACTER prompts propagate to same-name blocks.
         const isCharacter = b.type === 'CHARACTER';
-        const charName = isCharacter ? b.content.trim() : '';
+        const charNameOut = isCharacter ? b.content.trim() : '';
         setScreenplay(prev => ({
           ...prev,
           blocks: prev.blocks.map(x => {
             if (x.id === b.id) return { ...x, imagePrompt: prompt };
-            if (isCharacter && x.type === 'CHARACTER' && x.content.trim() === charName) return { ...x, imagePrompt: prompt };
+            if (isCharacter && x.type === 'CHARACTER' && x.content.trim() === charNameOut) return { ...x, imagePrompt: prompt };
             return x;
           }),
           lastModified: Date.now(),
@@ -396,14 +411,16 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         for (let i = idx; i >= 0; i--) {
           if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
         }
-        // ACTION is image-to-image: lock the beat's own character sheet.
-        // Gate instead of silently degrading — a text-to-image fallback here
-        // is exactly what makes a character's look drift between shots.
-        // CHARACTER/SCENE_HEADING sheets are the SOURCE images (no earlier
-        // sheet to reference), so they legitimately stay text-to-image.
-        let subjectRef: Blob | undefined;
-        let lockName: string | undefined;
-        if (b.type === 'ACTION') {
+        // Age-aware, sequence-aware reference resolution + scene backdrop (③).
+        const seq = sequenceAt(screenplay.sequences, idx);
+        // Frame refs: CHARACTER → own sheet (no env); ACTION/DIALOGUE → primary
+        // cast sheet + env backdrop.
+        let frameRefs: { character?: RefImage; environment?: RefImage } = {};
+        if (b.type === 'CHARACTER') {
+          const name = b.content.trim();
+          const age = wardrobeIn(seq, name).age;
+          frameRefs = { character: resolveCharacterSheet(name, screenplay.referenceBindings, refImages, sceneHead, age) };
+        } else if (b.type === 'ACTION') {
           const sceneNames: string[] = [];
           for (let i = idx; i >= 0; i--) {
             const sb = screenplay.blocks[i];
@@ -412,26 +429,40 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
               break;
             }
           }
-          const res = resolveActionRef(
-            screenplay.blocks, idx, sceneNames,
-            screenplay.referenceBindings, refImages, sceneHead,
-          );
+          const res = resolveActionRef(screenplay.blocks, idx, sceneNames, screenplay.referenceBindings, refImages, sceneHead);
+          const age = res.kind === 'ready' || res.kind === 'needs-image' ? wardrobeIn(seq, res.characterName).age : undefined;
           if (res.kind === 'needs-image') {
             return { ok: false, error: `角色「${res.characterName}」还没有设定图——请先生成该角色的 image，再进行本镜的图生图。` };
           }
-          // res.kind === 'no-character': an empty shot (establish / insert /
-          // scenery). Nothing to lock to, so text-to-image is the honest path —
-          // allowed, not blocked.
           if (res.kind === 'ready') {
-            subjectRef = await (await fetch(res.image.url)).blob().catch(() => undefined);
-            lockName = res.characterName;
+            frameRefs = resolveFrameRefs('action', res.characterName, sceneHead, screenplay.referenceBindings, refImages, age);
+          }
+        } else if (b.type === 'DIALOGUE') {
+          // dialogue: nearest cue name
+          let diagName = '';
+          for (let i = idx - 1; i >= 0; i--) {
+            if (screenplay.blocks[i].type === 'SCENE_HEADING') break;
+            if (screenplay.blocks[i].type === 'CHARACTER') { diagName = screenplay.blocks[i].content.trim(); break; }
+          }
+          if (diagName) {
+            const age = wardrobeIn(seq, diagName).age;
+            frameRefs = resolveFrameRefs('dialogue', diagName, sceneHead, screenplay.referenceBindings, refImages, age);
           }
         }
+        let subjectRef: Blob | undefined;
+        let lockName: string | undefined;
+        if (frameRefs.character) {
+          subjectRef = await (await fetch(frameRefs.character.url)).blob().catch(() => undefined);
+          lockName = (frameRefs.character.subject ?? '').split('/')[0];
+        }
+        let envRefB: Blob | undefined;
+        if (b.type !== 'CHARACTER' && frameRefs.environment) envRefB = await (await fetch(frameRefs.environment.url)).blob().catch(() => undefined);
         const imgs = await generateImages(
           { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
             ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
           b.imagePrompt,
-          { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
+          { n: 1, aspectRatio: '16:9', subjectReference: subjectRef,
+            references: b.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : undefined },
         );
         const stamp = Date.now().toString(36);
         const name = b.type === 'CHARACTER'
