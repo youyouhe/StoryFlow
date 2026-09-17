@@ -303,6 +303,10 @@ export interface AIState {
    *  every shot in the scene), this carries 1-based progress so the modal can
    *  show "shot 3/7…". Null when no batch is active. */
   batchProgress: { current: number; total: number } | null;
+  /** Neutral status message (e.g. "nothing left to generate in this scene").
+   *  Unlike `error` it is not a failure; optional so existing call sites that
+   *  omit it stay valid. */
+  info?: string | null;
 }
 
 export interface PDFOptions {

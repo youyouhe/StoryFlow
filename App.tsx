@@ -1248,9 +1248,10 @@ function App() {
 
           const total = jobs.length;
           if (total === 0) {
-            // Whole scene already storyboarded — nothing to generate.
-            setShowAIModal(false);
-            setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+            // Whole scene already storyboarded — say so instead of silently
+            // closing (a silent no-op reads as "it's broken").
+            setShowAIModal(true);
+            setAIState({ isLoading: false, suggestion: null, error: null, info: t.storyboardAllDone, decision: null, grayboxDraft: null, batchProgress: null });
             return;
           }
 

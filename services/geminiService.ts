@@ -98,7 +98,12 @@ const callAIProvider = async (
             await new Promise(r => setTimeout(r, 1500));
             continue;
           }
-          return finish(model, 'error', '', { errorType: `http:${response.status}`, error: message, attempt });
+          // Log the attempt, then THROW: silent empty-string returns made hard
+          // failures (余额不足, invalid key, content policy) indistinguishable
+          // from success downstream — the UI showed a generic retry message
+          // while the real reason sat in a local log.
+          finish(model, 'error', '', { errorType: `http:${response.status}`, error: message, attempt });
+          throw new Error(message);
         }
 
         const data = await response.json();
@@ -113,12 +118,14 @@ const callAIProvider = async (
           continue;
         }
         console.error("DeepSeek API Error:", e);
-        return finish(model, errorType === 'timeout' ? 'timeout' : 'error', '',
+        finish(model, errorType === 'timeout' ? 'timeout' : 'error', '',
           { errorType, error: message, attempt });
+        throw new Error(message);
       }
     }
     const { errorType, message } = classifyError(lastErr);
-    return finish(model, 'error', '', { errorType, error: message, attempt: 2 });
+    finish(model, 'error', '', { errorType, error: message, attempt: 2 });
+    throw new Error(message);
   }
 
   // 2. Google Gemini Provider (Default)
@@ -153,7 +160,10 @@ const callAIProvider = async (
   } catch (error) {
     const { errorType, message } = classifyError(error);
     console.error("Gemini Generate Error:", error);
-    return finish(model, 'error', '', { errorType, error: message });
+    finish(model, 'error', '', { errorType, error: message });
+    // Same contract as the DeepSeek branch: hard failures THROW the real
+    // message so the UI shows 余额不足/invalid key instead of a generic retry.
+    throw new Error(message);
   }
 };
 

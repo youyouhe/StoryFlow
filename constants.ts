@@ -739,6 +739,7 @@ export const TRANSLATIONS = {
     storyboardBatchSceneHint: "Alt+S on a scene heading generates this scene's environment image, then a character design sheet for every distinct character and a storyboard frame for every action in it that lacks one.",
     storyboardBatchProgress: "Generating image prompt {current}/{total}…",
     storyboardBatchPartial: "{failed}/{total} image prompts failed; the rest were saved.",
+    storyboardAllDone: "Every block in this scene already has a storyboard prompt. To regenerate one, delete that block's prompt (panel 🗑) and press Alt+S again — or re-add the beat if you deleted the blocks themselves.",
     storyboardWrongBlock: "Select a SCENE_HEADING (environment), ACTION (storyboard frame), or CHARACTER (design sheet) block to generate an image prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
@@ -1041,6 +1042,7 @@ export const TRANSLATIONS = {
     storyboardBatchSceneHint: "在场景标题上按 Alt+S 会先为该场景生成环境图，再为其中每个出现的不同角色生成设定图、为每个还没有分镜的动作块生成分镜画面。",
     storyboardBatchProgress: "正在生成分镜提示词 {current}/{total}…",
     storyboardBatchPartial: "{total} 个分镜提示词中有 {failed} 个失败，其余已保存。",
+    storyboardAllDone: "该场景所有块都已生成分镜提示词。要重新生成某个块：删除它的提示词（面板 🗑）后再按 Alt+S；如果你把块本身删掉了，请先把该节拍的文字重新加上。",
     storyboardWrongBlock: "请选中场景标题（环境图）、动作块（分镜画面）或角色块（设定表）再生成提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {
