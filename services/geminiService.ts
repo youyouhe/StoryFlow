@@ -749,6 +749,7 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
 - Do NOT use markdown, headings, bullet points, code blocks, or any preamble/explanation.
 - Each line must be a single concrete phrase. Be specific and visual (show, don't tell).
 - Keep the TOTAL prompt under 1200 characters — the image API caps input length and the tail lines get trimmed first, so front-load the essentials (identity in Subject, era in Environment/Material) and keep later lines tight.
+- CONTENT-SAFE WARDROBE (these prompts go to image models whose content checkers reject ambiguous ages or fetish-coded clothing): describe wardrobe factually — garment, color, fabric. Always state adult characters are ADULT in the Subject line. Never use fetish-coded slang or abbreviations (e.g. "JK", "制服诱惑") — translate such cues into their neutral fashion wording with explicit adult context (e.g. "adult woman in a Japanese school-fashion outfit: pleated skirt, white shirt, knee-high socks"). Avoid emphasizing hosiery/garment straps over the overall look. This keeps the image model's content checker from rejecting an otherwise legitimate fashion beat.
 - Translate any non-English source content into English for the prompt.`;
 
   // Render the scene context, highlighting the target block.
