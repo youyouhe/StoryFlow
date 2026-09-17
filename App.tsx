@@ -1584,7 +1584,7 @@ function App() {
         : (err?.message || t.aiErrorGeneric);
       setAIState({ isLoading: false, suggestion: null, error: friendly, decision: null, grayboxDraft: null, batchProgress: null });
     }
-  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t]);
+  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t, promptSource]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent, id: string, selectionStart: number) => {
     if (isReadOnly) return;
