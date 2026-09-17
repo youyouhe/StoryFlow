@@ -19,6 +19,9 @@ interface OpeningPickerProps {
   onReroll: () => void;
   /** Creates the script with the chosen opening (parent passes handleCreateFromTemplate). */
   onConfirm: (templateId: string, opening?: OpeningCandidate) => void;
+  /** Start a BLANK script from the picked template: no AI opening, one empty
+   *  scene heading so the user has a cursor to type into. */
+  onBlank: () => void;
 }
 
 export const OpeningPicker: React.FC<OpeningPickerProps> = ({
@@ -28,11 +31,12 @@ export const OpeningPicker: React.FC<OpeningPickerProps> = ({
   openingsError,
   chosenOpening,
   setChosenOpening,
+  onReroll,
+  onBlank,
+  onConfirm,
   screenplay,
   t,
   onClose,
-  onReroll,
-  onConfirm,
 }) => {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -100,8 +104,9 @@ export const OpeningPicker: React.FC<OpeningPickerProps> = ({
           >
             {openingsLoading ? t.openingLoading : t.openingReroll}
           </button>
-        </div>
-        <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0">
+          <button onClick={onBlank} className="mr-auto px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
+            {t.openingBlank}
+          </button>
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
             {t.cancel}
           </button>

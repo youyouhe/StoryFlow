@@ -739,6 +739,37 @@ function App() {
   /** P5-openings: template card click opens the opening picker instead of
    *  creating instantly — the user picks the template default or an
    *  AI-invented random opening. */
+  /** Blank start from the OpeningPicker: no AI opening, no template skeleton —
+   *  a single empty SCENE_HEADING so the user has a cursor to type into. The
+   *  picked template still applies (its systemPrompt/style rules drive later
+   *  AI generation). */
+  const handleCreateBlankScript = (templateId: string) => {
+      const template = TEMPLATES.find(tm => tm.id === templateId) || TEMPLATES[0];
+      let newScriptLanguage = screenplay.metadata.scriptLanguage;
+      if (newScriptLanguage === 'en' && lang === 'zh') newScriptLanguage = 'zh';
+      const firstBlock: ScriptBlock = { id: generateId(), type: 'SCENE_HEADING', content: '' };
+      const newScript: Screenplay = {
+          id: generateId(),
+          metadata: {
+              title: 'Untitled ' + (t.templates[template.nameKey as keyof typeof t.templates] || 'Script'),
+              author: 'Unknown',
+              draft: 'First Draft',
+              templateId: template.id,
+              scriptLanguage: newScriptLanguage
+          },
+          blocks: [firstBlock],
+          lastModified: Date.now()
+      };
+      setScreenplay(newScript);
+      setSelectedBlockId(firstBlock.id);
+      setOpeningPicker(null);
+      setShowTemplateModal(false);
+      setIsReadOnly(false);
+  };
+
+  /** P5-openings: template card click opens the opening picker instead of
+   *  creating instantly — the user picks the template default or an
+   *  AI-invented random opening. */
   const openOpeningPicker = (template: ScriptTemplate) => {
     setOpeningPicker(template);
     setOpeningOptions(null);
@@ -760,7 +791,6 @@ function App() {
 
   const handleCreateFromTemplate = (templateId: string, opening?: OpeningCandidate) => {
     const template = TEMPLATES.find(t => t.id === templateId) || TEMPLATES[0];
-
     let initialBlocks: Array<Omit<ScriptBlock, 'id'>> = template.initialBlocks;
 
     let newScriptLanguage = screenplay.metadata.scriptLanguage;
@@ -2259,6 +2289,7 @@ function App() {
             onClose={() => setOpeningPicker(null)}
             onReroll={() => openOpeningPicker(openingPicker)}
             onConfirm={handleCreateFromTemplate}
+            onBlank={() => handleCreateBlankScript(openingPicker.id)}
           />
         )}
       </div>
