@@ -1,5 +1,20 @@
 import { ScriptBlock } from '../types';
 
+/** Every distinct character name the screenplay names via CHARACTER cues —
+ *  the universe `computeBeatCast` matches beat-text mentions against. A name
+ *  that only ever appears inside an ACTION line ("周荇推门而入") still resolves
+ *  because the same character is cued somewhere in the script; callers with
+ *  scene-graybox blocking merge those names in too. */
+export const collectCharacterNames = (blocks: ScriptBlock[]): string[] => {
+  const names: string[] = [];
+  for (const b of blocks) {
+    if (b.type !== 'CHARACTER') continue;
+    const n = b.content.trim();
+    if (n && !names.includes(n)) names.push(n);
+  }
+  return names;
+};
+
 /** The cast of a beat: which scene characters plausibly appear in THIS shot.
  *  Rule: characters whose name appears in the beat text (or its attached
  *  CHARACTER cue) + the last two distinct preceding CHARACTER blocks within

@@ -460,6 +460,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         </select>
                     </div>
                  </div>
+
+                 {/* Image generation backend — MiniMax image-01 OR FAL queue */}
+                 <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                            {t.imageGenLabel || 'Image Generation Backend'}
+                        </label>
+                        <select
+                            value={appSettingsForm.imageProvider}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, imageProvider: e.target.value as AppSettings['imageProvider']})}
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                        >
+                            <option value="minimax">MiniMax image-01（用上方 MiniMax Key）</option>
+                            <option value="fal">FAL（gpt-image-2.5 等，独立 Key）</option>
+                        </select>
+                        <p className="mt-1 text-[10px] text-gray-400">
+                            {t.imageGenHint || 'Which backend turns storyboard prompts into images. MiniMax uses your MiniMax key above; FAL needs its own key below.'}
+                        </p>
+                    </div>
+                    {appSettingsForm.imageProvider === 'fal' && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                    {t.falKeyLabel || 'FAL API Key'}
+                                </label>
+                                <input
+                                    type="password"
+                                    value={appSettingsForm.falKey}
+                                    onChange={e => setAppSettingsForm({...appSettingsForm, falKey: e.target.value})}
+                                    placeholder="Key <your-fal-key>"
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                                />
+                                <p className="mt-1 text-[10px] text-gray-400">
+                                    {t.falKeyHint || 'Get a key at fal.ai → Billing → API Keys. Official pricing (openai/gpt-image-2.5): $0.00402/img at 1024×768 low, $0.00441 at 1920×1080 low, $0.03612 at 1024×768 high.'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                    {t.falModelLabel || 'FAL Model'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={appSettingsForm.falModel}
+                                    onChange={e => setAppSettingsForm({...appSettingsForm, falModel: e.target.value})}
+                                    placeholder="openai/gpt-image-2.5/flare"
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                                />
+                                <p className="mt-1 text-[10px] text-gray-400">
+                                    {t.falModelHint || 'Base app path. Auto-switches to its /edit endpoint (reference image) when a bound character sheet is available, else /text-to-image.'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                    {t.falQualityLabel || 'FAL Quality (cost)'}
+                                </label>
+                                <select
+                                    value={appSettingsForm.falQuality}
+                                    onChange={e => setAppSettingsForm({...appSettingsForm, falQuality: e.target.value as AppSettings['falQuality']})}
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                                >
+                                    <option value="low">low · economy（1024×768 $0.00402/张）</option>
+                                    <option value="high">high · paid（1024×768 $0.03612/张）</option>
+                                </select>
+                                <p className="mt-1 text-[10px] text-gray-400">
+                                    {t.falQualityHint || 'Official FAL rates: low is ~9× cheaper than high; size adds up to ~2.8× (1024×768 → 3840×2160). low is right for storyboard iterations.'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                 </div>
               </div>
             )}
 

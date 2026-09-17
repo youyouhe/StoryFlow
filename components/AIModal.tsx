@@ -1,0 +1,239 @@
+import React from 'react';
+import { Sparkles, X, Boxes, Bot, Loader2, Wand2, Cloud } from 'lucide-react';
+import { clsx } from 'clsx';
+import type { AIMode, AIState } from '../types';
+import { TRANSLATIONS } from '../constants';
+import { grayboxOverviewLine } from '../utils/exportData';
+
+interface AIModalProps {
+    aiMode: AIMode;
+    setAIMode: React.Dispatch<React.SetStateAction<AIMode>>;
+    aiState: AIState;
+    setAIState: React.Dispatch<React.SetStateAction<AIState>>;
+    t: typeof TRANSLATIONS['en'];
+    onClose: () => void;
+    onExecute: () => void;
+    onAccept: () => void;
+    transitionHeadingDraft: string;
+    setTransitionHeadingDraft: React.Dispatch<React.SetStateAction<string>>;
+    runContinuation: (directive?: { allowTransition: boolean; targetSceneHeading?: string }) => void;
+}
+
+export const AIModal: React.FC<AIModalProps> = ({
+    aiMode,
+    setAIMode,
+    aiState,
+    setAIState,
+    t,
+    onClose,
+    onExecute,
+    onAccept,
+    transitionHeadingDraft,
+    setTransitionHeadingDraft,
+    runContinuation,
+}) => {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
+                <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
+                        <Sparkles className="w-5 h-5" />
+                        <span>{t.aiAssistant}</span>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
+                        {[...(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX', 'DUB'] as const)].map(m => (
+                            <button
+                                key={m}
+                                onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}}
+                                className={clsx(
+                                    "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
+                                    aiMode === m
+                                        ? "bg-white dark:bg-[#27272a] text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                                )}
+                            >
+                                {m === 'CONTINUE' && t.modes.continue}
+                                {m === 'IDEAS' && t.modes.ideas}
+                                {m === 'REWRITE' && t.modes.rewrite}
+                                {m === 'STORYBOARD' && t.modes.storyboard}
+                                {m === 'GRAYBOX' && t.modes.graybox}
+                                {m === 'DUB' && t.modes.dub}
+                            </button>
+                        ))}
+                    </div>
+
+                    {aiState.batchProgress && (
+                        <div className="text-center py-6 space-y-3">
+                            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 dark:text-emerald-400">
+                                <Boxes className="w-8 h-8 animate-pulse" />
+                            </div>
+                            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+                                {t.grayboxBatchProgress
+                                    .replace('{current}', String(aiState.batchProgress.current))
+                                    .replace('{total}', String(aiState.batchProgress.total))}
+                            </p>
+                            <div className="w-full h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden mx-auto max-w-[80%]">
+                                <div
+                                    className="h-full bg-emerald-500 transition-all duration-300"
+                                    style={{ width: `${(aiState.batchProgress.current / Math.max(aiState.batchProgress.total, 1)) * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 px-4">
+                                {t.graybox3dHint}
+                            </p>
+                        </div>
+                    )}
+
+                    {!aiState.suggestion && !aiState.decision && !aiState.grayboxDraft && !aiState.batchProgress && (
+                         <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-500 dark:text-indigo-400">
+                                <Bot className="w-8 h-8" />
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 px-4">
+                                {aiMode === 'CONTINUE' && t.prompts.continue}
+                                {aiMode === 'IDEAS' && t.prompts.ideas}
+                                {aiMode === 'REWRITE' && t.prompts.rewrite}
+                                {aiMode === 'STORYBOARD' && t.prompts.storyboard}
+                                {aiMode === 'GRAYBOX' && t.prompts.graybox}
+                                {aiMode === 'DUB' && t.prompts.dub}
+                            </p>
+                            {aiMode === 'GRAYBOX' && (
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-6 px-4 leading-relaxed">
+                                    {t.grayboxBatchSceneHint}
+                                </p>
+                            )}
+                            <button
+                                onClick={onExecute}
+                                disabled={aiState.isLoading}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w-4 h-4" />}
+                                {aiState.isLoading
+                                  ? (aiMode === 'CONTINUE' ? t.transitionAssessing : t.aiGenerating)
+                                  : (aiMode === 'CONTINUE' ? t.transitionContinueScene : t.aiGenerate)}
+                            </button>
+                         </div>
+                    )}
+
+                    {/* CONTINUE two-step: transition decision card (shown after
+                        the judgment step, before the continuation is written). */}
+                    {aiMode === 'CONTINUE' && aiState.decision && !aiState.suggestion && (
+                        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">{t.transitionSuggests}</span>
+                                    <span className={clsx(
+                                        "text-[11px] font-bold px-2 py-0.5 rounded-full",
+                                        aiState.decision.action === 'transition'
+                                            ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                                            : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
+                                    )}>
+                                        {aiState.decision.action === 'transition' ? t.transitionReasonTransition : t.transitionReasonContinue}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{aiState.decision.reason}</p>
+                                {aiState.decision.action === 'transition' && (
+                                    <div className="mt-3">
+                                        <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                                            {t.transitionSceneLabel}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={transitionHeadingDraft}
+                                            onChange={e => setTransitionHeadingDraft(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-mono dark:text-white"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}
+                                    className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                                >
+                                    {t.aiDiscard}
+                                </button>
+                                {aiState.decision.action === 'transition' && (
+                                    <button
+                                        onClick={() => runContinuation({ allowTransition: true, targetSceneHeading: transitionHeadingDraft.trim() })}
+                                        disabled={aiState.isLoading || !transitionHeadingDraft.trim()}
+                                        className="flex-1 py-2.5 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-lg shadow-amber-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
+                                        {t.transitionAccept}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => runContinuation({ allowTransition: false })}
+                                    disabled={aiState.isLoading}
+                                    className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
+                                    {t.transitionContinueScene}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {aiState.error && (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-900/50">
+                            {aiState.error}
+                        </div>
+                    )}
+
+                    {aiState.suggestion && (
+                        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                            {aiMode === 'IDEAS' && (
+                                <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.aiIdeasHint}</p>
+                            )}
+                            {aiMode === 'STORYBOARD' && (
+                                <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.storyboardHint}</p>
+                            )}
+                            {aiMode === 'GRAYBOX' && (
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.grayboxHint}</p>
+                            )}
+                            {aiMode === 'GRAYBOX' && aiState.grayboxDraft && !aiState.grayboxDraft.error && (
+                                <p className="px-1 text-[10px] leading-snug text-emerald-600 dark:text-emerald-400 font-sans">
+                                    {grayboxOverviewLine(aiState.grayboxDraft)}
+                                </p>
+                            )}
+                            <div className="p-4 bg-gray-50 dark:bg-zinc-900/50 rounded-xl border border-gray-100 dark:border-zinc-800 text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto text-gray-800 dark:text-gray-300 shadow-inner">
+                                {aiState.suggestion}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setAIState({isLoading:false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null})}
+                                    className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                                >
+                                    {t.aiDiscard}
+                                </button>
+                                {(aiMode === 'STORYBOARD' || aiMode === 'GRAYBOX') && (
+                                    <button
+                                        onClick={() => navigator.clipboard?.writeText(aiState.suggestion || '').catch(() => {})}
+                                        className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                                    >
+                                        <Cloud className="w-3.5 h-3.5" />
+                                        {aiMode === 'GRAYBOX' ? t.grayboxCopy : t.aiCopyPrompt}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={onAccept}
+                                    disabled={aiMode === 'GRAYBOX' && !aiState.grayboxDraft}
+                                    className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : aiMode === 'GRAYBOX' ? t.grayboxSave : t.aiInsert}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};

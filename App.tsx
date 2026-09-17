@@ -6,16 +6,15 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateStyleHeads, generateOpenings, OpeningCandidate, analyzeDubbing } from './services/geminiService';
-import { Graybox3DView } from './components/Graybox3DView';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing } from './services/geminiService';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
 import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
+import { createWebMcpAccessor } from './services/webmcpAccessor';
 import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
 import { checkGrayboxHealth } from './utils/grayboxHealth';
-import { resolveRefBindings } from './utils/refBindings';
-import { computeBeatCast } from './utils/beatCast';
+import { resolveActionRef } from './utils/refBindings';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
   isDirStoreAvailable, pickAssetDir, persistDirHandle, loadPersistedDirHandle,
@@ -24,15 +23,18 @@ import {
 } from './services/assetDirStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { GalleryModal } from './components/GalleryModal';
+import { AIModal } from './components/AIModal';
+import { TemplateModal } from './components/TemplateModal';
+import { OpeningPicker } from './components/OpeningPicker';
+import { PromptPanel } from './components/PromptPanel';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { getAiLog } from './services/aiLog';
 import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
 import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
 import { isGalleryApiError } from './services/apiClient';
 import type { ScriptVisibility } from './services/apiClient';
-import { exportMarkdown, exportJSON, DEFAULT_EXPORT_OPTIONS, grayboxOverviewLine } from './utils/exportData';
-import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from './utils/grayboxToBlender';
-import { Menu, Moon, Sun, PanelLeft, Bot, Sparkles, X, Cloud, Check, Loader2, Wand2, Languages, LayoutTemplate, Eye, ChevronLeft, Image as ImageIcon, Trash2, Boxes } from 'lucide-react';
+import { exportMarkdown, exportJSON } from './utils/exportData';
+import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
 // Helper to generate IDs
@@ -258,379 +260,6 @@ function App() {
   // refreshed every render into a latest-ref so tool executions always see
   // current state without re-registering.
   const webmcpAccessorRef = useRef<StoryflowWebMcpAccessor | null>(null);
-  webmcpAccessorRef.current = {
-    getAppInfo: () => ({
-      app: 'StoryFlow' as const,
-      uiLanguage: lang,
-      scriptLanguage: screenplay.metadata.scriptLanguage,
-      provider: appSettings.provider,
-      currentScriptId: screenplay.id,
-      currentScriptTitle: screenplay.metadata.title,
-      blockCount: screenplay.blocks.length,
-      savedScriptCount: savedScripts.length,
-    }),
-    listScripts: () => savedScripts.map(s => ({ id: s.id, title: s.title, lastModified: s.lastModified })),
-    getBlocks: ({ from, to, types }) => {
-      const total = screenplay.blocks.length;
-      const start = Math.max(0, from ?? 0);
-      const end = Math.min(total - 1, to ?? Math.min(start + 199, total - 1));
-      const slice = screenplay.blocks.slice(start, end + 1)
-        .filter(b => !types || types.length === 0 || types.includes(b.type))
-        .map((b, i) => ({
-          index: start + i,
-          id: b.id,
-          type: b.type,
-          content: b.content,
-          hasGraybox: !!b.graybox,
-          grayboxKind: b.graybox?.kind,
-          hasImagePrompt: !!b.imagePrompt?.trim(),
-        }));
-      return { total, returned: slice.length, blocks: slice };
-    },
-    getGraybox: ({ blockIndex, blockId }) => {
-      const idx = blockIndex != null
-        ? blockIndex
-        : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (!b.graybox) return { error: `Block ${idx} (${b.type}) has no graybox payload.` };
-      return { blockIndex: idx, blockType: b.type, content: b.content, graybox: b.graybox };
-    },
-    appendBlocks: (blocks) => {
-      const firstIndex = screenplay.blocks.length;
-      setScreenplay(prev => ({
-        ...prev,
-        blocks: [...prev.blocks, ...blocks.map(nb => ({
-          id: generateId(),
-          type: nb.type,
-          content: nb.content,
-        }))],
-        lastModified: Date.now(),
-      }));
-      return { added: blocks.length, firstIndex, total: firstIndex + blocks.length };
-    },
-    generateVideoPrompt: ({ blockIndex, blockId }, target) => {
-      const idx = blockIndex != null
-        ? blockIndex
-        : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (!b.graybox || b.graybox.kind !== 'shot' || !b.graybox.camera) {
-        return { error: `Block ${idx} is not a shot with a camera graybox. Only ACTION/DIALOGUE blocks with a shot graybox have video prompts.` };
-      }
-      // owning scene: nearest SCENE_HEADING at/above the block
-      let sceneG: GrayboxData | null = null;
-      let sceneHead = '';
-      for (let i = idx; i >= 0; i--) {
-        const sb = screenplay.blocks[i];
-        if (sb.type === 'SCENE_HEADING') {
-          sceneHead = sb.content;
-          if (sb.graybox && sb.graybox.kind === 'scene' && !sb.graybox.error) sceneG = sb.graybox;
-          break;
-        }
-      }
-      const input = {
-        beatContent: b.content,
-        beatType: b.type,
-        camera: b.graybox.camera,
-        characters: sceneG?.characters ?? [],
-        sceneHeading: sceneHead,
-      };
-      return { target, prompt: target === 'h3' ? buildH3Prompt(input) : buildSeedancePrompt(input) };
-    },
-    checkGrayboxHealth: ({ blockIndex, blockId }) => {
-      const idx = blockIndex != null
-        ? blockIndex
-        : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (!b.graybox || b.graybox.kind !== 'shot' || !b.graybox.camera) {
-        return { error: `Block ${idx} is not a shot with a camera graybox.` };
-      }
-      // owning scene: blocking + every shot's shotType in that scene
-      let sceneG: GrayboxData | null = null;
-      let sceneStart = 0;
-      for (let i = idx; i >= 0; i--) {
-        if (screenplay.blocks[i].type === 'SCENE_HEADING') {
-          sceneStart = i;
-          const sb = screenplay.blocks[i];
-          if (sb.graybox && sb.graybox.kind === 'scene' && !sb.graybox.error) sceneG = sb.graybox;
-          break;
-        }
-      }
-      const sceneShotTypes: string[] = [];
-      for (let i = sceneStart + 1; i < screenplay.blocks.length; i++) {
-        const sb = screenplay.blocks[i];
-        if (sb.type === 'SCENE_HEADING') break;
-        if (sb.graybox?.kind === 'shot' && sb.graybox.camera && !sb.graybox.error) {
-          sceneShotTypes.push(sb.graybox.camera.shotType);
-        }
-      }
-      return checkGrayboxHealth(
-        { camera: b.graybox.camera, characters: sceneG?.characters ?? [], sceneShotTypes },
-        lang,
-      );
-    },
-    continueScript: async ({ hint }) => {
-      try {
-        const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
-        const raw = await generateContinuation(
-          screenplay.blocks,
-          activeTemplate.systemPrompt + (hint ? `\nAdditional directive for this continuation: ${hint}` : ''),
-          screenplay.metadata.scriptLanguage,
-          appSettings,
-          screenplay.metadata.templateId,
-        );
-        // Parse the [TYPE]-prefixed draft into blocks (same classification
-        // rules as the in-app suggestion parser, simplified for the tool).
-        const blocks: Array<{ type: BlockType; content: string }> = [];
-        for (const line of raw.split('\n')) {
-          const t = line.trim();
-          if (!t) continue;
-          const m = t.match(/^\[?([A-Za-z-]+)\]?\s*[:：]?\s*(.*)$/);
-          const tag = (m?.[1] ?? '').toUpperCase().replace(/-/g, '_');
-          const rest = (m?.[2] ?? t).trim();
-          if (tag === 'SCENE' || /^(INT\.|EXT\.|内\.|外\.|内景|外景)/.test(t)) {
-            blocks.push({ type: 'SCENE_HEADING', content: rest || t });
-          } else if (tag === 'ACTION') {
-            blocks.push({ type: 'ACTION', content: rest || t });
-          } else if (tag === 'CHARACTER' || (/^[A-Z一-龥 ]{1,20}$/.test(t) && !t.includes('.'))) {
-            blocks.push({ type: 'CHARACTER', content: rest || t });
-          } else if (tag === 'DIALOGUE') {
-            blocks.push({ type: 'DIALOGUE', content: rest || t });
-          } else if (tag === 'PARENTHETICAL' || /^\(.*\)$/.test(t)) {
-            blocks.push({ type: 'PARENTHETICAL', content: rest || t });
-          } else if (tag === 'TRANSITION') {
-            blocks.push({ type: 'TRANSITION', content: rest || t });
-          } else {
-            blocks.push({ type: 'ACTION', content: t });
-          }
-        }
-        return { ok: true, raw, blocks };
-      } catch (e: any) {
-        return { ok: false, error: String(e?.message || e) };
-      }
-    },
-    importScript: ({ json }) => {
-      try {
-        const parsed = JSON.parse(json);
-        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.blocks) || !parsed.metadata) {
-          return { ok: false, error: 'Invalid screenplay JSON: expected { metadata: {...}, blocks: [{ type, content }] }.' };
-        }
-        const validTypes: BlockType[] = ['SCENE_HEADING', 'ACTION', 'CHARACTER', 'DIALOGUE', 'PARENTHETICAL', 'TRANSITION'];
-        const blocks: ScriptBlock[] = parsed.blocks
-          .filter((b: any) => b && typeof b === 'object' && typeof b.content === 'string' && validTypes.includes(b.type))
-          .slice(0, 5000)
-          .map((b: any) => ({ id: generateId(), type: b.type as BlockType, content: b.content.slice(0, 5000) }));
-        if (!blocks.length) return { ok: false, error: 'No valid blocks found (each needs type + content).' };
-        const next: Screenplay = {
-          id: generateId(),
-          metadata: {
-            title: String(parsed.metadata.title || 'Imported Screenplay').slice(0, 120),
-            author: String(parsed.metadata.author || ''),
-            draft: String(parsed.metadata.draft || 'Draft 1'),
-            templateId: typeof parsed.metadata.templateId === 'string' ? parsed.metadata.templateId : undefined,
-            scriptLanguage: ['en', 'zh', 'dual'].includes(parsed.metadata.scriptLanguage) ? parsed.metadata.scriptLanguage : 'en',
-          },
-          blocks,
-          lastModified: Date.now(),
-          // bindings travel with the script (asset ids refer to the shared library)
-          referenceBindings: parsed.referenceBindings?.characters
-            ? { characters: parsed.referenceBindings.characters, environment: parsed.referenceBindings.environment }
-            : undefined,
-        };
-        setSelectedBlockId(blocks[0].id);
-        setScreenplay(next); // autosave persists script + index
-        return { ok: true, title: next.metadata.title, blockCount: blocks.length };
-      } catch (e: any) {
-        return { ok: false, error: `JSON parse failed: ${String(e?.message || e)}` };
-      }
-    },
-    exportScript: () => ({ ok: true, json: JSON.stringify(screenplay) }),
-    updateBlock: ({ blockIndex, blockId }, patch, expectedContent) => {
-      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (b.content !== expectedContent) {
-        return { ok: false, error: 'Content drifted — the block changed since you last read it (a human may have edited). Re-read with storyflow_get_blocks, then retry with the fresh content.' };
-      }
-      setScreenplay(prev => ({
-        ...prev,
-        blocks: prev.blocks.map(x => x.id === b.id
-          ? { ...x, ...(patch.content != null ? { content: patch.content } : {}), ...(patch.type ? { type: patch.type } : {}) }
-          : x),
-        lastModified: Date.now(),
-      }));
-      return { ok: true };
-    },
-    deleteBlock: ({ blockIndex, blockId }, expectedContent) => {
-      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (screenplay.blocks.length <= 1) return { ok: false, error: 'Refusing to delete the last remaining block.' };
-      if (b.content !== expectedContent) {
-        return { ok: false, error: 'Content drifted — the block changed since you last read it. Re-read with storyflow_get_blocks, then retry.' };
-      }
-      setScreenplay(prev => ({ ...prev, blocks: prev.blocks.filter(x => x.id !== b.id), lastModified: Date.now() }));
-      return { ok: true };
-    },
-    insertBlocks: (atIndex, blocks) => {
-      const firstIndex = Math.max(0, Math.min(atIndex, screenplay.blocks.length));
-      setScreenplay(prev => ({
-        ...prev,
-        blocks: [
-          ...prev.blocks.slice(0, firstIndex),
-          ...blocks.map(nb => ({ id: generateId(), type: nb.type, content: nb.content })),
-          ...prev.blocks.slice(firstIndex),
-        ],
-        lastModified: Date.now(),
-      }));
-      return { ok: true, firstIndex, total: screenplay.blocks.length + blocks.length };
-    },
-    generateGraybox: async ({ blockIndex, blockId }) => {
-      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (b.type !== 'SCENE_HEADING' && b.type !== 'ACTION' && b.type !== 'DIALOGUE') {
-        return { ok: false, error: `Block ${idx} (${b.type}) cannot hold a graybox. Target a SCENE_HEADING, ACTION, or DIALOGUE.` };
-      }
-      const kind: 'scene' | 'shot' = b.type === 'SCENE_HEADING' ? 'scene' : 'shot';
-      let sceneStart = idx;
-      for (let i = idx; i >= 0; i--) {
-        if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
-      }
-      const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
-      try {
-        let result: GrayboxData;
-        let ctxBlocks: ScriptBlock[];
-        let shotContext: { sceneLayout?: GrayboxData | null; priorShots?: GrayboxData[] } | undefined;
-        if (kind === 'scene') {
-          let sceneEnd = screenplay.blocks.length;
-          for (let i = idx + 1; i < screenplay.blocks.length; i++) {
-            if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneEnd = i; break; }
-          }
-          ctxBlocks = screenplay.blocks.slice(sceneStart, sceneEnd); // whole scene — characters need the beats
-        } else {
-          ctxBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
-          const sceneHeading = screenplay.blocks[sceneStart];
-          const sceneLayout = sceneHeading?.graybox?.kind === 'scene' && !sceneHeading.graybox.error
-            ? sceneHeading.graybox : null;
-          const priorShots: GrayboxData[] = [];
-          for (let i = sceneStart + 1; i < idx; i++) {
-            const pb = screenplay.blocks[i];
-            if (pb.type === 'SCENE_HEADING') break;
-            if (pb.graybox?.kind === 'shot' && !pb.graybox.error) priorShots.push(pb.graybox);
-          }
-          shotContext = { sceneLayout, priorShots };
-        }
-        result = await generateGraybox(ctxBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, shotContext);
-        if (result.error) return { ok: false, error: result.error };
-        setScreenplay(prev => ({
-          ...prev,
-          blocks: prev.blocks.map(x => x.id === b.id ? { ...x, graybox: result } : x),
-          lastModified: Date.now(),
-        }));
-        return { ok: true, kind };
-      } catch (e: any) {
-        return { ok: false, error: String(e?.message || e) };
-      }
-    },
-    generateImagePrompt: async ({ blockIndex, blockId }) => {
-      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { ok: false, error: 'Block not found. Use storyflow_get_blocks to list valid indices/ids.' };
-      if (b.type !== 'SCENE_HEADING' && b.type !== 'ACTION' && b.type !== 'CHARACTER') {
-        return { ok: false, error: `Block ${idx} (${b.type}) cannot hold an image prompt. Target a SCENE_HEADING, ACTION, or CHARACTER.` };
-      }
-      const kind = b.type === 'CHARACTER' ? 'character' as const : b.type === 'SCENE_HEADING' ? 'environment' as const : 'action' as const;
-      let sceneStart = idx;
-      for (let i = idx; i >= 0; i--) {
-        if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneStart = i; break; }
-      }
-      const activeTemplate = TEMPLATES.find(t => t.id === (screenplay.metadata.templateId ?? TEMPLATES[0].id)) || TEMPLATES[0];
-      const sceneBlocks = screenplay.blocks.slice(sceneStart, idx + 1);
-      try {
-        const prompt = await generateImagePrompt(sceneBlocks, b.id, activeTemplate.systemPrompt, appSettings, kind, screenplay.metadata.styleHead);
-        // Mirror the in-app save: CHARACTER prompts propagate to same-name blocks.
-        const isCharacter = b.type === 'CHARACTER';
-        const charName = isCharacter ? b.content.trim() : '';
-        setScreenplay(prev => ({
-          ...prev,
-          blocks: prev.blocks.map(x => {
-            if (x.id === b.id) return { ...x, imagePrompt: prompt };
-            if (isCharacter && x.type === 'CHARACTER' && x.content.trim() === charName) return { ...x, imagePrompt: prompt };
-            return x;
-          }),
-          lastModified: Date.now(),
-        }));
-        return { ok: true, kind };
-      } catch (e: any) {
-        return { ok: false, error: String(e?.message || e) };
-      }
-    },
-    generateImage: async ({ blockIndex, blockId }) => {
-      const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
-      const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
-      if (!b) return { ok: false, error: 'Block not found.' };
-      if (!b.imagePrompt?.trim()) return { ok: false, error: `Block ${idx} has no imagePrompt — run storyflow_generate_image_prompt first.` };
-      if (!appSettings.minimaxApiKey.trim()) return { ok: false, error: '未配置 MiniMax API Key（Settings → 视频生成）。' };
-      try {
-        const subject = b.type === 'CHARACTER' ? b.content.trim().slice(0, 40) : '环境';
-        let sceneHead = '';
-        for (let i = idx; i >= 0; i--) {
-          if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
-        }
-        // ACTION: identity lock — nearest preceding character's sheet as
-        // subject_reference. Bound asset first; subject-name fallback so the
-        // chain works before manual binding.
-        let subjectRef: Blob | undefined;
-        let lockName: string | undefined;
-        if (b.type === 'ACTION') {
-          const eff = resolveRefBindings(screenplay.referenceBindings, sceneHead);
-          for (let i = idx; i >= 0; i--) {
-            const x = screenplay.blocks[i];
-            if (x.type === 'SCENE_HEADING' && i !== idx) break;
-            if (x.type === 'CHARACTER') {
-              const name = x.content.trim();
-              const boundId = eff.characters[name];
-              let img = boundId ? refImages.find(r => r.id === boundId) : undefined;
-              if (!img) {
-                img = refImages.find(r => (r.subject ?? '') === name || (r.subject ?? '').startsWith(name + '/'));
-              }
-              if (img) {
-                subjectRef = await (await fetch(img.url)).blob().catch(() => undefined);
-                lockName = name;
-              }
-              break;
-            }
-          }
-        }
-        const imgs = await generateImages(
-          { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl },
-          b.imagePrompt,
-          { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
-        );
-        const stamp = Date.now().toString(36);
-        const name = b.type === 'CHARACTER'
-          ? `${subject}-gen-${stamp}.png`
-          : `scene-gen-${stamp}.png`;
-        const stored = await handleUploadRefImage(
-          new File([imgs[0].blob], name, { type: imgs[0].blob.type || 'image/png' }),
-          subject || '环境',
-          b.imagePrompt,
-          'ai-generate',
-          b.type === 'CHARACTER'
-            ? { kind: 'character', charName: subject }
-            : { kind: 'environment', sceneKey: sceneHead },
-        );
-        if (!stored) return { ok: false, error: '图片已生成但入库失败（存储后端异常）——详见控制台。' };
-        return { ok: true, subject, ...(lockName ? { characterLock: lockName } : {}) };
-      } catch (e: any) {
-        return { ok: false, error: String(e?.message || e) };
-      }
-    },
-    getAiLog: (opts) => getAiLog(opts) as unknown as Array<Record<string, unknown>>,
-  };
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
   // ---- white-model reference images + bindings ------------------------------
@@ -680,7 +309,7 @@ function App() {
     sourcePrompt?: string,
     source: 'upload' | 'ai-generate' | 'video-frame' = 'upload',
     identity?: { kind: 'character' | 'environment' | 'prop' | 'action'; charName?: string; variant?: string; sceneKey?: string },
-  ): Promise<boolean> => {
+  ): Promise<string | null> => {
     // v2 identity: pin to the current script; same-identity regenerations join
     // one version group (history kept, the newest becomes the selected one).
     const kind = identity?.kind ?? 'environment';
@@ -703,6 +332,7 @@ function App() {
           versionGroup: a.versionGroup, version: a.version, isSelected: a.isSelected ?? true,
         }]);
         if (siblings.length) promoteVersion(versionGroup, a.id).catch(() => {});
+        return a.id;
       } else {
         const stored = await addRefImage(file, meta);
         setRefImages((prev) => [...prev.map(r => r.versionGroup === versionGroup ? { ...r, isSelected: false } : r), {
@@ -713,11 +343,11 @@ function App() {
           versionGroup: stored.versionGroup, version: stored.version, isSelected: stored.isSelected ?? true,
         }]);
         if (siblings.length) promoteVersion(versionGroup, stored.id).catch(() => {});
+        return stored.id;
       }
-      return true;
     } catch (e) {
       console.warn('Failed to store reference image', e);
-      return false;
+      return null;
     }
   }, [assetDir, screenplay.id, refImages]);
 
@@ -797,6 +427,28 @@ function App() {
 
   // ---- MiniMax H3 submission (white-model → generated video, BYOK) --------
   const h3Ready = !!appSettings.minimaxApiKey.trim();
+
+  // ---- Image generation backend — FAL preferred, fall back to MiniMax ----
+  // User picks a provider in Settings, but FAL only actually wins when its
+  // key is configured; otherwise we silently use MiniMax (so an empty FAL key
+  // never bricks image generation). single decision point both call sites and
+  // the button gate read.
+  const effectiveImageProvider: 'minimax' | 'fal' =
+    appSettings.imageProvider === 'fal' && appSettings.falKey.trim()
+      ? 'fal'
+      : 'minimax';
+  const imageReady =
+    effectiveImageProvider === 'fal'
+      ? !!appSettings.falKey.trim()
+      : !!appSettings.minimaxApiKey.trim();
+
+  // Refreshed every render (latest-ref) so tool executions always see current
+  // state without re-registering. MUST stay in the render body, not an effect —
+  // the useEffect above only hands the ref to the registry after it is filled.
+  webmcpAccessorRef.current = createWebMcpAccessor({
+    screenplay, setScreenplay, savedScripts, appSettings, lang, refImages,
+    handleUploadRefImage, effectiveImageProvider, imageReady, setSelectedBlockId,
+  });
 
   /** Submit a recorded white-model video to H3. The view records first, then
    *  hands the blob here; App owns IO, keys, and the task record. */
@@ -2197,6 +1849,11 @@ function App() {
                                 imagePromptOpenLabel={t.imagePromptOpen}
                                 onOpenImagePrompt={openImagePromptPanel}
                                 isImagePromptPanelOpen={promptPanelBlockId === block.id}
+                                imageThumbUrl={
+                                  block.imageResult
+                                    ? refImages.find(r => r.id === block.imageResult?.assetId)?.url
+                                    : undefined
+                                }
                                 grayboxLabel={t.grayboxLabel}
                                 grayboxOpenLabel={t.grayboxOpen}
                                 onOpenGraybox={openGrayboxPanel}
@@ -2220,356 +1877,39 @@ function App() {
               ? screenplay.blocks.find(b => b.id === promptPanelBlockId)
               : null;
             if (!panelBlock) return null;
-            const hasPrompt = !!panelBlock.imagePrompt?.trim();
-            const hasGraybox = !!panelBlock.graybox;
-            if (!hasPrompt && !hasGraybox) return null;
-
-            // When both exist, the chip that opened the panel decides the
-            // initial view; the segmented control below lets the user switch.
-            // graybox3d = the Three.js previs; graybox = the raw JSON view.
-            const showingGrayboxJSON = hasGraybox && panelTab === 'graybox';
-            const showing3D = hasGraybox && panelTab === 'graybox3d';
-            const showingGraybox = showingGrayboxJSON || showing3D;
-            const activeGrayboxView: 'graybox3d' | 'graybox' = showing3D ? 'graybox3d' : 'graybox';
-
-            const copyText = showingGraybox
-              ? JSON.stringify(panelBlock.graybox, null, 2)
-              : (panelBlock.imagePrompt || '');
-
-            // Owning-scene context, lifted so the 3D view AND the footer
-            // Blender exporter share one lookup: the nearest SCENE_HEADING
-            // at/above the panel block. Its graybox supplies the layout +
-            // character blocking that shot views render (the white-model POV
-            // export and the Blender export both need real geometry, not an
-            // empty grid); its text feeds the Seedance/H3 prompt builder.
-            const panelIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
-            let panelSceneGraybox: GrayboxData | null = null;
-            let panelSceneHeading = '';
-            let panelSceneStart = 0;
-            for (let i = panelIdx; i >= 0; i--) {
-              const b = screenplay.blocks[i];
-              if (b.type === 'SCENE_HEADING') {
-                panelSceneStart = i;
-                panelSceneHeading = b.content;
-                if (b.graybox && b.graybox.kind === 'scene' && !b.graybox.error) {
-                  panelSceneGraybox = b.graybox;
-                }
-                break;
-              }
-            }
-            // every shot graybox's shotType in the owning scene — feeds
-            // the health check's W001 shot-variety warning
-            const panelSceneShotTypes: string[] = [];
-            for (let i = panelSceneStart + 1; i < screenplay.blocks.length; i++) {
-              const b = screenplay.blocks[i];
-              if (b.type === 'SCENE_HEADING') break;
-              if (b.graybox?.kind === 'shot' && b.graybox.camera && !b.graybox.error) {
-                panelSceneShotTypes.push(b.graybox.camera.shotType);
-              }
-            }
-            // Beat cast: characters plausibly IN THIS beat — reference
-            // images and capsule mappings are filtered to them.
-            const panelSceneCharNames = (panelSceneGraybox?.characters ?? []).map(c => c.name);
-            const panelBeatCast = panelBlock.type === 'ACTION' || panelBlock.type === 'DIALOGUE'
-              ? computeBeatCast(screenplay.blocks, panelIdx, panelSceneCharNames)
-              : undefined;
-
             return (
-              <div className="fixed top-0 right-0 h-full w-full max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l border-gray-200 dark:border-zinc-800 flex flex-col animate-in slide-in-from-right duration-200">
-                <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                  <div className={`flex items-center gap-2 font-bold text-sm ${showingGraybox ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                    {showingGraybox ? <Boxes className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
-                    <span>{showingGraybox ? t.grayboxLabel : t.storyboardPromptLabel}</span>
-                  </div>
-                  <button
-                    onClick={() => { setPromptPanelBlockId(null); setPanelTab('prompt'); }}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* When multiple payloads exist, offer a switcher. Graybox
-                    contributes two sub-tabs: 3D previs (graybox3d) and raw
-                    JSON (graybox). Build the tab list dynamically so only
-                    existing payloads appear. */}
-                {(hasPrompt && hasGraybox || hasGraybox) && hasGraybox && (() => {
-                  const tabs = (['prompt', 'graybox3d', 'graybox'] as const).filter(tab =>
-                    tab === 'prompt' ? hasPrompt : hasGraybox
-                  );
-                  return (
-                    <div className="px-4 pt-3 flex gap-1 flex-wrap">
-                      {tabs.map(tab => (
-                        <button
-                          key={tab}
-                          onClick={() => setPanelTab(tab)}
-                          className={clsx(
-                            "px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border transition-colors",
-                            panelTab === tab
-                              ? (tab === 'graybox3d'
-                                  ? "bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500"
-                                  : tab === 'graybox'
-                                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                                    : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800")
-                              : "bg-transparent text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800"
-                          )}
-                        >
-                          {tab === 'graybox3d' ? (t.graybox3dLabel || '3D') : tab === 'graybox' ? t.grayboxLabel : t.storyboardPromptLabel}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-                <div className="px-4 py-2 text-[11px] font-mono text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-zinc-800 truncate">
-                  {panelBlock.type} · {panelBlock.content.slice(0, 40) || '(empty)'}
-                </div>
-                {showing3D && hasGraybox && panelBlock.graybox && (
-                  <div className="px-4 pt-2 pb-1">
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-snug">
-                      {t.graybox3dHint || 'Interactive 3D previs. Drag to orbit.'}
-                    </p>
-                  </div>
-                )}
-                {showing3D && hasGraybox && panelBlock.graybox ? (
-                  (() => {
-                    return (
-                      <div className="flex-1 min-h-0 p-2">
-                        <Graybox3DView
-                          graybox={panelBlock.graybox}
-                          theme={theme}
-                          uiLang={lang}
-                          sceneGraybox={panelSceneGraybox}
-                          beat={{ type: panelBlock.type, content: panelBlock.content }}
-                          sceneHeading={panelSceneHeading}
-                          sceneShotTypes={panelSceneShotTypes}
-                          beatCastNames={panelBeatCast}
-                          scriptId={screenplay.id}
-                          refImages={refImages}
-                          refBindings={refBindings}
-                          onRefBindingsChange={handleRefBindingsChange}
-                          onUploadRefImage={handleUploadRefImage}
-                          onRemoveRefImage={handleRemoveRefImage}
-                          onOpenAssetLibrary={() => setShowAssetLibrary(true)}
-                          onGrayboxChange={(next) => setScreenplay(prev => ({
-                            ...prev,
-                            blocks: prev.blocks.map(x => x.id === panelBlock.id ? { ...x, graybox: next } : x),
-                            lastModified: Date.now(),
-                          }))}
-                          blockId={panelBlock.id}
-                          onSubmitH3={handleSubmitH3}
-                          h3Tasks={h3Tasks}
-                          h3Ready={h3Ready}
-                        />
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <div className="flex-1 overflow-y-auto p-4">
-                    {showingGrayboxJSON && panelBlock.graybox && (
-                      <p className="mb-2 px-1 text-[10px] leading-snug text-emerald-600 dark:text-emerald-400 font-sans">
-                        {grayboxOverviewLine(panelBlock.graybox)}
-                      </p>
-                    )}
-                    <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
-                      {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : panelBlock.imagePrompt}
-                    </pre>
-                  </div>
-                )}
-                <div className="relative p-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2">
-                  {!showingGraybox && panelBlock.imagePrompt && (
-                    <>
-                      {imageGenPreview?.blockId === panelBlock.id && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAssetLibrary(true)}
-                          title={lang === 'zh' ? '已入库——点击打开资产库' : 'Saved to library — click to open'}
-                          className="flex items-center gap-1.5 shrink-0 group"
-                        >
-                          <img
-                            src={imageGenPreview.url}
-                            alt={imageGenPreview.subject}
-                            className="w-9 h-9 rounded-md object-cover border border-emerald-400 group-hover:border-emerald-500"
-                          />
-                          <span className="hidden sm:inline text-[10px] text-emerald-600 dark:text-emerald-400 leading-tight">
-                            {lang === 'zh' ? '已入库' : 'saved'}<br />
-                            <span className="text-gray-400">{imageGenPreview.subject}</span>
-                          </span>
-                        </button>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        id="sf-prompt-asset-file"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          e.target.value = '';
-                          if (!f) return;
-                          // subject from the block itself: CHARACTER -> the
-                          // character name, ACTION -> 环境. The block's
-                          // imagePrompt rides along as provenance.
-                          const subject = panelBlock.type === 'CHARACTER'
-                            ? panelBlock.content.trim().slice(0, 40)
-                            : '环境';
-                          handleUploadRefImage(f, subject || '环境', panelBlock.imagePrompt);
-                        }}
-                      />
-                      <button
-                        onClick={() => document.getElementById('sf-prompt-asset-file')?.click()}
-                        className="flex-1 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                        title={lang === 'zh'
-                          ? '外部出图后回传：自动打 subject 并记录生成提示词（溯源）'
-                          : 'Import the externally-generated image: auto-tags subject and records the source prompt'}
-                      >
-                        <span className="text-sm leading-none">📥</span>
-                        {panelBlock.type === 'CHARACTER'
-                          ? (lang === 'zh' ? `存为「${panelBlock.content.trim().slice(0, 8)}」资产` : `Save as "${panelBlock.content.trim().slice(0, 12)}" asset`)
-                          : (lang === 'zh' ? '存为环境资产' : 'Save as env asset')}
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (imageGenerating || !h3Ready) return;
-                          setImageGenerating(true);
-                          setImageGenError(null);
-                          try {
-                            const subject = panelBlock.type === 'CHARACTER'
-                              ? panelBlock.content.trim().slice(0, 40)
-                              : '环境';
-                            // ACTION frames: visual identity lock — pass the
-                            // nearest preceding bound character's sheet as the
-                            // image-to-image subject reference.
-                            let subjectRef: Blob | undefined;
-                            if (panelBlock.type === 'ACTION') {
-                              const pIdx = screenplay.blocks.findIndex(b => b.id === panelBlock.id);
-                              let sceneHead = '';
-                              for (let i = pIdx; i >= 0; i--) {
-                                if (screenplay.blocks[i].type === 'SCENE_HEADING') { sceneHead = screenplay.blocks[i].content; break; }
-                              }
-                              const eff = resolveRefBindings(screenplay.referenceBindings, sceneHead);
-                              for (let i = pIdx; i >= 0; i--) {
-                                const b = screenplay.blocks[i];
-                                if (b.type === 'SCENE_HEADING' && i !== pIdx) break;
-                                if (b.type === 'CHARACTER') {
-                                  const boundId = eff.characters[b.content.trim()];
-                                  const img = boundId && refImages.find(r => r.id === boundId);
-                                  if (img) {
-                                    subjectRef = await (await fetch(img.url)).blob().catch(() => undefined);
-                                    break;
-                                  }
-                                }
-                              }
-                            }
-                            const imgs = await generateImages(
-                              { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl },
-                              panelBlock.imagePrompt!,
-                              { n: 1, aspectRatio: '16:9', subjectReference: subjectRef },
-                            );
-                            const stamp = Date.now().toString(36);
-                            const name = panelBlock.type === 'CHARACTER'
-                              ? `${subject}-gen-${stamp}.png`
-                              : `scene-gen-${stamp}.png`;
-                            setImageGenPreview({
-                              blockId: panelBlock.id,
-                              url: URL.createObjectURL(new Blob([imgs[0].blob], { type: imgs[0].blob.type || 'image/png' })),
-                              subject: subject || '环境',
-                            });
-                            for (const im of imgs) {
-                              // route through the active asset backend with
-                              // full provenance + v2 identity (pin-script,
-                              // version group per character/scene)
-                              let envScene = '';
-                              for (let i = screenplay.blocks.findIndex(b => b.id === panelBlock.id); i >= 0; i--) {
-                                if (screenplay.blocks[i].type === 'SCENE_HEADING') { envScene = screenplay.blocks[i].content; break; }
-                              }
-                              await handleUploadRefImage(
-                                new File([im.blob], name, { type: im.blob.type || 'image/png' }),
-                                subject || '环境',
-                                panelBlock.imagePrompt,
-                                'ai-generate',
-                                panelBlock.type === 'CHARACTER'
-                                  ? { kind: 'character', charName: subject }
-                                  : panelBlock.type === 'SCENE_HEADING'
-                                    ? { kind: 'environment', sceneKey: envScene }
-                                    : { kind: 'action', sceneKey: envScene },
-                              );
-                            }
-                          } catch (e: any) {
-                            setImageGenError(String(e?.message || e));
-                          } finally {
-                            setImageGenerating(false);
-                          }
-                        }}
-                        disabled={imageGenerating || !h3Ready}
-                        title={!h3Ready
-                          ? (lang === 'zh' ? '未配置 MiniMax API Key（Settings → 视频生成）' : 'No MiniMax API key (Settings → Video Generation)')
-                          : (lang === 'zh'
-                              ? '用 MiniMax image-01 直接生图入库（消耗该账号配额，按图计费）'
-                              : 'Generate via MiniMax image-01 straight into the library (billed per image)')}
-                        className="flex-1 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <span className="text-sm leading-none">🎨</span>
-                        {imageGenerating
-                          ? (lang === 'zh' ? '生成中…' : 'Generating…')
-                          : (lang === 'zh' ? '生成图片' : 'Generate')}
-                      </button>
-                      {imageGenError && (
-                        <p className="text-[10px] text-red-500 absolute bottom-0.5 left-4 right-4 truncate" title={imageGenError}>{imageGenError}</p>
-                      )}
-                    </>
-                  )}
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(copyText).catch(() => {});
-                    }}
-                    className="flex-1 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Cloud className="w-3.5 h-3.5" />
-                    {showingGraybox ? t.grayboxCopy : t.aiCopyPrompt}
-                  </button>
-                  {showingGraybox && panelBlock.graybox && !panelBlock.graybox.error && (
-                    <button
-                      onClick={() => {
-                        const kind = panelBlock.graybox!.kind;
-                        const py = buildBlenderScript({
-                          kind,
-                          graybox: panelBlock.graybox!,
-                          sceneGraybox: panelSceneGraybox,
-                          sceneHeading: panelSceneHeading,
-                          beat: { type: panelBlock.type, content: panelBlock.content },
-                        });
-                        downloadBlenderScript(py, blenderScriptFilename(screenplay.metadata.title, kind));
-                      }}
-                      title={lang === 'zh'
-                        ? '导出自包含 .py：在 Blender 的 Scripting 标签打开并运行，即重建灰模（Y-up→Z-up 已转换；镜头含关键帧运镜）'
-                        : 'Export a self-contained .py: open and run it in Blender\'s Scripting tab to rebuild the graybox (Y-up→Z-up converted; shot cameras come with keyframed moves)'}
-                      className="flex-1 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Boxes className="w-3.5 h-3.5" />
-                      {t.grayboxBlender}
-                    </button>
-                  )}
-                  {!isReadOnly && (
-                    <button
-                      onClick={() => {
-                        // delete whichever payload is currently active
-                        if (showingGraybox) handleDeleteGraybox(panelBlock.id);
-                        else handleDeleteImagePrompt(panelBlock.id);
-                        // If the other payload still exists, keep the panel open
-                        // on it; otherwise close. When leaving graybox for a
-                        // still-present prompt, reset to prompt tab.
-                        if (showingGraybox && hasPrompt) setPanelTab('prompt');
-                        else if (!showingGraybox && hasGraybox) setPanelTab('graybox3d');
-                        else { setPromptPanelBlockId(null); setPanelTab('prompt'); }
-                      }}
-                      className="flex-1 py-2 text-xs font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      {t.aiDeletePrompt}
-                    </button>
-                  )}
-                </div>
-              </div>
+              <PromptPanel
+                panelBlock={panelBlock}
+                panelTab={panelTab}
+                setPanelTab={setPanelTab}
+                setPromptPanelBlockId={setPromptPanelBlockId}
+                screenplay={screenplay}
+                theme={theme}
+                lang={lang}
+                t={t}
+                refImages={refImages}
+                refBindings={refBindings}
+                onRefBindingsChange={handleRefBindingsChange}
+                onUploadRefImage={handleUploadRefImage}
+                onRemoveRefImage={handleRemoveRefImage}
+                setShowAssetLibrary={setShowAssetLibrary}
+                setScreenplay={setScreenplay}
+                onSubmitH3={handleSubmitH3}
+                h3Tasks={h3Tasks}
+                h3Ready={h3Ready}
+                imageReady={imageReady}
+                effectiveImageProvider={effectiveImageProvider}
+                appSettings={appSettings}
+                imageGenerating={imageGenerating}
+                setImageGenerating={setImageGenerating}
+                imageGenError={imageGenError}
+                setImageGenError={setImageGenError}
+                imageGenPreview={imageGenPreview}
+                setImageGenPreview={setImageGenPreview}
+                isReadOnly={isReadOnly}
+                onDeleteGraybox={handleDeleteGraybox}
+                onDeleteImagePrompt={handleDeleteImagePrompt}
+              />
             );
           })()}
         </div>
@@ -2608,208 +1948,19 @@ function App() {
 
         {/* AI Modal */}
         {showAIModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
-                    <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
-                            <Sparkles className="w-5 h-5" />
-                            <span>{t.aiAssistant}</span>
-                        </div>
-                        <button onClick={() => setShowAIModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
-                    
-                    <div className="p-6 space-y-6">
-                        <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
-                            {[...(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX', 'DUB'] as const)].map(m => (
-                                <button
-                                    key={m}
-                                    onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}}
-                                    className={clsx(
-                                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
-                                        aiMode === m
-                                            ? "bg-white dark:bg-[#27272a] text-indigo-600 dark:text-indigo-400 shadow-sm"
-                                            : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                                    )}
-                                >
-                                    {m === 'CONTINUE' && t.modes.continue}
-                                    {m === 'IDEAS' && t.modes.ideas}
-                                    {m === 'REWRITE' && t.modes.rewrite}
-                                    {m === 'STORYBOARD' && t.modes.storyboard}
-                                    {m === 'GRAYBOX' && t.modes.graybox}
-                                    {m === 'DUB' && t.modes.dub}
-                                </button>
-                            ))}
-                        </div>
-
-                        {aiState.batchProgress && (
-                            <div className="text-center py-6 space-y-3">
-                                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 dark:text-emerald-400">
-                                    <Boxes className="w-8 h-8 animate-pulse" />
-                                </div>
-                                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
-                                    {t.grayboxBatchProgress
-                                        .replace('{current}', String(aiState.batchProgress.current))
-                                        .replace('{total}', String(aiState.batchProgress.total))}
-                                </p>
-                                <div className="w-full h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden mx-auto max-w-[80%]">
-                                    <div
-                                        className="h-full bg-emerald-500 transition-all duration-300"
-                                        style={{ width: `${(aiState.batchProgress.current / Math.max(aiState.batchProgress.total, 1)) * 100}%` }}
-                                    />
-                                </div>
-                                <p className="text-[11px] text-gray-400 dark:text-gray-500 px-4">
-                                    {t.graybox3dHint}
-                                </p>
-                            </div>
-                        )}
-
-                        {!aiState.suggestion && !aiState.decision && !aiState.grayboxDraft && !aiState.batchProgress && (
-                             <div className="text-center py-6">
-                                <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-500 dark:text-indigo-400">
-                                    <Bot className="w-8 h-8" />
-                                </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 px-4">
-                                    {aiMode === 'CONTINUE' && t.prompts.continue}
-                                    {aiMode === 'IDEAS' && t.prompts.ideas}
-                                    {aiMode === 'REWRITE' && t.prompts.rewrite}
-                                    {aiMode === 'STORYBOARD' && t.prompts.storyboard}
-                                    {aiMode === 'GRAYBOX' && t.prompts.graybox}
-                                    {aiMode === 'DUB' && t.prompts.dub}
-                                </p>
-                                {aiMode === 'GRAYBOX' && (
-                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-6 px-4 leading-relaxed">
-                                        {t.grayboxBatchSceneHint}
-                                    </p>
-                                )}
-                                <button
-                                    onClick={() => executeAI()}
-                                    disabled={aiState.isLoading}
-                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w-4 h-4" />}
-                                    {aiState.isLoading
-                                      ? (aiMode === 'CONTINUE' ? t.transitionAssessing : t.aiGenerating)
-                                      : (aiMode === 'CONTINUE' ? t.transitionContinueScene : t.aiGenerate)}
-                                </button>
-                             </div>
-                        )}
-
-                        {/* CONTINUE two-step: transition decision card (shown after
-                            the judgment step, before the continuation is written). */}
-                        {aiMode === 'CONTINUE' && aiState.decision && !aiState.suggestion && (
-                            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">{t.transitionSuggests}</span>
-                                        <span className={clsx(
-                                            "text-[11px] font-bold px-2 py-0.5 rounded-full",
-                                            aiState.decision.action === 'transition'
-                                                ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-                                                : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300"
-                                        )}>
-                                            {aiState.decision.action === 'transition' ? t.transitionReasonTransition : t.transitionReasonContinue}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{aiState.decision.reason}</p>
-                                    {aiState.decision.action === 'transition' && (
-                                        <div className="mt-3">
-                                            <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                                                {t.transitionSceneLabel}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={transitionHeadingDraft}
-                                                onChange={e => setTransitionHeadingDraft(e.target.value)}
-                                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm font-mono dark:text-white"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}
-                                        className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-                                    >
-                                        {t.aiDiscard}
-                                    </button>
-                                    {aiState.decision.action === 'transition' && (
-                                        <button
-                                            onClick={() => runContinuation({ allowTransition: true, targetSceneHeading: transitionHeadingDraft.trim() })}
-                                            disabled={aiState.isLoading || !transitionHeadingDraft.trim()}
-                                            className="flex-1 py-2.5 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-lg shadow-amber-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                                        >
-                                            {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
-                                            {t.transitionAccept}
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => runContinuation({ allowTransition: false })}
-                                        disabled={aiState.isLoading}
-                                        className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                                    >
-                                        {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1"/> : null}
-                                        {t.transitionContinueScene}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {aiState.error && (
-                            <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-900/50">
-                                {aiState.error}
-                            </div>
-                        )}
-
-                        {aiState.suggestion && (
-                            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                                {aiMode === 'IDEAS' && (
-                                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.aiIdeasHint}</p>
-                                )}
-                                {aiMode === 'STORYBOARD' && (
-                                    <p className="text-[11px] text-indigo-600 dark:text-indigo-400">{t.storyboardHint}</p>
-                                )}
-                                {aiMode === 'GRAYBOX' && (
-                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.grayboxHint}</p>
-                                )}
-                                {aiMode === 'GRAYBOX' && aiState.grayboxDraft && !aiState.grayboxDraft.error && (
-                                    <p className="px-1 text-[10px] leading-snug text-emerald-600 dark:text-emerald-400 font-sans">
-                                        {grayboxOverviewLine(aiState.grayboxDraft)}
-                                    </p>
-                                )}
-                                <div className="p-4 bg-gray-50 dark:bg-zinc-900/50 rounded-xl border border-gray-100 dark:border-zinc-800 text-sm font-mono whitespace-pre-wrap max-h-60 overflow-y-auto text-gray-800 dark:text-gray-300 shadow-inner">
-                                    {aiState.suggestion}
-                                </div>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setAIState({isLoading:false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null})}
-                                        className="flex-1 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-                                    >
-                                        {t.aiDiscard}
-                                    </button>
-                                    {(aiMode === 'STORYBOARD' || aiMode === 'GRAYBOX') && (
-                                        <button
-                                            onClick={() => navigator.clipboard?.writeText(aiState.suggestion || '').catch(() => {})}
-                                            className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                                        >
-                                            <Cloud className="w-3.5 h-3.5" />
-                                            {aiMode === 'GRAYBOX' ? t.grayboxCopy : t.aiCopyPrompt}
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={acceptAISuggestion}
-                                        disabled={aiMode === 'GRAYBOX' && !aiState.grayboxDraft}
-                                        className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                                    >
-                                        {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : aiMode === 'GRAYBOX' ? t.grayboxSave : t.aiInsert}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <AIModal
+                aiMode={aiMode}
+                setAIMode={setAIMode}
+                aiState={aiState}
+                setAIState={setAIState}
+                t={t}
+                onClose={() => setShowAIModal(false)}
+                onExecute={() => executeAI()}
+                onAccept={acceptAISuggestion}
+                transitionHeadingDraft={transitionHeadingDraft}
+                setTransitionHeadingDraft={setTransitionHeadingDraft}
+                runContinuation={runContinuation}
+            />
         )}
 
         {/* Gallery browse (P2) */}
@@ -2869,177 +2020,30 @@ function App() {
 
         {/* Templates Modal */}
         {showTemplateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200 dark:border-zinc-800 max-h-[80vh] flex flex-col relative">
-              <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2 text-gray-900 dark:text-white font-bold">
-                      <LayoutTemplate className="w-5 h-5 text-indigo-600" />
-                      <span>{t.selectTemplate}</span>
-                  </div>
-                  <button onClick={() => setShowTemplateModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                      <X className="w-5 h-5" />
-                  </button>
-              </div>
-              <div className="p-6 overflow-y-auto">
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {TEMPLATES.map(tpl => (
-                       <div 
-                          key={tpl.id}
-                          className="relative flex flex-col items-start p-4 rounded-xl border border-gray-200 dark:border-zinc-800 hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-lg hover:shadow-indigo-500/10 hover:bg-gray-50 dark:hover:bg-zinc-900 transition-all text-left group"
-                       >
-                          <button 
-                            onClick={() => openOpeningPicker(tpl)}
-                            className="absolute inset-0 w-full h-full z-0 cursor-pointer"
-                            aria-label={`Select ${t.templates[tpl.nameKey as keyof typeof t.templates]}`}
-                          />
-                          
-                          <div className="relative z-10 pointer-events-none pr-6">
-                            <span className="font-bold text-gray-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors block">
-                                {t.templates[tpl.nameKey as keyof typeof t.templates]}
-                            </span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed block">
-                                {t.templates[tpl.descKey as keyof typeof t.templates]}
-                            </span>
-                          </div>
-
-                          <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setViewingTemplate(tpl);
-                            }}
-                            className="absolute top-2 right-2 z-20 p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-                            title={t.viewPrompt}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                       </div>
-                    ))}
-                 </div>
-              </div>
-              <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex justify-end shrink-0">
-                  <button onClick={() => setShowTemplateModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
-                    {t.cancel}
-                  </button>
-              </div>
-
-              {/* Nested Prompt Viewer Modal */}
-              {viewingTemplate && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/60 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 rounded-2xl">
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-gray-200 dark:border-zinc-700 w-full max-w-lg p-6 relative flex flex-col max-h-full">
-                        <div className="flex items-center justify-between mb-4 shrink-0">
-                            <h3 className="font-bold text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                                <Bot className="w-5 h-5 text-indigo-500"/>
-                                {t.systemPrompt}
-                            </h3>
-                            <button onClick={() => setViewingTemplate(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-black/30 p-4 rounded-lg text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-y-auto mb-4 border border-gray-200 dark:border-zinc-800 flex-1">
-                            {viewingTemplate.systemPrompt}
-                        </div>
-                        <div className="flex justify-end shrink-0">
-                            <button
-                                onClick={() => setViewingTemplate(null)}
-                                className="px-4 py-2 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
-                            >
-                                {t.close}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <TemplateModal
+            t={t}
+            viewingTemplate={viewingTemplate}
+            setViewingTemplate={setViewingTemplate}
+            setShowTemplateModal={setShowTemplateModal}
+            openOpeningPicker={openOpeningPicker}
+          />
         )}
 
         {/* Opening Picker (P5-openings) — template default vs AI-invented cold opens */}
         {openingPicker && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-gray-200 dark:border-zinc-800">
-              <div className="p-4 border-b border-gray-100 dark:border-zinc-800 shrink-0">
-                <div className="font-bold text-gray-900 dark:text-white">🎲 {t.openingTitle}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {t.templates[openingPicker.nameKey as keyof typeof t.templates]} · {t.openingAiHint}
-                </div>
-              </div>
-              <div className="p-4 overflow-y-auto space-y-3">
-                {/* Template default opening */}
-                <button
-                  type="button"
-                  onClick={() => setChosenOpening(null)}
-                  className={`w-full text-left p-3 rounded-xl border transition-all ${
-                    chosenOpening === null
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                      : 'border-gray-200 dark:border-zinc-800 hover:border-indigo-300'
-                  }`}
-                >
-                  <div className="text-xs font-bold text-gray-900 dark:text-white mb-1">{t.openingDefault}</div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                    {(() => {
-                      const base = (openingPicker.initialBlocksZh && ['zh', 'dual'].includes(screenplay.metadata.scriptLanguage))
-                        ? openingPicker.initialBlocksZh
-                        : openingPicker.initialBlocks;
-                      return base.slice(0, 2).map(b => b.content).join(' — ');
-                    })()}
-                  </div>
-                </button>
-
-                {openingsLoading && (
-                  <div className="p-3 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-800 text-xs text-indigo-600 dark:text-indigo-400 animate-pulse">
-                    {t.openingLoading}
-                  </div>
-                )}
-                {openingsError && (
-                  <div className="p-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-[11px] text-red-600 dark:text-red-400 break-all">
-                    {openingsError}
-                  </div>
-                )}
-                {(openingOptions ?? []).map((opt, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setChosenOpening(i)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${
-                      chosenOpening === i
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                        : 'border-gray-200 dark:border-zinc-800 hover:border-indigo-300'
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-gray-900 dark:text-white mb-1">{opt.logline || `#${i + 1}`}</div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
-                      {opt.blocks.slice(0, 3).map(b => b.content).join(' — ')}
-                    </div>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => openOpeningPicker(openingPicker)}
-                  disabled={openingsLoading}
-                  className="w-full p-2 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 text-xs text-gray-500 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors disabled:opacity-50"
-                >
-                  {openingsLoading ? t.openingLoading : t.openingReroll}
-                </button>
-              </div>
-              <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0">
-                <button onClick={() => setOpeningPicker(null)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
-                  {t.cancel}
-                </button>
-                <button
-                  onClick={() => {
-                    if (!openingPicker) return;
-                    handleCreateFromTemplate(
-                      openingPicker.id,
-                      chosenOpening !== null && openingOptions ? openingOptions[chosenOpening] : undefined
-                    );
-                  }}
-                  className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm disabled:opacity-50"
-                >
-                  {t.openingConfirm}
-                </button>
-              </div>
-            </div>
-          </div>
+          <OpeningPicker
+            openingPicker={openingPicker}
+            openingOptions={openingOptions}
+            openingsLoading={openingsLoading}
+            openingsError={openingsError}
+            chosenOpening={chosenOpening}
+            setChosenOpening={setChosenOpening}
+            screenplay={screenplay}
+            t={t}
+            onClose={() => setOpeningPicker(null)}
+            onReroll={() => openOpeningPicker(openingPicker)}
+            onConfirm={handleCreateFromTemplate}
+          />
         )}
       </div>
     </div>

@@ -20,6 +20,10 @@
  */
 
 import { logAiCall, classifyError } from './aiLog';
+import { falTextToImage, falDownloadImages, DEFAULT_FAL_MODEL, FAL_SIZE_FOR_ASPECT, FalConfig } from './falService';
+
+/** Backend selector for generateImages — mirrors AppSettings.imageProvider. */
+export type ImageProvider = 'minimax' | 'fal';
 
 export interface MiniMaxConfig {
   apiKey: string;
@@ -204,10 +208,39 @@ const clampImagePrompt = (prompt: string): string => {
  *  no 24h URL expiry. Falls back to URL download if the endpoint ignores
  *  the base64 request. */
 export const generateImages = async (
-  cfg: MiniMaxConfig,
+  cfg: MiniMaxConfig & { falKey?: string; falModel?: string; falQuality?: 'low' | 'high'; provider?: ImageProvider },
   prompt: string,
   opts?: { n?: number; aspectRatio?: string; subjectReference?: Blob },
 ): Promise<GeneratedImage[]> => {
+  // FAL backend: queue async submit→poll, then materialize CDN blobs.
+  if (cfg.provider === 'fal') {
+    if (!cfg.falKey?.trim()) throw new Error('未配置 FAL API Key —— 请在 Settings → AI 中填写（imageProvider = FAL）。');
+    const size = FAL_SIZE_FOR_ASPECT[opts?.aspectRatio ?? '16:9'] ?? 'square_hd';
+    const falCfg: FalConfig = { apiKey: cfg.falKey.trim(), model: cfg.falModel?.trim() || DEFAULT_FAL_MODEL };
+    const t0 = performance.now();
+    let outcome: 'ok' | 'error' = 'ok';
+    let result;
+    try {
+      result = await falTextToImage(falCfg, prompt, {
+        size,
+        quality: cfg.falQuality ?? 'low',
+        numImages: opts?.n ?? 1,
+        outputFormat: 'png',
+        // Identity lock: a character design sheet conditions the generation
+        // via the /edit endpoint (same role subject_reference plays on MiniMax).
+        ...(opts?.subjectReference ? { referenceImages: [opts.subjectReference] } : {}),
+      });
+    } catch (e: any) {
+      outcome = 'error';
+      logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'image-gen', provider: 'fal', model: falCfg.model ?? DEFAULT_FAL_MODEL, outcome, errorType: classifyError(e).errorType, error: String(e?.message || e) });
+      throw e;
+    }
+    const imgs = await falDownloadImages(result, opts?.n ?? 1);
+    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'image-gen', provider: 'fal', model: falCfg.model ?? DEFAULT_FAL_MODEL, outcome, responseChars: imgs.reduce((a, i) => a + i.blob.size, 0) });
+    return imgs.map(i => ({ url: i.url, blob: i.blob }));
+  }
+
+  // ---- MiniMax image-01 (default) ----
   const body: Record<string, unknown> = {
     model: 'image-01',
     prompt: clampImagePrompt(prompt),

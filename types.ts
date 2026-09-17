@@ -16,6 +16,11 @@ export interface ScriptBlock {
    *  + intensity, saved so a dubbing sheet can be exported with stable
    *  voice-direction per character. Populated by the DUB analysis mode. */
   dubEmotion?: DubEmotion;
+  /** Link from this block's imagePrompt to the generated asset in the library.
+   *  Persists the generate result so the thumbnail survives regeneration of
+   *  other blocks and reloads. The url is looked up from the live library at
+   *  render (object urls are session-scoped), so only the id is stored. */
+  imageResult?: { assetId: string; subject: string };
   /** Optional 3D gray-box (previs) payload.
    *  SCENE_HEADING stores a 'scene' graybox (layout + characters);
    *  ACTION/DIALOGUE store a 'shot' graybox (camera). Phase-1: data + AI only;
@@ -206,6 +211,18 @@ export interface AppSettings {
   minimaxApiKey: string;
   /** MiniMax endpoint: CN 'https://api.minimaxi.com' | intl 'https://api.minimax.io'. */
   minimaxBaseUrl: string;
+  /** FAL text-to-image BYOK (queue API). Empty until the user fills it; only
+   *  used when imageProvider === 'fal'. Get a key at fal.ai (billing required). */
+  falKey: string;
+  /** FAL application model path; defaults to openai/gpt-image-2.5/flare. */
+  falModel: string;
+  /** FAL image quality tier — the COST lever ('low' economy ≈$0.004/img,
+   *  'high' ≈$0.05/img). Defaults to 'low'. Only used when imageProvider='fal'. */
+  falQuality: 'low' | 'high';
+  /** Which backend generates storyboard images. 'minimax' = MiniMax image-01
+   *  (page-held key, base64 response); 'fal' = FAL queue (gpt-image-2.5 etc.,
+   *  async submit→poll, CDN download). */
+  imageProvider: 'minimax' | 'fal';
   colorSettings: ColorSettings;
   shortcuts: KeyboardShortcuts;
   autoAcceptAI: boolean;

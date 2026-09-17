@@ -20,6 +20,10 @@ interface EditorBlockProps {
   imagePromptOpenLabel?: string;
   onOpenImagePrompt?: (id: string) => void;
   isImagePromptPanelOpen?: boolean;
+  /** Resolved url of the generated-result thumbnail for this block's prompt
+   *  (from block.imageResult → library). Rendered inside the image-prompt chip
+   *  so the user sees at a glance that an image already exists for this shot. */
+  imageThumbUrl?: string;
   /** Graybox (3D previs) chip — scene layout on SCENE_HEADING, camera/运镜 on
    *  ACTION/DIALOGUE. Emerald accent to distinguish from the indigo
    *  image-prompt chip when an ACTION block carries both. */
@@ -65,6 +69,7 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
   imagePromptOpenLabel = 'View',
   onOpenImagePrompt,
   isImagePromptPanelOpen = false,
+  imageThumbUrl,
   grayboxLabel = 'Graybox',
   grayboxOpenLabel = 'View',
   onOpenGraybox,
@@ -136,6 +141,18 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
         spellCheck={false}
       />
 
+      {/* Dubbing-direction cue for DIALOGUE blocks. Written by the DUB sheet
+          mode and saved on the block; shown as a parenthetical-style cue under
+          the line so the emotion/delivery direction is visible in the editor
+          WITHOUT contaminating the actual dialogue text (which is what a dubbing
+          engine / export reads). Not interactive — the DUB mode re-runs to
+          refresh it. */}
+      {block.type === 'DIALOGUE' && block.dubEmotion && (
+        <span className="mt-0.5 block text-[11px] italic text-violet-600/70 dark:text-violet-400/70 text-center w-3/4 mx-auto">
+          ({block.dubEmotion.emotion}{block.dubEmotion.intensity > 0 ? ` · ${block.dubEmotion.intensity}/10` : ''}{block.dubEmotion.delivery ? ` · ${block.dubEmotion.delivery}` : ''}{block.dubEmotion.parenthetical ? ` · ${block.dubEmotion.parenthetical}` : ''})
+        </span>
+      )}
+
       {/* Storyboard image prompt chip (ACTION / CHARACTER blocks).
           Clicking it opens the prompt in a right-side drawer (handled in App)
           instead of expanding inline, so it costs only one line of editor space. */}
@@ -151,6 +168,9 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
           )}
         >
           <ImageIcon className="w-3 h-3" />
+          {imageThumbUrl && (
+            <img src={imageThumbUrl} alt="" className="w-4 h-4 rounded-sm object-cover border border-emerald-300/60" />
+          )}
           <span>{imagePromptLabel}</span>
           <span className="font-sans normal-case tracking-normal opacity-60">· {imagePromptOpenLabel}</span>
         </button>
