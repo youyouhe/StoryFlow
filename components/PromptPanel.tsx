@@ -519,7 +519,9 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
               </p>
             )}
             {imageGenError && (
-              <p className="text-[10px] text-red-500 absolute bottom-0.5 left-4 right-4 truncate" title={imageGenError}>{imageGenError}</p>
+              <div className="w-full mb-1 px-1">
+              <p className="text-[10px] leading-snug text-red-500 break-all max-h-16 overflow-y-auto" title={imageGenError}>{imageGenError}</p>
+            </div>
             )}
           </>
         )}

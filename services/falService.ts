@@ -172,6 +172,26 @@ export const falUploadFile = async (cfg: FalConfig, blob: Blob, fileName?: strin
  *                      unreachable from the runner). The /edit endpoint bills
  *                      the input image tokens the table above already assumes.
  */
+/** FAL validation errors arrive as {"detail":[{"loc":["body","prompt"],"msg":"…"}]}.
+ *  A truncated raw dump like that is undebuggable in a 10px UI line — extract
+ *  the human-readable messages (with their field path) and keep the raw body
+ *  only as a fallback when the body isn't the expected shape. */
+const falErrorMessage = (status: number, body: string): string => {
+  try {
+    const parsed = JSON.parse(body);
+    const details = Array.isArray(parsed?.detail) ? parsed.detail : [];
+    const msgs = details
+      .map((d: { loc?: unknown; msg?: unknown }) => {
+        const loc = Array.isArray(d?.loc) ? d.loc.filter(Boolean).join('.') : '';
+        const msg = typeof d?.msg === 'string' ? d.msg : '';
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .filter(Boolean);
+    if (msgs.length) return `FAL HTTP ${status}: ${msgs.join(' | ')}`;
+  } catch { /* body wasn't JSON — fall through to the raw dump */ }
+  return `FAL HTTP ${status}: ${body.slice(0, 300)}`;
+};
+
 export const falTextToImage = async (
   cfg: FalConfig,
   prompt: string,
@@ -217,9 +237,10 @@ export const falTextToImage = async (
   } catch (e) {
     throw new Error(`FAL submit 网络错误: ${String(e)}`);
   }
+
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`FAL submit HTTP ${res.status}: ${body.slice(0, 300)}`);
+    throw new Error(falErrorMessage(res.status, body));
   }
   const sub = await res.json().catch(() => ({}));
   const requestId = sub?.request_id;
@@ -247,7 +268,7 @@ export const falTextToImage = async (
   const r = await fetch(resultUrl, { headers: pollHeaders });
   if (!r.ok) {
     const body = await r.text().catch(() => '');
-    throw new Error(`FAL result HTTP ${r.status}: ${body.slice(0, 300)}`);
+    throw new Error(falErrorMessage(r.status, body));
   }
   return r.json();
 };
