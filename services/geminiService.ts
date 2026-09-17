@@ -252,6 +252,7 @@ ${sceneMap ? `
      [TRANSITION] CUT TO:
 
      Do not use markdown (no **bold**). Do not provide explanations. Just the labeled script blocks.
+     Costume variants: when a character's OUTFIT changes from earlier (bathrobe after a shower, armor after a battle, plain clothes at home), re-cue the character with the costume in parentheses BEFORE their next beat — e.g. [CHARACTER] 张三（浴袍） — and keep using that cue until they change again. Keep the base name IDENTICAL; only the parenthetical differs. Never invent a new character name for the same person. This is how the storyboard pipeline knows which outfit to draw.
   ${directiveInstruction}
   `;
 
