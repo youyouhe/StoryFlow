@@ -182,6 +182,11 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
     if (link?.url) thumb = { url: link.url, subject: panelBlock.imageResult?.subject ?? '' };
   }
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+  // Bootstrap/link escape hatch: when an ACTION's character has no design
+  // sheet, the panel offers (a) fresh text-to-image whose result BECOMES the
+  // sheet, or (b) linking an existing library asset as the sheet. linkingChar
+  // is non-null while the library picker overlay is open.
+  const [linkingChar, setLinkingChar] = useState<{ name: string; variant?: string } | null>(null);
 
   return (
     <div className="fixed top-0 right-0 h-full w-full max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l border-gray-200 dark:border-zinc-800 flex flex-col animate-in slide-in-from-right duration-200">
@@ -364,6 +369,11 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     if (screenplay.blocks[i].type === 'SCENE_HEADING') { envScene = screenplay.blocks[i].content; break; }
                   }
                   const seq = sequenceAt(screenplay.sequences, panelBlockIdx);
+                  // needs-image escape hatch (a): this beat generates fresh and
+                  // its result is adopted as the character's design sheet.
+                  const bootstrapChar = panelBlock.type === 'ACTION' && panelActionRef?.kind === 'needs-image'
+                    ? panelActionRef
+                    : null;
                   const parsedName = panelBlock.type === 'CHARACTER'
                     ? parseCharacterName(panelBlock.content)
                     : (panelActionRef?.kind === 'ready' || panelActionRef?.kind === 'needs-image')
@@ -431,9 +441,13 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                       'ai-generate',
                       panelBlock.type === 'CHARACTER'
                         ? parseIntCtxChar(panelBlock, subject)
-                        : panelBlock.type === 'SCENE_HEADING'
-                          ? { kind: 'environment', sceneKey: envScene }
-                          : { kind: 'action', sceneKey: envScene },
+                        : bootstrapChar
+                          // Bootstrap: the fresh shot BECOMES the character's
+                          // design sheet, so later shots can lock to it.
+                          ? { kind: 'character' as const, charName: bootstrapChar.characterName, ...(bootstrapChar.variant ? { variant: bootstrapChar.variant } : {}) }
+                          : panelBlock.type === 'SCENE_HEADING'
+                            ? { kind: 'environment', sceneKey: envScene }
+                            : { kind: 'action', sceneKey: envScene },
                     );
                     // Persist the prompt→asset link on the block itself so the
                     // thumbnail survives regenerating other blocks AND reloads.
@@ -459,14 +473,14 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   setImageGenerating(false);
                 }
               }}
-              disabled={imageGenerating || !imageReady || (panelBlock.type === 'ACTION' && panelActionRef?.kind === 'needs-image')}
+              disabled={imageGenerating || !imageReady}
               title={
                 !imageReady
                   ? (effectiveImageProvider === 'fal'
                       ? (lang === 'zh' ? '未配置 FAL API Key（Settings → AI）' : 'No FAL API key (Settings → AI)')
                       : (lang === 'zh' ? '未配置 MiniMax API Key（Settings → 视频生成）' : 'No MiniMax API key (Settings → Video Generation)'))
                   : panelBlock.type === 'ACTION' && panelActionRef?.kind === 'needs-image'
-                    ? t.imageGenNeedsImage.replace('{name}', panelActionRef.characterName)
+                    ? t.imageGenBootstrapTitle.replace('{name}', panelActionRef.characterName)
                     : panelBlock.type === 'ACTION' && panelActionRef?.kind === 'no-character'
                       ? t.imageGenEmptyShot
                       : (effectiveImageProvider === 'fal'
@@ -484,9 +498,20 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                 stated in the panel, not only on hover, so the button
                 is never just mysteriously disabled. */}
             {panelBlock.type === 'ACTION' && panelActionRef?.kind === 'needs-image' && (
-              <p className="w-full text-[10px] leading-snug text-amber-600 dark:text-amber-400">
-                ⚠ {t.imageGenNeedsImage.replace('{name}', panelActionRef.characterName)}
-              </p>
+              <>
+                <p className="w-full text-[10px] leading-snug text-amber-600 dark:text-amber-400">
+                  ⚠ {t.imageGenNeedsImage.replace('{name}', panelActionRef.characterName)}
+                </p>
+                <p className="w-full text-[10px] leading-snug text-gray-500 dark:text-gray-400">
+                  {t.imageGenNeedsImageOptions}
+                </p>
+                <button
+                  onClick={() => setLinkingChar({ name: panelActionRef.characterName, variant: panelActionRef.variant })}
+                  className="w-full py-1.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                >
+                  🔗 {t.imageGenLinkSheet.replace('{name}', panelActionRef.characterName)}
+                </button>
+              </>
             )}
             {panelBlock.type === 'ACTION' && panelActionRef?.kind === 'no-character' && (
               <p className="w-full text-[10px] leading-snug text-gray-400 dark:text-gray-500">
@@ -550,6 +575,42 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
         )}
       </div>
 
+      {/* Library picker: link an existing asset as the blocked character's
+          design sheet. Setting the binding clears needs-image on the next
+          render, so image-to-image proceeds normally. */}
+      {linkingChar && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6" onClick={() => setLinkingChar(null)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="text-sm font-bold text-gray-900 dark:text-white mb-3">
+              {t.imageGenLinkSheet.replace('{name}', linkingChar.name)}
+            </div>
+            {refImages.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4">{t.imageGenNoAssets}</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {refImages.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      // Script-wide binding: this asset IS the character's sheet.
+                      onRefBindingsChange({
+                        ...refBindings,
+                        characters: { ...refBindings.characters, [linkingChar.name]: r.id },
+                      });
+                      setLinkingChar(null);
+                    }}
+                    className="p-1 rounded-lg border border-gray-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
+                    title={r.subject || r.name}
+                  >
+                    <img src={r.url} alt={r.subject || ''} className="w-full aspect-square object-cover rounded" />
+                    <div className="text-[9px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{r.subject || r.name}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Enlarged view of the generated image. Overlay above everything in the
           panel; click anywhere (or the ×) to dismiss. Full-screen-in-panel is
           enough — the source is already in the library for full inspection. */}
