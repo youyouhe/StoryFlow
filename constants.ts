@@ -784,6 +784,7 @@ export const TRANSLATIONS = {
       storyboard: "Storyboard",
       graybox: "Graybox",
       dub: "Dub sheet",
+      fromPrompt: "Prompt→Script",
       syncCloud: "Sync to cloud"
     },
     styleHeadTitle: "Style Head",
@@ -806,8 +807,12 @@ export const TRANSLATIONS = {
       rewrite: "Polish the selected block.",
       storyboard: "Generate a text-to-image prompt for this action or character (six visual elements).",
       graybox: "Generate a 3D graybox (spatial layout for a scene, or camera/运镜 for a shot).",
-      dub: "Infer per-line dubbing direction (emotion + delivery + intensity) for every dialogue block, saved for a stable-voice dubbing sheet."
+      dub: "Infer per-line dubbing direction (emotion + delivery + intensity) for every dialogue block, saved for a stable-voice dubbing sheet.",
+      fromPrompt: "Paste a finished production/AI-video prompt (scene + camera rules, costumes, timeline with dialogue). It is transcribed into a new screenplay — costume changes become 张三（浴袍）-style character cues, so variants and sequences light up automatically."
     },
+    fromPromptEmpty: "Paste the production prompt first.",
+    fromPromptAccept: "Create as new script",
+    fromPromptPlaceholder: "Paste the full production prompt here — scene, camera rules, costumes, timeline with dialogue, subtitles, audio, negatives…",
     placeholders: {
       SCENE_HEADING: 'INT./EXT. LOCATION - TIME',
       ACTION: 'Action description...',
@@ -1068,6 +1073,7 @@ export const TRANSLATIONS = {
       storyboard: "分镜",
       graybox: "灰模",
       dub: "配音表",
+      fromPrompt: "提示词转剧本",
       syncCloud: "同步到云端"
     },
     styleHeadTitle: "风格头",
@@ -1090,8 +1096,12 @@ export const TRANSLATIONS = {
       rewrite: "润色选定的段落。",
       storyboard: "为该动作或角色生成文生图提示词（六大视觉要素）。",
       graybox: "生成 3D 灰模（场景的空间布局，或镜头的运镜）。",
-      dub: "为每句对白推断配音方向（情绪 + 口吻 + 强度）并保存，供稳定的音色配音表导出。"
+      dub: "为每句对白推断配音方向（情绪 + 口吻 + 强度）并保存，供稳定的音色配音表导出。",
+      fromPrompt: "粘贴一段写好的制作提示词（画面 + 运镜规则 + 服装 + 时间轴对白）。系统会把它转写成一份新剧本——换装自动变成 张三（浴袍） 式的角色 cue，变体与序列机制自动生效。"
     },
+    fromPromptEmpty: "请先粘贴制作提示词。",
+    fromPromptAccept: "生成为新剧本",
+    fromPromptPlaceholder: "把完整的制作提示词粘贴到这里——场景、运镜规则、服装、时间轴对白、字幕、音频、NEGATIVE……",
     placeholders: {
       SCENE_HEADING: '内/外 场景 - 时间',
       ACTION: '动作描述...',

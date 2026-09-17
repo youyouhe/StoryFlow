@@ -226,7 +226,7 @@ export interface KeyboardShortcuts {
  *  STORYBOARD generates a text-to-image prompt;
  *  GRAYBOX generates a structured 3D previs JSON (scene layout or shot camera);
  *  DUB infers per-line dubbing metadata (emotion/delivery/intensity). */
-export type AIMode = 'CONTINUE' | 'IDEAS' | 'REWRITE' | 'STORYBOARD' | 'GRAYBOX' | 'DUB';
+export type AIMode = 'CONTINUE' | 'IDEAS' | 'REWRITE' | 'STORYBOARD' | 'GRAYBOX' | 'DUB' | 'FROM_PROMPT';
 
 export interface AppSettings {
   provider: LLMProvider;

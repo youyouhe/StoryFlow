@@ -158,6 +158,67 @@ const callAIProvider = async (
 };
 
 
+/**
+ * FROM_PROMPT — derive a screenplay from a finished PRODUCTION prompt.
+ *
+ * The user pastes a complete AI-video / directorial prompt (scene + camera
+ * rules, costume list, timeline with verbatim dialogue, subtitle UI, audio,
+ * negative list). The LLM's job is NOT to write a new story — it is to
+ * TRANSCRIBE that prompt into the standard labeled block format the app
+ * parses, so the whole downstream pipeline (variant sheets, Sequence
+ * wardrobe, storyboard frames) applies to an already-authored video idea.
+ *
+ * Encoding rules taught here (these make the pipeline light up):
+ *  - One [SCENE] per location/time; a fixed-camera single-location video is
+ *    ONE scene.
+ *  - The timeline becomes ordered beats: staging/movement → [ACTION], spoken
+ *    lines → [CHARACTER] + [DIALOGUE] with the dialogue VERBATIM.
+ *  - A costume change is encoded as a re-cue with the costume in parentheses
+ *    (`女主（学院风）`) — the base name stays identical. This is exactly the
+ *    variant convention the storyboard pipeline resolves.
+ *  - Off-screen voices are cued as their own character (`男声（画外）`) so
+ *    dialogue attribution survives.
+ *  - Never invent characters, lines, or scenes that the prompt does not
+ *    contain; never merge or drop timeline beats.
+ */
+export const screenplayFromPrompt = async (
+  source: string,
+  systemInstruction: string,
+  scriptLanguage: ScriptLanguage,
+  settings: AppSettings,
+): Promise<string> => {
+  const langInstruction = getLanguageInstruction(scriptLanguage);
+  const systemPrompt = `${systemInstruction}
+You are also a Screenplay Transcriber: you convert finished production prompts (AI-video prompts, directorial briefs) into standard screenplay format.
+${langInstruction}`;
+
+  const userPrompt = `Convert the production prompt below into a screenplay.
+
+The prompt is ALREADY a finished creative work — your job is transcription into block format, not rewriting. Preserve its story, dialogue, order, and staging exactly.
+
+Rules:
+1. One [SCENE] per location/time. A fixed-camera single-location video is exactly ONE [SCENE]; derive INT./EXT., location and time from the prompt's scene description.
+2. Walk the timeline in order. Each beat becomes blocks in this labeled format:
+     [SCENE] INT./EXT. LOCATION - TIME
+     [ACTION] staging, movement, entrances/exits, camera-stable business
+     [CHARACTER] NAME — or NAME（COSTUME）when that character is wearing a named costume
+     [DIALOGUE] the spoken line, VERBATIM from the prompt
+     [PARENTHETICAL] (delivery/voice direction, when the prompt gives one)
+3. Costume changes: when the prompt changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter — derive a SHORT label from the outfit description (e.g. 女主（学院风）). The base name must stay IDENTICAL across the whole script. Do NOT write the full outfit paragraph into the cue — keep cue labels short; the outfit detail belongs in the [ACTION] line.
+4. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim.
+5. Dialogue must be transcribed VERBATIM. Do not paraphrase, translate, add, or drop lines.
+6. Do NOT invent characters, lines, scenes, or camera moves the prompt does not contain. Do not merge or skip timeline beats.
+7. Describe the scene environment once in the first [ACTION] (or the [SCENE] heading) so the environment image can be derived.
+8. Output ONLY labeled blocks — no markdown, no explanations, no headings of your own.
+
+Production prompt:
+---
+${source.trim()}
+---`;
+
+  return callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'from-prompt');
+};
+
 export const generateContinuation = async (
   blocks: ScriptBlock[],
   systemInstruction: string,

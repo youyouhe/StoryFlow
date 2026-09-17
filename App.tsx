@@ -6,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing, generateSequences } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing, generateSequences, screenplayFromPrompt } from './services/geminiService';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
@@ -204,6 +204,8 @@ function App() {
   // Editable draft of the AI-suggested transition scene heading, so the user
   // can tweak it before accepting a transition in the CONTINUE two-step flow.
   const [transitionHeadingDraft, setTransitionHeadingDraft] = useState('');
+  // FROM_PROMPT: the pasted production prompt the user wants transcribed.
+  const [promptSource, setPromptSource] = useState('');
   // Storyboard prompt side-panel: when a block's prompt chip is clicked, its
   // full content is shown in a right-side drawer instead of expanding inline
   // (which ate editor space). Holds the block id whose prompt is open, or null.
@@ -1529,7 +1531,20 @@ function App() {
           lastModified: Date.now(),
         }));
         result = `Dubbing direction written to ${applied}/${total} dialogue line${total === 1 ? '' : 's'}. (emotion + delivery + intensity per line)`;
-      }
+      } else if (effectiveMode === 'FROM_PROMPT') {
+        // FROM_PROMPT: transcribe a pasted production prompt into a full
+        // screenplay. The result flows through the normal suggestion → accept
+        // path; accept creates a NEW script (not an append).
+        if (!promptSource.trim()) {
+          setAIState({ isLoading: false, suggestion: null, error: t.fromPromptEmpty, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+        }
+        result = await screenplayFromPrompt(promptSource, activeTemplate.systemPrompt, screenplay.metadata.scriptLanguage, appSettings);
+        if (!result || !result.trim()) {
+          setAIState({ isLoading: false, suggestion: null, error: t.aiErrorGeneric, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+        }
+       }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {
       const msg = err?.message || '';
@@ -1841,6 +1856,33 @@ function App() {
           return { id: generateId(), type, content };
       });
 
+      // FROM_PROMPT: the transcribed screenplay becomes a NEW script — the
+      // pasted production prompt is a whole work, not a continuation of
+      // whatever is currently open. Title derives from the first scene heading
+      // so the sidebar shows something meaningful.
+      if (aiMode === 'FROM_PROMPT') {
+          if (!newBlocks.length) {
+              setAIState({ isLoading: false, suggestion: null, error: t.aiErrorGeneric, decision: null, grayboxDraft: null, batchProgress: null });
+              return;
+          }
+          const firstScene = newBlocks.find(b => b.type === 'SCENE_HEADING')?.content?.trim();
+          const newScript: Screenplay = {
+              id: generateId(),
+              metadata: {
+                  ...screenplay.metadata,
+                  title: firstScene ? firstScene.slice(0, 40) : (screenplay.metadata.title || 'Prompt Script'),
+                  draft: 'First Draft',
+              },
+              blocks: newBlocks,
+              lastModified: Date.now(),
+          };
+          setScreenplay(newScript);
+          setSelectedBlockId(newBlocks[0].id);
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+      }
+
       setScreenplay(prev => {
           const updatedBlocks = [...prev.blocks, ...newBlocks];
           return { ...prev, blocks: updatedBlocks };
@@ -2127,10 +2169,12 @@ function App() {
                 setAIState={setAIState}
                 t={t}
                 onClose={() => setShowAIModal(false)}
-                onExecute={() => executeAI()}
+                onExecute={() => { void executeAI(); }}
                 onAccept={acceptAISuggestion}
                 transitionHeadingDraft={transitionHeadingDraft}
                 setTransitionHeadingDraft={setTransitionHeadingDraft}
+                promptSource={promptSource}
+                onPromptSourceChange={setPromptSource}
                 runContinuation={runContinuation}
             />
         )}
