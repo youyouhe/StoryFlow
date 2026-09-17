@@ -814,6 +814,8 @@ export const TRANSLATIONS = {
     fromPromptEmpty: "Paste the production prompt first.",
     fromPromptAccept: "Create as new script",
     fromPromptPlaceholder: "Paste the full production prompt here — scene, camera rules, costumes, timeline with dialogue, subtitles, audio, negatives…",
+    blankTemplateTitle: "Blank Script",
+    blankTemplateDesc: "Start from scratch — no AI opening, no skeleton. One empty scene heading.",
     placeholders: {
       SCENE_HEADING: 'INT./EXT. LOCATION - TIME',
       ACTION: 'Action description...',
@@ -1104,6 +1106,8 @@ export const TRANSLATIONS = {
     fromPromptEmpty: "请先粘贴制作提示词。",
     fromPromptAccept: "生成为新剧本",
     fromPromptPlaceholder: "把完整的制作提示词粘贴到这里——场景、运镜规则、服装、时间轴对白、字幕、音频、NEGATIVE……",
+    blankTemplateTitle: "空白剧本",
+    blankTemplateDesc: "从零开始——不用 AI 开场，无骨架内容，只有一个空场景标题。",
     placeholders: {
       SCENE_HEADING: '内/外 场景 - 时间',
       ACTION: '动作描述...',

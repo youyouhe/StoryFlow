@@ -2272,6 +2272,7 @@ function App() {
             setViewingTemplate={setViewingTemplate}
             setShowTemplateModal={setShowTemplateModal}
             openOpeningPicker={openOpeningPicker}
+            onBlank={() => handleCreateBlankScript('standard')}
           />
         )}
 

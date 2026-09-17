@@ -9,6 +9,8 @@ export interface TemplateModalProps {
   setViewingTemplate: React.Dispatch<React.SetStateAction<ScriptTemplate | null>>;
   setShowTemplateModal: React.Dispatch<React.SetStateAction<boolean>>;
   openOpeningPicker: (template: ScriptTemplate) => void;
+  /** Create a truly BLANK script (no AI opening, no skeleton) — the blank card. */
+  onBlank: () => void;
 }
 
 export const TemplateModal: React.FC<TemplateModalProps> = ({
@@ -17,6 +19,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   setViewingTemplate,
   setShowTemplateModal,
   openOpeningPicker,
+  onBlank,
 }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -32,6 +35,22 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         </div>
         <div className="p-6 overflow-y-auto">
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* BLANK card — first, visually distinct: no AI opening, no skeleton */}
+              <div className="relative flex flex-col items-start p-4 rounded-xl border-2 border-dashed border-emerald-400/70 dark:border-emerald-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/10 transition-all text-left group">
+                 <button
+                   onClick={onBlank}
+                   className="absolute inset-0 w-full h-full z-0 cursor-pointer"
+                   aria-label="Blank script"
+                 />
+                 <div className="relative z-10 pointer-events-none pr-6">
+                   <span className="font-bold text-emerald-700 dark:text-emerald-400 mb-1 block">
+                     {t.blankTemplateTitle}
+                   </span>
+                   <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed block">
+                     {t.blankTemplateDesc}
+                   </span>
+                 </div>
+              </div>
               {TEMPLATES.map(tpl => (
                  <div 
                     key={tpl.id}
