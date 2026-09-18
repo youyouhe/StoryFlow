@@ -6,7 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { SettingsModal } from './components/SettingsModal';
 import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing, generateSequences, screenplayFromPrompt } from './services/geminiService';
+import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, generateSegmentGraybox, decideSceneTransition, generateOpenings, OpeningCandidate, analyzeDubbing, generateSequences, screenplayFromPrompt } from './services/geminiService';
 import { ExportMenu } from './components/ExportMenu';
 import { paginateBlocks } from './utils/pagination';
 import { exportToPDF } from './utils/pdfExport';
@@ -1706,6 +1706,35 @@ function App() {
         result = formatVideoPlan(plan);
         // Stash the structured plan for downstream per-segment video wiring.
         (window as unknown as { __videoPlan?: unknown }).__videoPlan = plan;
+
+        // Per-segment graybox generation: after the plan, generate ONE
+        // continuous camera per segment (LLM reads all beats + scene blocking).
+        // Results land in screenplay.segmentGrayboxes keyed by the segment's
+        // first block id — the white-model render / H3 flow reads them.
+        const segLayout = (() => {
+          const h = screenplay.blocks.find(b => b.type === 'SCENE_HEADING');
+          return h?.graybox && h.graybox.kind === 'scene' && !h.graybox.error ? h.graybox : null;
+        })();
+        const segGrayboxes: Record<string, GrayboxData> = {};
+        for (let si = 0; si < plan.segments.length; si++) {
+          const seg = plan.segments[si];
+          setAIState({ isLoading: true, suggestion: result || null, error: null, decision: null, grayboxDraft: null, batchProgress: { current: si + 1, total: plan.segments.length } });
+          const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
+          const gb = await generateSegmentGraybox(
+            segBlocks, seg.beats, segLayout, seg.sceneHeading,
+            Math.round(seg.duration * 10) / 10, appSettings, activeTemplate.systemPrompt,
+          );
+          if (!gb.error) {
+            segGrayboxes[seg.blockIds[0]] = gb;
+            setScreenplay(prev => ({
+              ...prev,
+              segmentGrayboxes: { ...(prev.segmentGrayboxes ?? {}), [seg.blockIds[0]]: gb },
+              lastModified: Date.now(),
+            }));
+          } else {
+            console.warn('Segment graybox failed:', gb.error);
+          }
+        }
       }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {

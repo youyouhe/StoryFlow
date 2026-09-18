@@ -1078,6 +1078,105 @@ const normalizeGraybox = (parsed: any, kind: 'scene' | 'shot'): GrayboxData => {
  * still shows something and the user can discard.
  */
 /**
+ * Segment-level graybox generation — ONE continuous camera design covering
+ * MULTIPLE beats (the VIDEO_PLAN generation segment).
+ *
+ * The camera is a continuous take across the whole segment: path/lookPath
+ * waypoints are placed at beat boundaries so the lens shifts attention as the
+ * story moves, while duration = the full segment span. For fixed-camera
+ * scripts (一镜到底) the model should hold a static frame and let the actor's
+ * blocking carry the beats.
+ *
+ * Uses jsonMode; on any failure returns a GrayboxData with `error` (same
+ * degrade pattern as generateGraybox). */
+export const generateSegmentGraybox = async (
+  segmentBlocks: ScriptBlock[],
+  beatSpans: { range: string; text: string; start: number; end: number }[],
+  sceneLayout: GrayboxData | null,
+  sceneHeading: string,
+  durationSeconds: number,
+  settings: AppSettings,
+  systemInstruction: string,
+): Promise<GrayboxData> => {
+  const langInstruction = 'Label objects/characters using the names that appear in the script. Keep all JSON keys in English.';
+
+  // scene layout blocking, for spatial grounding
+  const layoutLines = (sceneLayout?.layout ?? [])
+    .map(o => `  - ${o.role}${o.label ? ` "${o.label}"` : ''} @(${(o.position ?? []).map(n => Number(n).toFixed(1)).join(',')})`)
+    .join('\n');
+  const charLines = (sceneLayout?.characters ?? [])
+    .map(c => `  - ${c.name} @(${(c.position ?? []).map(n => Number(n).toFixed(1)).join(',')})${c.facing != null ? ` facing ${Number(c.facing).toFixed(2)}rad` : ''}${c.pose ? ` · ${c.pose}` : ''}`)
+    .join('\n');
+
+  const beatLines = beatSpans.map(b => `  [${b.range}] (${Math.round((b.start - beatSpans[0].start) * 10) / 10}s into the take) ${b.text}`).join('\n');
+
+  const systemPrompt = `You are a Cinematographer designing a CONTINUOUS-TAKE camera for a multi-beat segment.
+The segment spans ${durationSeconds}s and contains ${beatSpans.length} beats. Design ONE camera that covers the WHOLE take:
+- The camera does NOT cut — it may hold, drift, push, pan, or track continuously.
+- Beat boundaries are timing marks for the ACTOR, not camera cuts. The camera responds to the story arc across beats.
+- For a fixed-camera script (一镜到底), hold the frame and let the actor move through it.
+- If the story demands it, the camera may slowly reposition between beats — but never cut.
+
+Coordinates (FIXED CONTRACT): meters, y is UP, floor at y=0, eye ≈1.6m. Camera aim = lookAt target point (never angles).
+${langInstruction}
+
+${systemInstruction}
+
+Output STRICT JSON only:
+{
+  "kind": "shot",
+  "camera": {
+    "shotType": "extreme-wide|wide|medium|close-up|extreme-close-up|over-the-shoulder|top-down|pov",
+    "shotDescription": "one sentence: the continuous-take camera intent across all beats",
+    "position": [x,y,z],
+    "lookAt": [x,y,z],
+    "movement": {
+      "type": "static|pan|tilt|dolly|tracking|orbit|crane|handheld",
+      "duration": ${durationSeconds},
+      "targetSeconds": ${durationSeconds},
+      "path": [[x,y,z]...],
+      "lookPath": [[x,y,z]...]
+    },
+    "focus": "character or object the camera follows"
+  }
+}
+Rules:
+- movement.duration MUST be exactly ${durationSeconds} (the full take).
+- path: for static/pan/tilt, a single held position; for dolly/tracking/crane, waypoints across the take.
+- lookPath: the lens attention over time — one waypoint per major beat shift (looking at the active subject).
+- focus: the character or object that carries the segment's arc.
+- No markdown, no commentary.`;
+
+  const userPrompt = `Design the continuous-take camera for this segment (${durationSeconds}s).
+
+Scene: ${sceneHeading}
+
+${sceneLayout?.layout?.length ? `Scene layout (objects, meters y-up):
+${layoutLines}
+` : ''}${sceneLayout?.characters?.length ? `
+Character blocking:
+${(sceneLayout.characters ?? []).map(c => `  ${c.name} @(${(c.position ?? []).join(',')})`).join('\n')}
+` : ''}
+Beats in this segment (in order):
+${beatLines}
+
+Output ONLY the shot graybox JSON.`;
+
+  try {
+    const raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'segment-graybox');
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = match ? JSON.parse(match[0]) : JSON.parse(raw);
+    const result = normalizeGraybox(parsed, 'shot');
+    // enforce the segment span
+    if (result.camera?.movement) result.camera.movement.duration = durationSeconds;
+    if (result.camera?.movement) result.camera.movement.targetSeconds = durationSeconds;
+    return result;
+  } catch (e) {
+    return { kind: 'shot', error: `Segment graybox failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+};
+
+/**
  * Sequence boundary judgment + wardrobe/age state for the WHOLE script — one
  * LLM pass.
  *

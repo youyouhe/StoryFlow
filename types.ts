@@ -166,6 +166,13 @@ export interface Screenplay {
    *  same wardrobe reference instead of drifting. Determined by
    *  utils/sequence.ts. Persisted with the script. */
   sequences?: ScriptSequence[];
+  /** Segment-level grayboxes (from VIDEO_PLAN segmentation): one continuous
+   *  camera design per generation segment, keyed by the segment's first block
+   *  id. A segment graybox spans MULTIPLE beats — path/lookPath waypoints are
+   *  timed to beat boundaries (一镜到底的多节拍镜头语言), duration = the
+   *  segment span. Independent from VIDEO_PLAN re-planning: re-segmenting
+   *  matches by first-block id and keeps reusable entries. */
+  segmentGrayboxes?: Record<string, GrayboxData>;
   /** FROM_PROMPT origin: the raw production prompt the script was transcribed
    *  from. The transcription deliberately drops the video-model constraint
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
