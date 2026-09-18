@@ -1711,6 +1711,8 @@ function App() {
         // continuous camera per segment (LLM reads all beats + scene blocking).
         // Results land in screenplay.segmentGrayboxes keyed by the segment's
         // first block id — the white-model render / H3 flow reads them.
+        // SKIPPED in simple production mode (no spatial blocking needed).
+        if (screenplay.productionMode === 'simple') return;
         const segLayout = (() => {
           const h = screenplay.blocks.find(b => b.type === 'SCENE_HEADING');
           return h?.graybox && h.graybox.kind === 'scene' && !h.graybox.error ? h.graybox : null;
@@ -1805,6 +1807,8 @@ function App() {
             // Trigger on SCENE_HEADING (layout + blocking), ACTION, or DIALOGUE
             // (camera/运镜). CHARACTER is excluded — it owns the image-prompt
             // design sheet, graybox is about space + camera.
+            // Skipped in simple production mode (no spatial blocking needed).
+            if (screenplay.productionMode === 'simple') return;
             const currentBlock = screenplay.blocks.find(b => b.id === id);
             if (currentBlock?.type === 'SCENE_HEADING' || currentBlock?.type === 'ACTION' || currentBlock?.type === 'DIALOGUE') {
                 e.preventDefault();
@@ -2068,6 +2072,9 @@ function App() {
               return;
           }
           const firstScene = safeBlocks.find(b => b.type === 'SCENE_HEADING')?.content?.trim();
+          // Auto-detect production mode: fixed-camera keywords → simple
+          const fp = promptSource.toLowerCase();
+          const isFixedCam = /固定机位|一镜到底|固定镜头|fixed camera|single take|static shot|desktop|录屏/.test(fp);
           const newScript: Screenplay = {
               id: generateId(),
               metadata: {
@@ -2077,6 +2084,7 @@ function App() {
               },
               blocks: safeBlocks,
               sourcePrompt: promptSource,
+              productionMode: isFixedCam ? 'simple' : 'cinematic',
               lastModified: Date.now(),
           };
           setScreenplay(newScript);

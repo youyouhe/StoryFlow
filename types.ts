@@ -178,6 +178,13 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
+  /** Pipeline complexity level. 'simple' = fixed-camera / single-scene scripts
+   *  where graybox (spatial blocking + camera choreography) adds no value —
+   *  the pipeline is: character sheets + variant images + segment video prompts.
+   *  'cinematic' = the full pipeline with graybox, white-model, camera paths.
+   *  Auto-set by FROM_PROMPT (fixed-camera keywords → simple); user can
+   *  override in Settings. */
+  productionMode?: 'simple' | 'cinematic';
 }
 
 /** One segment's per-character costume/age continuity state. */
