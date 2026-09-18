@@ -397,6 +397,31 @@ function App() {
     }
   }, [assetDir]);
 
+  /** Switch the asset folder to a DIFFERENT directory. Unlike
+   *  handleOpenAssetDir (first-time adopt, which migrates browser-storage
+   *  assets in), switching re-points the library at the newly picked folder
+   *  and reloads its contents — no migration, no side effects on the old
+   *  folder. */
+  const handleSwitchAssetDir = useCallback(async () => {
+    if (!isDirStoreAvailable()) {
+      alert('当前环境不支持文件夹资产库（需要 Chrome/Edge + localhost 或 HTTPS）。');
+      return;
+    }
+    const h = await pickAssetDir();
+    if (!h) return;
+    if ((await queryDirPermission(h)) !== 'granted') {
+      if (!(await requestDirPermission(h))) return;
+    }
+    try {
+      await persistDirHandle(h);
+      const assets = await listDirAssets(h);
+      setAssetDir(h);
+      setRefImages(assets.map((a) => toRefImage(a)));
+    } catch (e) {
+      console.warn('Failed to switch asset folder', e);
+    }
+  }, []);
+
   /** Re-scan the asset store — manual button + auto-triggered when a phone
    *  drop (LocalSend) lands new files or a cloud download imports locally. */
   const reloadAssets = useCallback(async () => {
@@ -2349,6 +2374,7 @@ function App() {
                 backendName={assetDir?.name}
                 dirAvailable={isDirStoreAvailable()}
                 onOpenDir={handleOpenAssetDir}
+                onSwitchDir={handleSwitchAssetDir}
                 onRescan={reloadAssets}
             />
         )}

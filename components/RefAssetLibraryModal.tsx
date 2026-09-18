@@ -36,6 +36,7 @@ interface Labels {
   folderMode: string;
   localMode: string;
   useFolder: string;
+  dirSwitch: string;
   folderHint: string;
   phone: string;
   phoneNeedDir: string;
@@ -88,6 +89,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     folderMode: 'Folder',
     localMode: 'Browser storage',
     useFolder: 'Use folder…',
+    dirSwitch: 'Switch folder',
     folderHint: 'Switching auto-migrates your browser-storage assets into the folder (idempotent). Point at a synced folder for cross-device sharing. Requires Chrome/Edge on localhost/HTTPS.',
     phone: 'Phone drop · LocalSend',
     phoneNeedDir: 'Phone drop needs the folder backend (files land in the folder, then auto-import).',
@@ -136,6 +138,7 @@ export const REF_LIBRARY_LABELS: Record<'en' | 'zh', Labels> = {
     folderMode: '文件夹',
     localMode: '浏览器存储',
     useFolder: '使用文件夹…',
+    dirSwitch: '切换目录',
     folderHint: '切换时自动把浏览器存量资产迁移进文件夹（按 id 幂等，可重复执行）。指向同步盘目录即可跨设备共享。需 Chrome/Edge + localhost/HTTPS。',
     phone: '手机投递 · LocalSend',
     phoneNeedDir: '手机投递需要文件夹后端（文件落盘到文件夹后自动入库）。',
@@ -182,6 +185,8 @@ interface Props {
   backendName?: string;
   dirAvailable: boolean;
   onOpenDir: () => void;
+  /** Pick a DIFFERENT folder and switch the library to it. */
+  onSwitchDir: () => void;
   /** Re-scan the asset folder (called automatically when phone drops arrive). */
   onRescan: () => void;
   /** Current screenplay id — enables the 本剧本/全部 scope filter. */
@@ -227,7 +232,7 @@ const EditableText: React.FC<{
   );
 };
 
-export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onRescan, scriptId, scripts }) => {
+export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, onDelete, onClose, labels, backend, backendName, dirAvailable, onOpenDir, onSwitchDir, onRescan, scriptId, scripts }) => {
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<RefImage | null>(null);
   const [cat, setCat] = useState<'all' | 'character' | 'action' | 'environment' | 'prop'>('all');
@@ -436,6 +441,16 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
               ? `📁 ${backendName ?? ''}`
               : `💾 ${labels.localMode} · ${dirAvailable ? labels.useFolder : '—'}`}
           </button>
+          {backend === 'dir' && (
+            <button
+              type="button"
+              onClick={onSwitchDir}
+              title={labels.dirSwitch}
+              className="px-2 py-0.5 rounded-full text-[9px] font-semibold border border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              🔀 {labels.dirSwitch}
+            </button>
+          )}
           {signedIn ? (
             <button
               type="button"
