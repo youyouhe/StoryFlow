@@ -16,6 +16,12 @@ const VITE_ENV = (import.meta as unknown as { env?: Record<string, string | unde
 const LOGIN_URL = VITE_ENV.VITE_LOGIN_URL || 'https://auth.smartbid.site/login';
 const LOGOUT_URL = VITE_ENV.VITE_LOGOUT_URL || 'https://auth.smartbid.site/logout';
 
+/** Test/dev escape hatch (VITE_DISABLE_SSO=1): the whole SSO surface becomes a
+ *  no-op — no state restore, no login redirect, no cookie writes. Cloud sync
+ *  stays unavailable (anonymous) and migration runs through Export/Import
+ *  JSON. Production never sets the flag. */
+const SSO_DISABLED = VITE_ENV.VITE_DISABLE_SSO === '1';
+
 function getCookie(name: string): string | null {
   const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
   return m ? decodeURIComponent(m[1]) : null;
@@ -43,6 +49,7 @@ function deleteSsoCookie(): void {
 
 // Call once on app start: recover the SSO token from URL or cross-subdomain cookie.
 export function initSSO(): string | null {
+  if (SSO_DISABLED) return null;
   const params = new URLSearchParams(window.location.search);
   const urlToken = params.get('sso_token');
 
@@ -91,6 +98,7 @@ export function getSsoToken(): string | null {
 }
 
 export function clearToken(): void {
+  if (SSO_DISABLED) return;
   // Audit notice token: localStorage first, shared cookie as fallback.
   const token = localStorage.getItem(TOKEN_KEY) || getCookie('sso_token');
   localStorage.removeItem(TOKEN_KEY);
@@ -116,6 +124,7 @@ export function clearToken(): void {
 // If this tab logged out earlier, delete the cookie again right before jumping —
 // 4A's Auto-SSO block bounces on cookie presence alone (skill pitfall #2).
 export function requireLogin(): void {
+  if (SSO_DISABLED) return; // test env: sign-in is a no-op, no redirect
   try {
     if (sessionStorage.getItem(LOGOUT_FLAG_KEY)) {
       deleteSsoCookie();
@@ -130,6 +139,7 @@ export function requireLogin(): void {
 // Family-wide logout: 4A clears its session cookie and revokes every token
 // for the user, then 302s back to the current page.
 export function logoutEverywhere(): void {
+  if (SSO_DISABLED) return;
   clearToken();
   window.location.href = `${LOGOUT_URL}?redirect=${encodeURIComponent(window.location.href)}`;
 }
