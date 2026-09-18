@@ -1,5 +1,5 @@
 import { RefBindings, RefImage, ScriptBlock } from '../types';
-import { computeBeatCast, collectCharacterNames, resolveBeatVariant } from './beatCast';
+import { computeBeatCast, collectCharacterNames, parseCharacterName, resolveBeatVariant } from './beatCast';
 
 /** Outcome of resolving a character reference image for an ACTION (storyboard)
  *  beat. ACTION generation is image-to-image — the whole point is to keep a
@@ -27,14 +27,28 @@ export interface FrameRefs {
   environment?: RefImage;
 }
 
+/** Normalize ANY identity spelling into {base, variant}: script cues use
+ *  parens (张三（浴袍）), the library uses slashes (张三/浴袍), assets may carry
+ *  either (users rename freely). One parser keeps them all comparable. */
+export const normIdentity = (raw?: string): { base: string; variant?: string } => {
+  const s = (raw ?? '').trim();
+  if (!s) return { base: '' };
+  if (s.includes('/')) {
+    const [b, v] = s.split('/', 2);
+    return { base: b.trim(), variant: v?.trim() || undefined };
+  }
+  const p = parseCharacterName(s);
+  return { base: p.base, variant: p.variant };
+};
+
 /** Resolve a primary character sheet for a beat or a hit, with age-awareness,
  *  optional costume VARIANT, and (optionally) sequence wardrobe. Precedence:
  *    1. explicit binding for this character (per-scene override already merged)
- *    2. the exact VARIANT asset (subject `名字/变体`) when one is asked for
- *    3. an age-tagged asset (subject `名字/年纪`) when the sequence/context
- *       asks for that age
- *    4. the base design sheet (subject === name)
- *  Returns the RefImage or undefined when none exists. */
+ *    2. the exact VARIANT asset (subject 名字/变体 OR 名字（变体）) when asked for
+ *    3. an age-tagged asset (subject 名字/年纪) when the sequence/context asks
+ *    4. the base design sheet (no variant tag)
+ *  Identity comparison is spelling-agnostic: 女主（初始造型）, 女主/初始造型 and
+ *  plain 女主 all match the same person. Returns undefined when none exists. */
 export const resolveCharacterSheet = (
   name: string,
   bindings: RefBindings | undefined,
@@ -43,25 +57,32 @@ export const resolveCharacterSheet = (
   age?: string,
   variant?: string,
 ): RefImage | undefined => {
+  const wanted = normIdentity(name);
+  const wantBase = wanted.base;
+  if (!wantBase) return undefined;
+  const wantVariant = variant ?? wanted.variant;
+
   const eff = resolveRefBindings(bindings, sceneHeading);
-  const boundId = eff.characters[name];
+  const boundId = eff.characters[wantBase];
   if (boundId) {
     const im = refImages.find(r => r.id === boundId);
     if (im) return im;
   }
-  const owned = refImages.filter(r =>
-    (r.subject ?? '') === name || (r.subject ?? '').startsWith(name + '/'));
+
+  // every asset whose subject normalizes to this base — any spelling
+  const owned = refImages.filter(r => normIdentity(r.subject).base === wantBase);
   if (!owned.length) return undefined;
-  if (variant) {
-    const tagged = owned.find(r => (r.subject ?? '').startsWith(`${name}/${variant}`));
+
+  if (wantVariant) {
+    const tagged = owned.find(r => normIdentity(r.subject).variant === wantVariant);
     if (tagged) return tagged;
   }
   if (age) {
-    const tagged = owned.find(r => (r.subject ?? '').startsWith(`${name}/${age}`));
+    const tagged = owned.find(r => normIdentity(r.subject).variant === age);
     if (tagged) return tagged;
   }
-  // prefer latest non-tagged base sheet if present, else the last any
-  return owned.find(r => (r.subject ?? '') === name) ?? owned[owned.length - 1];
+  // prefer the untagged base sheet if present, else the newest owned asset
+  return owned.find(r => !normIdentity(r.subject).variant) ?? owned[owned.length - 1];
 };
 
 /** Resolve a frame's references from a beat/CHARACTER target: the primary

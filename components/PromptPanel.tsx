@@ -183,7 +183,10 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
         character: sheet,
         characterLabel: pc.variant ? `${pc.base}（${pc.variant}）` : pc.base,
         environment: undefined as RefImage | undefined,
-        needsImage: false,
+        // The character's OWN panel without a sheet is an actionable gap (amber
+        // bootstrap/link chip), NOT an empty shot — the gray empty-shot chip
+        // here read as if the character didn't exist.
+        needsImage: !sheet,
       };
     }
     if (panelBlock.type === 'SCENE_HEADING') {
