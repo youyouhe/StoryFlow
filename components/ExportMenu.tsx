@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, FileJson, FileCode, ChevronDown, Check, X } from 'lucide-react';
+import { FileText, FileJson, FileCode, ChevronDown, Check, X, Download, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ExportFormat, ExportOptions } from '../types';
 import { DEFAULT_EXPORT_OPTIONS } from '../utils/exportData';
@@ -19,10 +19,16 @@ interface ExportMenuProps {
   open: boolean;
   onClose: () => void;
   onExport: (format: ExportFormat, options: ExportOptions) => void;
+  /** Import a screenplay from an exported JSON file (creates a NEW script). */
+  onImportJson: (file: File) => void;
+  /** Export the whole reference library into one portable pack file. */
+  onExportAssetPack: () => void;
+  /** Import a library asset pack (identity-aware re-upload). */
+  onImportAssetPack: (file: File) => void;
   t: any;
 }
 
-export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, t }) => {
+export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, t }) => {
   const [format, setFormat] = useState<ExportFormat>('json');
   const [opts, setOpts] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -159,6 +165,33 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
                 label={t.exportIncludeBlockIds || 'Block type + id annotations'}
               />
             </div>
+          </div>
+        </div>
+
+        {/* data portability — import/export beyond the current script */}
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+            {t.dataSection || 'Data'}
+          </label>
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer select-none">
+              <FileJson className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t.importScript}</span>
+              <input type="file" accept="application/json,.json" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onImportJson(f); }} />
+            </label>
+            <button onClick={onExportAssetPack} title={t.assetPackExportHint}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 select-none">
+              <Download className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t.assetPackExport}</span>
+            </button>
+            <label title={t.assetPackImportHint}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer select-none">
+              <Upload className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{t.assetPackImport}</span>
+              <input type="file" accept="application/json,.json" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onImportAssetPack(f); }} />
+            </label>
           </div>
         </div>
 

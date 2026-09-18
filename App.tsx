@@ -2059,9 +2059,6 @@ function App() {
             isOpen={true} 
             onToggle={() => setSidebarOpen(!sidebarOpen)}
             onNewScript={() => setShowTemplateModal(true)}
-            onImportJson={(f) => { void handleImportScript(f); }}
-            onExportAssetPack={() => { void handleExportAssetPack(); }}
-            onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
             onScriptSettings={() => setShowSettingsModal(true)}
             t={t}
             savedScripts={savedScripts}
@@ -2361,6 +2358,9 @@ function App() {
             open={showExportMenu}
             onClose={() => setShowExportMenu(false)}
             onExport={handleExport}
+            onImportJson={(f) => { void handleImportScript(f); }}
+            onExportAssetPack={() => { void handleExportAssetPack(); }}
+            onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
             t={t}
         />
 
