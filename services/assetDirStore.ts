@@ -18,7 +18,8 @@
  * empty — tag them in the library UI).
  */
 
-import { RefImageMetaPatch, StoredRefImage, openRefsDB } from './refImageStore';
+import { RefImageMetaPatch, StoredRefImage, openRefsDB , parseLegacySubject, deriveSubject } from './refImageStore';
+import { parseCharacterName } from '../utils/beatCast';
 
 export interface DirAssetMeta {
   id: string;
@@ -205,6 +206,14 @@ export const listDirAssets = async (dir: FileSystemDirectoryHandle): Promise<Dir
     if (handle.kind !== 'file' || name === MANIFEST || !IMAGE_RE.test(name)) continue;
     const file = await (handle as FileSystemFileHandle).getFile();
     if (!known.has(name)) {
+      // Identity adoption for externally-copied files: a filename that NAMES an
+      // identity (parens variant `女主（浴袍）.png` or slash `女主/浴袍.png`) is an
+      // intentional character sheet — e.g. images copied in from another
+      // machine. Plain filenames stay generic environment assets (random
+      // screenshots must not silently become characters).
+      const stem = name.replace(/\.[^.]+$/, '');
+      const paren = parseCharacterName(stem);
+      const slash = stem.includes('/') ? parseLegacySubject(stem) : null;
       const meta: DirAssetMeta = {
         id: newId(),
         fileName: name,
@@ -214,6 +223,17 @@ export const listDirAssets = async (dir: FileSystemDirectoryHandle): Promise<Dir
         size: file.size,
         createdAt: file.lastModified || Date.now(),
       };
+      if (paren.variant) {
+        meta.kind = 'character';
+        meta.charName = paren.base;
+        meta.variant = paren.variant;
+        meta.subject = deriveSubject({ kind: 'character', charName: paren.base, variant: paren.variant });
+      } else if (slash && slash.kind === 'character' && slash.variant) {
+        meta.kind = 'character';
+        meta.charName = slash.charName;
+        meta.variant = slash.variant;
+        meta.subject = deriveSubject({ kind: 'character', charName: slash.charName, variant: slash.variant });
+      }
       manifest.assets.push(meta);
       adopted.push(meta);
     }
