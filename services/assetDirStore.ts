@@ -292,18 +292,53 @@ export const updateAssetMetaInDir = async (
   dir: FileSystemDirectoryHandle,
   id: string,
   patch: RefImageMetaPatch,
-): Promise<void> => {
+): Promise<DirAssetMeta | undefined> => {
   const manifest = await readManifest(dir);
   const idx = manifest.assets.findIndex((a) => a.id === id);
-  if (idx < 0) return;
-  manifest.assets[idx] = {
+  if (idx < 0) return undefined;
+  const next: DirAssetMeta = {
     ...manifest.assets[idx],
     ...('name' in patch ? { name: patch.name! } : {}),
-    ...('subject' in patch ? { subject: patch.subject || undefined } : {}),
     ...('source' in patch ? { source: patch.source } : {}),
     ...('sourcePrompt' in patch ? { sourcePrompt: patch.sourcePrompt || undefined } : {}),
   };
+  // Users type identity into the NAME field (it's the visible one) — e.g.
+  // renaming to 女主（初始造型）.png means "this IS 女主's 初始造型 sheet".
+  // Re-derive identity from the name stem on every rename.
+  if ('name' in patch && patch.name) {
+    const paren = parseCharacterName(patch.name.replace(/\.[^.]+$/, ''));
+    if (paren.variant) {
+      next.kind = 'character';
+      next.charName = paren.base;
+      next.variant = paren.variant;
+    }
+  }
+  // Rebuild identity from the subject spelling — SAME contract as the IDB
+  // backend's updateRefImageMeta. 女主/浴袍 and 女主（浴袍） both re-derive to
+  // character/女主/浴袍, so a renamed asset becomes bindable/resolvable
+  // without waiting for a rescan.
+  if ('subject' in patch) {
+    next.subject = patch.subject || undefined;
+    if (next.subject) {
+      const paren = parseCharacterName(next.subject);
+      const legacy = parseLegacySubject(next.subject);
+      const ident = paren.variant
+        ? { kind: 'character' as const, charName: paren.base, variant: paren.variant }
+        : { kind: legacy.kind, charName: legacy.charName, variant: legacy.variant };
+      next.kind = ident.kind;
+      next.charName = ident.charName;
+      next.variant = ident.variant;
+    }
+  }
+  if (!next.versionGroup) {
+    next.versionGroup = `vg_${next.id}`;
+    next.version = next.version ?? 1;
+    next.isSelected = true;
+  }
+  next.subject = deriveSubject(next);
+  manifest.assets[idx] = next;
   await writeManifest(dir, manifest);
+  return next;
 };
 
 export const removeAssetFromDir = async (dir: FileSystemDirectoryHandle, id: string): Promise<void> => {

@@ -1,3 +1,5 @@
+import { parseCharacterName } from '../utils/beatCast';
+
 /**
  * Reference-image library — IndexedDB persistence for the white-model
  * reference assets (数字资产). Blobs don't belong in localStorage
@@ -227,6 +229,13 @@ export const updateRefImageMeta = async (id: string, patch: RefImageMetaPatch): 
   const next: StoredRefImage = {
     ...existing,
     ...('name' in patch ? { name: patch.name! } : {}),
+    // Users type identity into the NAME field (it's the visible one) — renaming
+    // to 女主（初始造型）.png means "this IS 女主's 初始造型 sheet". Re-derive
+    // identity from the name stem on every rename (dir backend does the same).
+    ...('name' in patch && patch.name ? (() => {
+      const paren = parseCharacterName(patch.name.replace(/\.[^.]+$/, ''));
+      return paren.variant ? { kind: 'character' as AssetKind, charName: paren.base, variant: paren.variant } : {};
+    })() : {}),
     ...('kind' in patch ? { kind: patch.kind } : {}),
     ...('charName' in patch ? { charName: patch.charName || undefined } : {}),
     ...('variant' in patch ? { variant: patch.variant || undefined } : {}),
