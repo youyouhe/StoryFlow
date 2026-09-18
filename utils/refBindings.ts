@@ -69,7 +69,7 @@ export const resolveCharacterSheet = (
  *  scene environment sheet (③) when one is bound/available. Never a character
  *  backdrop for CHARACTER blocks (独立背景). */
 export const resolveFrameRefs = (
-  kind: 'action' | 'dialogue' | 'character',
+  kind: 'action' | 'dialogue' | 'character' | 'environment',
   name: string,
   sceneHeading: string,
   bindings: RefBindings | undefined,

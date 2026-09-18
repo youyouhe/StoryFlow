@@ -186,6 +186,11 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
         needsImage: false,
       };
     }
+    if (panelBlock.type === 'SCENE_HEADING') {
+      // The scene's own panel: only ③ applies (this IS the environment slot).
+      const fr = resolveFrameRefs('environment', '', panelSceneHeading, screenplay.referenceBindings, refImages);
+      return { character: undefined, environment: fr.environment, characterLabel: '', needsImage: false };
+    }
     if (panelBlock.type === 'ACTION') {
       if (panelActionRef?.kind === 'ready') {
         const age = wardrobeIn(seq, panelActionRef.characterName).age;
@@ -225,7 +230,11 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   // sheet, the panel offers (a) fresh text-to-image whose result BECOMES the
   // sheet, or (b) linking an existing library asset as the sheet. linkingChar
   // is non-null while the library picker overlay is open.
-  const [linkingChar, setLinkingChar] = useState<{ name: string; variant?: string } | null>(null);
+  const [linkingTarget, setLinkingTarget] = useState<
+    | { kind: 'character'; name: string; variant?: string }
+    | { kind: 'environment'; sceneHeading: string }
+    | null
+  >(null);
 
   return (
     <div className="fixed top-0 right-0 h-full w-full max-w-sm z-40 shadow-2xl bg-white dark:bg-[#18181b] border-l border-gray-200 dark:border-zinc-800 flex flex-col animate-in slide-in-from-right duration-200">
@@ -334,29 +343,31 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
       {refPreview && !showingGraybox && (
         <div className="px-4 pt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
           <span className="text-gray-400 dark:text-gray-500">{t.refLockLabel}</span>
-          {refPreview.character ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+          {/* Chips are BUTTONS: click to change/link what this frame locks to.
+              Never a dead end — 不满意就换绑。 */}
+          {panelBlock.type !== 'SCENE_HEADING' && (refPreview.character ? (
+            <button type="button" onClick={() => setLinkingTarget({ kind: 'character', name: refPreview.characterLabel.split('（')[0], variant: refPreview.characterLabel.includes('（') ? refPreview.characterLabel.split('（')[1].replace('）','') : undefined })} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:border-indigo-500 cursor-pointer" title={t.refLockChange}>
               <img src={refPreview.character.url} alt="" className="w-3.5 h-3.5 rounded-sm object-cover" />
               ① {refPreview.characterLabel}
-            </span>
+            </button>
           ) : refPreview.needsImage ? (
-            <span className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+            <button type="button" onClick={() => setLinkingTarget({ kind: 'character', name: refPreview.characterLabel })} className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:border-amber-500 cursor-pointer" title={t.refLockChange}>
               ① {refPreview.characterLabel} · {t.refLockNoSheet}
-            </span>
-          ) : panelBlock.type !== 'SCENE_HEADING' ? (
+            </button>
+          ) : (
             <span className="px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-zinc-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-zinc-700">
               ① {t.refLockNoCharacter}
             </span>
-          ) : null}
+          ))}
           {panelBlock.type !== 'CHARACTER' && (refPreview.environment ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <button type="button" onClick={() => setLinkingTarget({ kind: 'environment', sceneHeading: panelSceneHeading })} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:border-emerald-500 cursor-pointer" title={t.refLockChange}>
               <img src={refPreview.environment.url} alt="" className="w-3.5 h-3.5 rounded-sm object-cover" />
               ③ {t.refLockEnv}
-            </span>
+            </button>
           ) : (
-            <span className="px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-zinc-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-zinc-700" title={t.refLockNoEnvHint}>
+            <button type="button" onClick={() => setLinkingTarget({ kind: 'environment', sceneHeading: panelSceneHeading })} className="px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-zinc-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-zinc-700 hover:border-emerald-500 cursor-pointer" title={t.refLockNoEnvHint}>
               ③ {t.refLockNoEnv}
-            </span>
+            </button>
           ))}
         </div>
       )}
@@ -576,7 +587,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   {t.imageGenNeedsImageOptions}
                 </p>
                 <button
-                  onClick={() => setLinkingChar({ name: panelActionRef.characterName, variant: panelActionRef.variant })}
+                  onClick={() => setLinkingTarget({ kind: 'character', name: panelActionRef.characterName, variant: panelActionRef.variant })}
                   className="w-full py-1.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
                 >
                   🔗 {t.imageGenLinkSheet.replace('{name}', panelActionRef.characterName)}
@@ -650,11 +661,13 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
       {/* Library picker: link an existing asset as the blocked character's
           design sheet. Setting the binding clears needs-image on the next
           render, so image-to-image proceeds normally. */}
-      {linkingChar && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6" onClick={() => setLinkingChar(null)}>
+      {linkingTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6" onClick={() => setLinkingTarget(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="text-sm font-bold text-gray-900 dark:text-white mb-3">
-              {t.imageGenLinkSheet.replace('{name}', linkingChar.name)}
+              {linkingTarget.kind === 'character'
+                ? t.imageGenLinkSheet.replace('{name}', linkingTarget.name)
+                : t.imageGenPickEnv}
             </div>
             {refImages.length === 0 ? (
               <p className="text-xs text-gray-400 py-4">{t.imageGenNoAssets}</p>
@@ -664,12 +677,29 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   <button
                     key={r.id}
                     onClick={() => {
-                      // Script-wide binding: this asset IS the character's sheet.
-                      onRefBindingsChange({
-                        ...refBindings,
-                        characters: { ...refBindings.characters, [linkingChar.name]: r.id },
-                      });
-                      setLinkingChar(null);
+                      if (linkingTarget.kind === 'character') {
+                        // Script-wide binding: this asset IS the character's sheet.
+                        onRefBindingsChange({
+                          ...refBindings,
+                          characters: { ...refBindings.characters, [linkingTarget.name]: r.id },
+                        });
+                      } else {
+                        // Per-scene binding: this asset is THIS scene's backdrop.
+                        // resolveRefBindings gives the scene override precedence,
+                        // so it wins over any script-wide environment default.
+                        const heading = linkingTarget.sceneHeading;
+                        onRefBindingsChange({
+                          ...refBindings,
+                          scenes: {
+                            ...(refBindings.scenes ?? {}),
+                            [heading]: {
+                              ...(refBindings.scenes?.[heading] ?? {}),
+                              environment: r.id,
+                            },
+                          },
+                        });
+                      }
+                      setLinkingTarget(null);
                     }}
                     className="p-1 rounded-lg border border-gray-200 dark:border-zinc-700 hover:border-indigo-500 transition-colors"
                     title={r.subject || r.name}
