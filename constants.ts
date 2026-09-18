@@ -754,6 +754,8 @@ export const TRANSLATIONS = {
     videoPlanHint: "Aggregates the script's timeline into video-generation segments of ≤ your target duration (H3 4-15s etc). Deterministic — reads each beat's timestamp, groups consecutive beats into one generation window. Fewer videos, better consistency.",
     videoPlanDone: (n: number, target: number) => `Script aggregates into ${n} video segment(s) of ≤${target}s each.`,
     videoPlanNoTimeline: "No beat timestamps found. Beats need 00:00-00:03 style prefixes (FROM_PROMPT transcriptions carry them) — or generate grayboxes to time the scene.",
+    videoPlanExport: "Download plan",
+    videoPlanNext: "Next: record white-model per segment → submit to H3",
     storyboardWrongBlock: "Select a SCENE_HEADING (environment), ACTION (storyboard frame), or CHARACTER (design sheet) block to generate an image prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
@@ -1073,6 +1075,8 @@ export const TRANSLATIONS = {
     videoPlanHint: "把剧本时间轴聚合为 ≤目标时长的视频生成段（H3 4-15s 等）。确定性计算——读取每拍的时间戳，将连续节拍聚合进同一个生成窗口。生成次数更少，段内一致性更好。",
     videoPlanDone: (n: number, target: number) => `剧本聚合为 ${n} 个视频生成段（每段 ≤${target}s）。`,
     videoPlanNoTimeline: "未找到节拍时间戳。节拍需要 00:00-00:03 式前缀（提示词转剧本会自动带上），或先生成灰模来给场景计时。",
+    videoPlanExport: "下载分段计划",
+    videoPlanNext: "下一步：逐段录制白模 → 提交 H3",
     storyboardWrongBlock: "请选中场景标题（环境图）、动作块（分镜画面）或角色块（设定表）再生成提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {

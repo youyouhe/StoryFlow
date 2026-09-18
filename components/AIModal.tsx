@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, X, Boxes, Bot, Loader2, Wand2, Cloud } from 'lucide-react';
+import { FileText, Sparkles, X, Boxes, Bot, Loader2, Wand2, Cloud } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { AIMode, AIState } from '../types';
 import { TRANSLATIONS } from '../constants';
@@ -210,6 +210,25 @@ export const AIModal: React.FC<AIModalProps> = ({
                         </div>
                     )}
 
+                    {aiMode === 'VIDEO_PLAN' && aiState.suggestion && (
+                        <div className="space-y-3">
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.videoPlanNext}</p>
+                            <button
+                                onClick={() => {
+                                    const blob = new Blob([aiState.suggestion || ''], { type: 'text/markdown' });
+                                    const a = document.createElement('a');
+                                    a.href = URL.createObjectURL(blob);
+                                    a.download = 'video-plan.md';
+                                    a.click();
+                                    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors"
+                            >
+                                <FileText className="w-3.5 h-3.5" />
+                                {t.videoPlanExport}
+                            </button>
+                        </div>
+                    )}
                     {aiState.error && (
                         <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-900/50">
                             {aiState.error}
