@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import type { AIMode, AIState } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { grayboxOverviewLine } from '../utils/exportData';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface AIModalProps {
     aiMode: AIMode;
@@ -241,7 +242,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 </button>
                                 {(aiMode === 'STORYBOARD' || aiMode === 'GRAYBOX') && (
                                     <button
-                                        onClick={() => navigator.clipboard?.writeText(aiState.suggestion || '').catch(() => {})}
+                                        onClick={() => { void copyToClipboard(aiState.suggestion || ''); }}
                                         className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors flex items-center justify-center gap-1.5"
                                     >
                                         <Cloud className="w-3.5 h-3.5" />

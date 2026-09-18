@@ -17,6 +17,7 @@ import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
+import { copyToClipboard } from './utils/clipboard';
 import { sanitizeParsedBlocks } from './utils/scriptParse';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
@@ -1930,7 +1931,7 @@ function App() {
       // IDEAS mode returns creative directions for reference, not script content.
       // Copy to clipboard instead of inserting into the script body.
       if (aiMode === 'IDEAS') {
-          navigator.clipboard?.writeText(aiState.suggestion).catch(() => {});
+          void copyToClipboard(aiState.suggestion);
           setShowAIModal(false);
           setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;

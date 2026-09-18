@@ -6,6 +6,7 @@ import type { ScriptBlock, Screenplay, GrayboxData, RefImage, RefBindings, H3Tas
 import { Graybox3DView } from './Graybox3DView';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs, normIdentity } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
+import { copyToClipboard } from '../utils/clipboard';
 import { computeBeatCast, parseCharacterName, resolveBeatVariant } from '../utils/beatCast';
 import { grayboxOverviewLine } from '../utils/exportData';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from '../utils/grayboxToBlender';
@@ -628,7 +629,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
         )}
         <button
           onClick={() => {
-            navigator.clipboard?.writeText(copyText).catch(() => {});
+            void copyToClipboard(copyText);
           }}
           className="flex-1 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors flex items-center justify-center gap-1.5"
         >

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts, GeminiThinkingLevel, GalleryUser } from '../types';
 import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
 import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check } from 'lucide-react';
+import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 
 interface SettingsModalProps {
@@ -29,12 +30,13 @@ const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
     return (
         <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
                 if (!value) return;
-                navigator.clipboard?.writeText(value).then(() => {
+                const ok = await copyToClipboard(value);
+                if (ok) {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
-                }).catch(() => {});
+                }
             }}
             disabled={!value}
             title={copied ? 'Copied ✓' : 'Copy'}
