@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
         port: 5173,
         host: '0.0.0.0',
         strictPort: true,
-        ...(https ? { https: true } : {}),
       },
       plugins: [react(), ...(https ? [basicSsl()] : [])],
       build: {

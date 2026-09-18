@@ -740,6 +740,31 @@ function App() {
   /** P5-openings: template card click opens the opening picker instead of
    *  creating instantly — the user picks the template default or an
    *  AI-invented random opening. */
+  /** Import a screenplay from an exported JSON file. Creates a NEW script with
+   *  a fresh id (no collision with existing entries); identity fields travel
+   *  with the object — referenceBindings, sequences, sourcePrompt, imageResult. */
+  const handleImportScript = useCallback(async (file: File) => {
+      try {
+          const parsed = JSON.parse(await file.text()) as Screenplay;
+          if (!parsed || !Array.isArray(parsed.blocks) || parsed.blocks.length === 0) {
+              throw new Error('bad-format');
+          }
+          const imported: Screenplay = {
+              ...DEFAULT_SCRIPT,
+              ...parsed,
+              id: generateId(),
+              blocks: parsed.blocks.map(b => ({ ...b, id: generateId() })),
+              lastModified: Date.now(),
+          };
+          setScreenplay(imported);
+          setSelectedBlockId(imported.blocks[0].id);
+          setIsReadOnly(false);
+      } catch (e) {
+          console.warn('Import failed:', e);
+          alert(t.importScriptError);
+      }
+  }, [t]);
+
   /** Blank start from the OpeningPicker: no AI opening, no template skeleton —
    *  a single empty SCENE_HEADING so the user has a cursor to type into. The
    *  picked template still applies (its systemPrompt/style rules drive later
@@ -1969,6 +1994,7 @@ function App() {
             isOpen={true} 
             onToggle={() => setSidebarOpen(!sidebarOpen)}
             onNewScript={() => setShowTemplateModal(true)}
+            onImportJson={(f) => { void handleImportScript(f); }}
             onScriptSettings={() => setShowSettingsModal(true)}
             t={t}
             savedScripts={savedScripts}

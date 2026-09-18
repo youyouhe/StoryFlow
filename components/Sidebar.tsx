@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ScriptBlock, SyncStatus } from '../types';
 import type { ScriptVisibility } from '../services/apiClient';
-import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert, Globe, Lock } from 'lucide-react';
+import { Clapperboard, Plus, Settings, FileText, ChevronRight, FilePlus, Upload, List, Trash2, FolderOpen, Download, Images, Cloud, CloudOff, CloudUpload, RefreshCw, TriangleAlert, Globe, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 
@@ -31,6 +31,8 @@ interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   onNewScript: () => void;
+  /** Import a screenplay from an exported JSON file (creates a NEW script). */
+  onImportJson: (file: File) => void;
   onScriptSettings: () => void;
   /** Opens the global reference-asset library modal. */
   onOpenAssetLibrary: () => void;
@@ -64,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isOpen,
     onToggle,
     onNewScript,
+  onImportJson,
     onScriptSettings,
     onOpenAssetLibrary,
     assetLibraryLabel,
@@ -209,6 +212,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <FilePlus className="w-3.5 h-3.5" />
                         {t.newScript}
                     </button>
+                    <label className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-zinc-600 rounded-lg text-xs font-semibold transition-all cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        {t.importScript}
+                        <input
+                            type="file"
+                            accept="application/json,.json"
+                            className="hidden"
+                            onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                e.target.value = '';
+                                if (f) onImportJson(f);
+                            }}
+                        />
+                    </label>
                 </div>
                 <div className="px-4 py-2 mb-1 flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{t.scenes}</span>
