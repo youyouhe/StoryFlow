@@ -765,6 +765,71 @@ function App() {
       }
   }, [t]);
 
+  /** Export the whole reference library into ONE portable pack file
+   *  (metadata + base64 images). The offline answer to "move my assets to
+   *  another machine" when cloud sync is unavailable (test env, no balance).
+   *  Identity fields travel so the importing side rebuilds the same
+   *  version groups / variant slots / bindings targets. */
+  const handleExportAssetPack = useCallback(async () => {
+      if (!refImages.length) { alert(t.assetPackEmpty); return; }
+      const assets: Array<Record<string, unknown>> = [];
+      for (const r of refImages) {
+          try {
+              const blob = await (await fetch(r.url)).blob();
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                  const fr = new FileReader();
+                  fr.onload = () => resolve(fr.result as string);
+                  fr.onerror = () => reject(new Error('read failed'));
+                  fr.readAsDataURL(blob);
+              });
+              assets.push({
+                  name: r.name, type: r.type || blob.type || 'image/png',
+                  subject: r.subject, kind: r.kind, charName: r.charName, variant: r.variant,
+                  sceneKey: r.sceneKey, scriptIds: r.scriptIds, isSelected: r.isSelected,
+                  source: r.source, sourcePrompt: r.sourcePrompt, dataUrl,
+              });
+          } catch (e) { console.warn('Asset pack: skipped unreadable asset', r.id, e); }
+      }
+      const pack = { storyflowAssetPack: 1 as const, exportedAt: new Date().toISOString(), assets };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(pack)], { type: 'application/json' }));
+      a.download = `storyflow-assets-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+  }, [refImages, t]);
+
+  /** Import a pack produced by handleExportAssetPack. Each entry re-enters
+   *  through the normal identity-aware upload (handleUploadRefImage), so
+   *  version groups / variant slots rebuild exactly as if generated here. */
+  const handleImportAssetPack = useCallback(async (file: File) => {
+      try {
+          const pack = JSON.parse(await file.text()) as { storyflowAssetPack?: number; assets?: Array<Record<string, unknown>> };
+          if (pack?.storyflowAssetPack !== 1 || !Array.isArray(pack.assets)) throw new Error('bad pack');
+          let ok = 0;
+          for (const a of pack.assets) {
+              try {
+                  const blob = await (await fetch(String(a.dataUrl))).blob();
+                  const id = await handleUploadRefImage(
+                      new File([blob], String(a.name || 'asset.png'), { type: String(a.type || 'image/png') }),
+                      a.subject ? String(a.subject) : undefined,
+                      a.sourcePrompt ? String(a.sourcePrompt) : undefined,
+                      (a.source as 'upload' | 'ai-generate' | 'video-frame') ?? 'upload',
+                      { kind: (a.kind as 'character' | 'environment' | 'prop' | 'action') ?? 'character',
+                        charName: a.charName ? String(a.charName) : undefined,
+                        variant: a.variant ? String(a.variant) : undefined,
+                        sceneKey: a.sceneKey ? String(a.sceneKey) : undefined,
+                        },
+                  );
+                  if (id) ok++;
+              } catch (e) { console.warn('Asset pack: failed to import one asset', e); }
+          }
+          alert(t.assetPackImported.replace('{ok}', String(ok)).replace('{total}', String(pack.assets.length)));
+      } catch (e) {
+          console.warn('Asset pack import failed:', e);
+          alert(t.importScriptError);
+      }
+  }, [handleUploadRefImage, t]);
+
   /** Blank start from the OpeningPicker: no AI opening, no template skeleton —
    *  a single empty SCENE_HEADING so the user has a cursor to type into. The
    *  picked template still applies (its systemPrompt/style rules drive later
@@ -1995,6 +2060,8 @@ function App() {
             onToggle={() => setSidebarOpen(!sidebarOpen)}
             onNewScript={() => setShowTemplateModal(true)}
             onImportJson={(f) => { void handleImportScript(f); }}
+            onExportAssetPack={() => { void handleExportAssetPack(); }}
+            onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
             onScriptSettings={() => setShowSettingsModal(true)}
             t={t}
             savedScripts={savedScripts}
