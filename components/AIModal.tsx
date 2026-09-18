@@ -52,7 +52,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                 
                 <div className="p-6 space-y-6">
                     <div className="flex gap-2 p-1 bg-gray-100 dark:bg-zinc-900 rounded-xl">
-                        {[...(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX', 'DUB', 'FROM_PROMPT'] as const)].map(m => (
+                        {[...(['CONTINUE', 'IDEAS', 'REWRITE', 'STORYBOARD', 'GRAYBOX', 'DUB', 'FROM_PROMPT', 'VIDEO_PLAN'] as const)].map(m => (
                             <button
                                 key={m}
                                 onClick={() => { setAIMode(m); setAIState({isLoading:false, suggestion:null, error:null, decision:null, grayboxDraft:null, batchProgress:null})}}
@@ -70,6 +70,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 {m === 'GRAYBOX' && t.modes.graybox}
                                 {m === 'DUB' && t.modes.dub}
                                 {m === 'FROM_PROMPT' && t.modes.fromPrompt}
+                                {m === 'VIDEO_PLAN' && t.modes.videoPlan}
                             </button>
                         ))}
                     </div>
@@ -109,6 +110,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 {aiMode === 'GRAYBOX' && t.prompts.graybox}
                                 {aiMode === 'DUB' && t.prompts.dub}
                                 {aiMode === 'FROM_PROMPT' && t.prompts.fromPrompt}
+                                {aiMode === 'VIDEO_PLAN' && t.prompts.videoPlanHint}
                             </p>
                             {aiMode === 'GRAYBOX' && (
                                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-6 px-4 leading-relaxed">
@@ -254,7 +256,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                                     disabled={aiMode === 'GRAYBOX' && !aiState.grayboxDraft}
                                     className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
-                                    {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : aiMode === 'GRAYBOX' ? t.grayboxSave : aiMode === 'FROM_PROMPT' ? t.fromPromptAccept : t.aiInsert}
+                                    {aiMode === 'IDEAS' ? t.aiCopyIdeas : aiMode === 'STORYBOARD' ? t.aiSavePrompt : aiMode === 'GRAYBOX' ? t.grayboxSave : aiMode === 'VIDEO_PLAN' ? (t.cancel || 'Close') : t.aiInsert}
                                 </button>
                             </div>
                         </div>

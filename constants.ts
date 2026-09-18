@@ -751,6 +751,9 @@ export const TRANSLATIONS = {
     storyboardBatchProgress: "Generating image prompt {current}/{total}…",
     storyboardBatchPartial: "{failed}/{total} image prompts failed; the rest were saved.",
     storyboardAllDone: "Every block in this scene already has a storyboard prompt. To regenerate one, delete that block's prompt (panel 🗑) and press Alt+S again — or re-add the beat if you deleted the blocks themselves.",
+    videoPlanHint: "Aggregates the script's timeline into video-generation segments of ≤ your target duration (H3 4-15s etc). Deterministic — reads each beat's timestamp, groups consecutive beats into one generation window. Fewer videos, better consistency.",
+    videoPlanDone: (n: number, target: number) => `Script aggregates into ${n} video segment(s) of ≤${target}s each.`,
+    videoPlanNoTimeline: "No beat timestamps found. Beats need 00:00-00:03 style prefixes (FROM_PROMPT transcriptions carry them) — or generate grayboxes to time the scene.",
     storyboardWrongBlock: "Select a SCENE_HEADING (environment), ACTION (storyboard frame), or CHARACTER (design sheet) block to generate an image prompt.",
     storyboardPromptLabel: "Image Prompt",
     storyboardElements: {
@@ -802,6 +805,7 @@ export const TRANSLATIONS = {
       graybox: "Graybox",
       dub: "Dub sheet",
       fromPrompt: "Prompt→Script",
+      videoPlan: "Video Plan",
       syncCloud: "Sync to cloud"
     },
     styleHeadTitle: "Style Head",
@@ -825,6 +829,7 @@ export const TRANSLATIONS = {
       storyboard: "Generate a text-to-image prompt for this action or character (six visual elements).",
       graybox: "Generate a 3D graybox (spatial layout for a scene, or camera/运镜 for a shot).",
       dub: "Infer per-line dubbing direction (emotion + delivery + intensity) for every dialogue block, saved for a stable-voice dubbing sheet.",
+      videoPlanHint: "Reads each beat's timestamp and aggregates consecutive beats into video-generation segments of ≤15s (scene changes force a boundary; beats are atomic). Deterministic — no AI call.",
       fromPrompt: "Paste a finished production/AI-video prompt (scene + camera rules, costumes, timeline with dialogue). It is transcribed into a new screenplay — costume changes become 张三（浴袍）-style character cues, so variants and sequences light up automatically."
     },
     fromPromptEmpty: "Paste the production prompt first.",
@@ -1065,6 +1070,9 @@ export const TRANSLATIONS = {
     storyboardBatchProgress: "正在生成分镜提示词 {current}/{total}…",
     storyboardBatchPartial: "{total} 个分镜提示词中有 {failed} 个失败，其余已保存。",
     storyboardAllDone: "该场景所有块都已生成分镜提示词。要重新生成某个块：删除它的提示词（面板 🗑）后再按 Alt+S；如果你把块本身删掉了，请先把该节拍的文字重新加上。",
+    videoPlanHint: "把剧本时间轴聚合为 ≤目标时长的视频生成段（H3 4-15s 等）。确定性计算——读取每拍的时间戳，将连续节拍聚合进同一个生成窗口。生成次数更少，段内一致性更好。",
+    videoPlanDone: (n: number, target: number) => `剧本聚合为 ${n} 个视频生成段（每段 ≤${target}s）。`,
+    videoPlanNoTimeline: "未找到节拍时间戳。节拍需要 00:00-00:03 式前缀（提示词转剧本会自动带上），或先生成灰模来给场景计时。",
     storyboardWrongBlock: "请选中场景标题（环境图）、动作块（分镜画面）或角色块（设定表）再生成提示词。",
     storyboardPromptLabel: "文生图提示词",
     storyboardElements: {
@@ -1116,6 +1124,7 @@ export const TRANSLATIONS = {
       graybox: "灰模",
       dub: "配音表",
       fromPrompt: "提示词转剧本",
+      videoPlan: "视频分段",
       syncCloud: "同步到云端"
     },
     styleHeadTitle: "风格头",
@@ -1139,6 +1148,7 @@ export const TRANSLATIONS = {
       storyboard: "为该动作或角色生成文生图提示词（六大视觉要素）。",
       graybox: "生成 3D 灰模（场景的空间布局，或镜头的运镜）。",
       dub: "为每句对白推断配音方向（情绪 + 口吻 + 强度）并保存，供稳定的音色配音表导出。",
+      videoPlanHint: "读取每拍时间戳，将连续节拍聚合为 ≤15s 的视频生成段（场景变化强制分段；节拍不可拆分）。确定性计算——不调用 AI。",
       fromPrompt: "粘贴一段写好的制作提示词（画面 + 运镜规则 + 服装 + 时间轴对白）。系统会把它转写成一份新剧本——换装自动变成 张三（浴袍） 式的角色 cue，变体与序列机制自动生效。"
     },
     fromPromptEmpty: "请先粘贴制作提示词。",

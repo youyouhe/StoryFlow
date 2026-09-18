@@ -18,6 +18,7 @@ import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { copyToClipboard } from './utils/clipboard';
+import { planVideoSegments, formatVideoPlan } from './utils/videoPlan';
 import { sanitizeParsedBlocks } from './utils/scriptParse';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
@@ -1692,7 +1693,20 @@ function App() {
           setAIState({ isLoading: false, suggestion: null, error: t.aiErrorGeneric, decision: null, grayboxDraft: null, batchProgress: null });
           return;
         }
-       }
+      } else if (effectiveMode === 'VIDEO_PLAN') {
+        // Deterministic planner — no AI call. Reads each beat's timestamp
+        // prefix, groups consecutive beats into ≤target generation windows
+        // (scene changes force a boundary; beats are atomic, never split).
+        const target = 15; // H3 max; adjustable when other models are wired
+        const plan = planVideoSegments(screenplay.blocks, target);
+        if (!plan.segments.length || plan.segments.every(s => s.beats.length === 0)) {
+          setAIState({ isLoading: false, suggestion: null, error: t.videoPlanNoTimeline, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+        }
+        result = formatVideoPlan(plan);
+        // Stash the structured plan for downstream per-segment video wiring.
+        (window as unknown as { __videoPlan?: unknown }).__videoPlan = plan;
+      }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {
       const msg = err?.message || '';
