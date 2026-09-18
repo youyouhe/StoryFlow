@@ -69,20 +69,31 @@ export const resolveCharacterSheet = (
     if (im) return im;
   }
 
-  // every asset whose subject normalizes to this base — any spelling
-  const owned = refImages.filter(r => normIdentity(r.subject).base === wantBase);
+  // Identity candidates: match the SUBJECT or the NAME (stem, extension
+  // stripped). Both are user-visible identity claims — users rename assets to
+  // 女主（初始造型）.png expecting recognition, and subjects may be edited
+  // independently. Whichever field carries the identity counts.
+  const stemOf = (r: RefImage): string => (r.name ?? '').replace(/\.[^.]+$/, '');
+  const owned = refImages.filter(r => {
+    const bySubject = normIdentity(r.subject).base === wantBase;
+    const byName = normIdentity(stemOf(r)).base === wantBase;
+    return bySubject || byName;
+  });
   if (!owned.length) return undefined;
 
+  const variantOf = (r: RefImage): string | undefined =>
+    normIdentity(r.subject).variant ?? normIdentity(stemOf(r)).variant;
+
   if (wantVariant) {
-    const tagged = owned.find(r => normIdentity(r.subject).variant === wantVariant);
+    const tagged = owned.find(r => variantOf(r) === wantVariant);
     if (tagged) return tagged;
   }
   if (age) {
-    const tagged = owned.find(r => normIdentity(r.subject).variant === age);
+    const tagged = owned.find(r => variantOf(r) === age);
     if (tagged) return tagged;
   }
   // prefer the untagged base sheet if present, else the newest owned asset
-  return owned.find(r => !normIdentity(r.subject).variant) ?? owned[owned.length - 1];
+  return owned.find(r => !variantOf(r)) ?? owned[owned.length - 1];
 };
 
 /** Resolve a frame's references from a beat/CHARACTER target: the primary
