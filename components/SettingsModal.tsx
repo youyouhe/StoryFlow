@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts, GeminiThinkingLevel, GalleryUser } from '../types';
 import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
-import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2 } from 'lucide-react';
+import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check } from 'lucide-react';
 import { GALLERY_BACKEND } from '../services/gallery';
 
 interface SettingsModalProps {
@@ -20,6 +20,33 @@ interface SettingsModalProps {
   /** P5: milli-credit balance for the signed-in 4A identity. */
   creditBalance?: number | null;
 }
+/** Copy-to-clipboard button for API key fields: keys don't sync across
+ *  origins/devices (BYOK), so migrating means re-pasting — this makes that a
+ *  one click instead of select-inside-a-password-field. Shows a check for a
+ *  moment after copying. */
+const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
+    const [copied, setCopied] = useState(false);
+    return (
+        <button
+            type="button"
+            onClick={() => {
+                if (!value) return;
+                navigator.clipboard?.writeText(value).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                }).catch(() => {});
+            }}
+            disabled={!value}
+            title={copied ? 'Copied ✓' : 'Copy'}
+            className={`px-2 py-2 rounded-lg border transition-colors ${copied
+                ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                : 'border-gray-200 dark:border-zinc-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed'}`}
+        >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+        </button>
+    );
+};
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance }) => {
 
   const [metaDataForm, setMetaDataForm] = useState<ScriptMetadata>(metadata);
@@ -354,13 +381,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                                 {t.apiKeyLabel} (DeepSeek)
                             </label>
-                            <input 
+                            <div className="flex items-center gap-2">
+                                <input 
                                 type="password" 
                                 value={appSettingsForm.deepseekApiKey} 
                                 onChange={e => setAppSettingsForm({...appSettingsForm, deepseekApiKey: e.target.value})}
                                 placeholder="sk-..."
                                 className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                             />
+                                <CopyKeyButton value={appSettingsForm.deepseekApiKey} />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
@@ -385,13 +415,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                                 {t.apiKeyLabel} (Gemini - Optional)
                             </label>
-                            <input
+                            <div className="flex items-center gap-2">
+                                <input
                                 type="password"
                                 value={appSettingsForm.geminiApiKey}
                                 onChange={e => setAppSettingsForm({...appSettingsForm, geminiApiKey: e.target.value})}
                                 placeholder="Overwrite env variable..."
                                 className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                             />
+                                <CopyKeyButton value={appSettingsForm.geminiApiKey} />
+                            </div>
                             <p className="mt-1 text-[10px] text-gray-400">Leave empty to use the system default key.</p>
                         </div>
                         <div>
@@ -435,13 +468,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                             {t.videoGenLabel || 'Video Generation · MiniMax H3'}
                         </label>
-                        <input
+                        <div className="flex items-center gap-2">
+                                <input
                             type="password"
                             value={appSettingsForm.minimaxApiKey}
                             onChange={e => setAppSettingsForm({...appSettingsForm, minimaxApiKey: e.target.value})}
                             placeholder="MiniMax API Key..."
                             className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                         />
+                                <CopyKeyButton value={appSettingsForm.minimaxApiKey} />
+                            </div>
                         <p className="mt-1 text-[10px] text-gray-400">
                             {t.videoGenHint || 'Used only when submitting white-model generation tasks (billed per second: output + input reference video). Get a key at platform.minimaxi.com → 账户管理 → 接口密钥.'}
                         </p>
@@ -485,6 +521,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                                     {t.falKeyLabel || 'FAL API Key'}
                                 </label>
+                                <div className="flex items-center gap-2">
                                 <input
                                     type="password"
                                     value={appSettingsForm.falKey}
@@ -492,6 +529,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                     placeholder="Key <your-fal-key>"
                                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
                                 />
+                                <CopyKeyButton value={appSettingsForm.falKey} />
+                            </div>
                                 <p className="mt-1 text-[10px] text-gray-400">
                                     {t.falKeyHint || 'Get a key at fal.ai → Billing → API Keys. Official pricing (openai/gpt-image-2.5): $0.00402/img at 1024×768 low, $0.00441 at 1920×1080 low, $0.03612 at 1024×768 high.'}
                                 </p>
