@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm install          # install dependencies
 npm run dev          # web dev server → http://localhost:5173 (strictPort)
+npm run dev:https    # same, but self-signed HTTPS (VITE_HTTPS=1) — makes the LAN origin a secure context so the folder asset library works from other devices; first visit must accept the cert warning. Default `dev` stays HTTP: the WebMCP bridge/localhost browser expect it.
 npm run build        # production build (outputs to dist/)
 npm run preview      # preview the production build
 
