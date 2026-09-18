@@ -12,7 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build-debug": "tauri build --debug",
-    "dev:https": "VITE_HTTPS=1 vite"
+    "dev:https": "VITE_HTTPS=1 vite --port 5174"
   },
   "engines": {
     "node": ">=20"
