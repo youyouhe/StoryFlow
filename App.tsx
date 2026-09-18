@@ -1716,9 +1716,11 @@ function App() {
           return h?.graybox && h.graybox.kind === 'scene' && !h.graybox.error ? h.graybox : null;
         })();
         const segGrayboxes: Record<string, GrayboxData> = {};
+        let segFailures = 0;
+        let segFirstError: string | null = null;
         for (let si = 0; si < plan.segments.length; si++) {
           const seg = plan.segments[si];
-          setAIState({ isLoading: true, suggestion: result || null, error: null, decision: null, grayboxDraft: null, batchProgress: { current: si + 1, total: plan.segments.length } });
+          setAIState({ isLoading: true, suggestion: result || null, error: null, info: null, decision: null, grayboxDraft: null, batchProgress: { current: si + 1, total: plan.segments.length } });
           const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
           const gb = await generateSegmentGraybox(
             segBlocks, seg.beats, segLayout, seg.sceneHeading,
@@ -1732,8 +1734,13 @@ function App() {
               lastModified: Date.now(),
             }));
           } else {
+            segFailures++;
+            if (!segFirstError) segFirstError = gb.error;
             console.warn('Segment graybox failed:', gb.error);
           }
+        }
+        if (segFailures) {
+          setAIState({ isLoading: false, suggestion: result || null, error: `${segFailures}/${plan.segments.length} 段灰盒生成失败——${segFirstError ?? '未知原因'}`, decision: null, grayboxDraft: null, batchProgress: null });
         }
       }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
