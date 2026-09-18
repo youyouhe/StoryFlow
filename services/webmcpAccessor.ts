@@ -15,7 +15,7 @@ import { generateImages } from './minimaxService';
 import { getAiLog } from './aiLog';
 import { buildSeedancePrompt, buildH3Prompt } from '../utils/whiteModelPrompt';
 import { checkGrayboxHealth } from '../utils/grayboxHealth';
-import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
+import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { parseCharacterName, baseCharName, resolveBeatVariant } from '../utils/beatCast';
 
@@ -462,6 +462,15 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
           subjectRef = await (await fetch(frameRefs.character.url)).blob().catch(() => undefined);
           lockName = (frameRefs.character.subject ?? '').split('/')[0];
         }
+        // ACTION multi-character: every cast sheet conditions the frame.
+        let charRefs: Blob[] = [];
+        if (b.type === 'ACTION') {
+          const beat = resolveBeatRefs(screenplay.blocks, idx, [], screenplay.referenceBindings, refImages, sceneHead, screenplay.sequences);
+          for (const m of [beat.primary, ...beat.others]) {
+            if (!m) continue;
+            try { charRefs.push(await (await fetch(m.image.url)).blob()); } catch { /* skip */ }
+          }
+        }
         let envRefB: Blob | undefined;
         if (b.type !== 'CHARACTER' && frameRefs.environment) envRefB = await (await fetch(frameRefs.environment.url)).blob().catch(() => undefined);
         const imgs = await generateImages(
@@ -469,7 +478,10 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
             ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
           b.imagePrompt,
           { n: 1, aspectRatio: '16:9', subjectReference: subjectRef,
-            references: b.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : undefined },
+            references: {
+              ...(charRefs.length ? { characters: charRefs } : {}),
+              ...(b.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
+            } },
         );
         const stamp = Date.now().toString(36);
         const name = b.type === 'CHARACTER'

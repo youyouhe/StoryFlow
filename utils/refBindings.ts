@@ -1,4 +1,4 @@
-import { RefBindings, RefImage, ScriptBlock } from '../types';
+import { RefBindings, RefImage, ScriptBlock, ScriptSequence } from '../types';
 import { computeBeatCast, collectCharacterNames, parseCharacterName, resolveBeatVariant } from './beatCast';
 
 /** Outcome of resolving a character reference image for an ACTION (storyboard)
@@ -63,7 +63,14 @@ export const resolveCharacterSheet = (
   const wantVariant = variant ?? wanted.variant;
 
   const eff = resolveRefBindings(bindings, sceneHeading);
-  const boundId = eff.characters[wantBase];
+  // Binding lookup, most-specific first: 女主/浴袍 (this variant) → 女主 (the
+  // character's general sheet) → the name as passed. Per-variant keys are what
+  // make in-scene 换装 bindable: different beats of one character can link to
+  // DIFFERENT pngs, and re-linking a slot never disturbs the others.
+  const boundId =
+    (wantVariant ? eff.characters[`${wantBase}/${wantVariant}`] : undefined) ??
+    eff.characters[wantBase] ??
+    eff.characters[name];
   if (boundId) {
     const im = refImages.find(r => r.id === boundId);
     if (im) return im;
@@ -165,6 +172,73 @@ export const resolveActionRef = (
 
   if (!image) return { kind: 'needs-image', characterName: primary, variant };
   return { kind: 'ready', characterName: primary, variant, image };
+};
+
+
+/** Full beat conditioning: EVERY cast member's sheet (variant/age-aware,
+ *  spelling-agnostic) plus the scene backdrop. This is what a frame
+ *  generation should be conditioned on — one reference per character in
+ *  frame (several characters in one ACTION is normal), not just the lead.
+ *
+ *  Gating is still PRIMARY-only: if the lead cast member has no sheet the
+ *  caller blocks (needs-image) exactly as before. Secondary cast members
+ *  without a sheet are skipped silently — a missing secondary degrades the
+ *  shot gracefully instead of blocking it.
+ *
+ *  `characterRefs` (returned) is ordered: primary first. */
+export interface BeatRefs {
+  primary?: { name: string; variant?: string; image: RefImage };
+  others: { name: string; variant?: string; image: RefImage }[];
+  environment?: RefImage;
+  /** true when the lead cast member exists but has no sheet → caller blocks. */
+  needsImage: boolean;
+}
+
+export const resolveBeatRefs = (
+  blocks: ScriptBlock[],
+  beatIndex: number,
+  extraCharNames: string[],
+  bindings: RefBindings | undefined,
+  refImages: RefImage[],
+  sceneHeading?: string,
+  sequences?: ScriptSequence[] | undefined,
+): BeatRefs => {
+  const universe = collectCharacterNames(blocks);
+  for (const n of extraCharNames) {
+    if (n && !universe.includes(n)) universe.push(n);
+  }
+  const cast = computeBeatCast(blocks, beatIndex, universe);
+  if (!cast.length) return { others: [], needsImage: false };
+
+  const primary = cast[0];
+  const variantOf = (name: string): string | undefined => resolveBeatVariant(blocks, beatIndex, name);
+  const pVariant = variantOf(primary);
+  const primarySheet = resolveCharacterSheet(primary, bindings, refImages, sceneHeading, undefined, pVariant);
+
+  const others: BeatRefs['others'] = [];
+  for (const name of cast.slice(1)) {
+    const sheet = resolveCharacterSheet(name, bindings, refImages, sceneHeading, undefined, variantOf(name));
+    if (sheet) others.push({ name, variant: variantOf(name), image: sheet });
+  }
+
+  const eff = resolveRefBindings(bindings, sceneHeading);
+  let environment: RefImage | undefined;
+  if (eff.environment) environment = refImages.find(r => r.id === eff.environment);
+  if (!environment && sceneHeading) {
+    environment = refImages.find(r =>
+      (r.subject ?? '') === sceneHeading ||
+      (r.kind === 'environment' && r.sceneKey && sceneHeading.includes(r.sceneKey)) ||
+      (r.kind === 'environment' && (r.subject ?? '') === '环境'));
+  }
+
+  return {
+    primary: primarySheet
+      ? { name: primary, variant: pVariant, image: primarySheet }
+      : undefined,
+    others,
+    environment,
+    needsImage: !primarySheet,
+  };
 };
 
 /** Resolve the EFFECTIVE bindings for a scene: per-scene costume overrides

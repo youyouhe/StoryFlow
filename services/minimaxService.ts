@@ -210,7 +210,14 @@ const clampImagePrompt = (prompt: string): string => {
 export const generateImages = async (
   cfg: MiniMaxConfig & { falKey?: string; falModel?: string; falQuality?: 'high' | 'low'; provider?: ImageProvider },
   prompt: string,
-  opts?: { n?: number; aspectRatio?: string; subjectReference?: Blob; references?: { character?: Blob; landscape?: Blob } },
+  opts?: {
+    n?: number;
+    aspectRatio?: string;
+    /** Legacy single-identity lock (kept for compatibility). */
+    subjectReference?: Blob;
+    /** Full frame conditioning: every character sheet + the scene backdrop. */
+    references?: { characters?: Blob[]; landscape?: Blob };
+  },
 ): Promise<GeneratedImage[]> => {
   // FAL backend: queue async submit→poll, then materialize CDN blobs.
   if (cfg.provider === 'fal') {
@@ -223,8 +230,8 @@ export const generateImages = async (
     // first, then any scene/environment backdrop — a frame references both the
     // character (identity lock) and the scene it stands in (背景一致).
     const refBlobs: Blob[] = [];
-    if (opts?.subjectReference) refBlobs.push(opts.subjectReference);
-    if (opts?.references?.character) refBlobs.push(opts.references.character);
+    if (opts?.references?.characters?.length) refBlobs.push(...opts.references.characters);
+    else if (opts?.subjectReference) refBlobs.push(opts.subjectReference);
     if (opts?.references?.landscape) refBlobs.push(opts.references.landscape);
     let result;
     try {
@@ -258,11 +265,16 @@ export const generateImages = async (
   // Subject reference (图生图 identity lock): array of {type:'character',
   // image_file} per the official schema — base64 Data URL natively supported,
   // single front-facing subject works best (exactly our turnaround sheets).
-  const identityRef = opts?.subjectReference ?? opts?.references?.character;
-  if (identityRef) {
-    body.subject_reference = await asBase64DataUri(identityRef).then(uri => [{
-      type: 'character', image_file: uri,
-    }]);
+  // subject_reference is an ARRAY — every present character sheet conditions
+  // its own identity, so multi-character ACTIONs can lock all of them.
+  const identityRefs = [
+    ...(opts?.subjectReference ? [opts.subjectReference] : []),
+    ...(opts?.references?.characters ?? []),
+  ];
+  if (identityRefs.length) {
+    body.subject_reference = await Promise.all(
+      identityRefs.slice(0, 4).map(b => asBase64DataUri(b).then(uri => ({ type: 'character', image_file: uri }))),
+    );
   }
   // MiniMax image-01 exposes no landscape/scenery slot (only character
   // subject_reference). A scene backdrop on MiniMax is therefore carried in the

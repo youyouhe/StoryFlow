@@ -4,7 +4,7 @@ import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 import type { ScriptBlock, Screenplay, GrayboxData, RefImage, RefBindings, H3Task, AppSettings, Language } from '../types';
 import { Graybox3DView } from './Graybox3DView';
-import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet } from '../utils/refBindings';
+import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs, normIdentity } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { computeBeatCast, parseCharacterName, resolveBeatVariant } from '../utils/beatCast';
 import { grayboxOverviewLine } from '../utils/exportData';
@@ -349,12 +349,12 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
           {/* Chips are BUTTONS: click to change/link what this frame locks to.
               Never a dead end — 不满意就换绑。 */}
           {panelBlock.type !== 'SCENE_HEADING' && (refPreview.character ? (
-            <button type="button" onClick={() => setLinkingTarget({ kind: 'character', name: refPreview.characterLabel.split('（')[0], variant: refPreview.characterLabel.includes('（') ? refPreview.characterLabel.split('（')[1].replace('）','') : undefined })} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:border-indigo-500 cursor-pointer" title={t.refLockChange}>
+            <button type="button" onClick={() => { const ni = normIdentity(refPreview.characterLabel); setLinkingTarget({ kind: 'character', name: ni.base, variant: ni.variant }); }} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:border-indigo-500 cursor-pointer" title={t.refLockChange}>
               <img src={refPreview.character.url} alt="" className="w-3.5 h-3.5 rounded-sm object-cover" />
               ① {refPreview.characterLabel}
             </button>
           ) : refPreview.needsImage ? (
-            <button type="button" onClick={() => setLinkingTarget({ kind: 'character', name: refPreview.characterLabel })} className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:border-amber-500 cursor-pointer" title={t.refLockChange}>
+            <button type="button" onClick={() => { const ni = normIdentity(refPreview.characterLabel); setLinkingTarget({ kind: 'character', name: ni.base, variant: ni.variant }); }} className="px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:border-amber-500 cursor-pointer" title={t.refLockChange}>
               ① {refPreview.characterLabel} · {t.refLockNoSheet}
             </button>
           ) : (
@@ -458,6 +458,11 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   const bootstrapChar = panelBlock.type === 'ACTION' && panelActionRef?.kind === 'needs-image'
                     ? panelActionRef
                     : null;
+                  // FULL beat conditioning: every cast member's sheet + the
+                  // scene backdrop (multi-character ACTIONs lock all of them).
+                  const beatRefs = panelBlock.type === 'ACTION'
+                    ? resolveBeatRefs(screenplay.blocks, panelBlockIdx, panelSceneCharNames, screenplay.referenceBindings, refImages, envScene, screenplay.sequences)
+                    : null;
                   const parsedName = panelBlock.type === 'CHARACTER'
                     ? parseCharacterName(panelBlock.content)
                     : (panelActionRef?.kind === 'ready' || panelActionRef?.kind === 'needs-image')
@@ -487,6 +492,14 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   if (frameRefs.character) {
                     subjectRef = await (await fetch(frameRefs.character.url)).blob().catch(() => undefined);
                   }
+                  // ACTION multi-character: every cast sheet conditions the frame.
+                  let charRefs: Blob[] = [];
+                  if (beatRefs) {
+                    for (const m of [beatRefs.primary, ...beatRefs.others]) {
+                      if (!m) continue;
+                      try { charRefs.push(await (await fetch(m.image.url)).blob()); } catch { /* skip unreadable sheet */ }
+                    }
+                  }
                   // ③ env backdrop: only for DIALOGUE/ACTION (独立背景 for sheets).
                   let envRefB: Blob | undefined;
                   if (panelBlock.type !== 'CHARACTER' && frameRefs.environment) {
@@ -496,8 +509,12 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
                       ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
                     panelBlock.imagePrompt!,
-                    { n: 1, aspectRatio: '16:9', subjectReference: subjectRef,
-                      references: panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : undefined },
+                    { n: 1, aspectRatio: '16:9',
+                      subjectReference: subjectRef,
+                      references: {
+                        ...(charRefs.length ? { characters: charRefs } : {}),
+                        ...(panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
+                      } },
                   );
                   const stamp = Date.now().toString(36);
                   const name = panelBlock.type === 'CHARACTER'
@@ -681,10 +698,14 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     key={r.id}
                     onClick={() => {
                       if (linkingTarget.kind === 'character') {
-                        // Script-wide binding: this asset IS the character's sheet.
+                        // Script-wide binding, PER-VARIANT key when the slot has
+                        // a costume variant (女主/初始造型): different variant
+                        // slots can hold different pngs; re-linking one slot
+                        // never disturbs the others.
+                        const key = linkingTarget.variant ? `${linkingTarget.name}/${linkingTarget.variant}` : linkingTarget.name;
                         onRefBindingsChange({
                           ...refBindings,
-                          characters: { ...refBindings.characters, [linkingTarget.name]: r.id },
+                          characters: { ...refBindings.characters, [key]: r.id },
                         });
                       } else {
                         // Per-scene binding: this asset is THIS scene's backdrop.
