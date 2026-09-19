@@ -36,6 +36,9 @@ interface AIModalProps {
     onVideoPlanDurationChange?: (n: number) => void;
     planResolution?: '480P' | '768P' | '2K';
     onPlanResolutionChange?: (r: '480P' | '768P' | '2K') => void;
+    /** Live H3 tasks for this plan — per-segment status + download links. */
+    planTasks?: { id: string; segmentIndex?: number; status: string; resultUrl?: string; error?: string }[];
+    planNextHint?: string;
     videoPlanModelId?: string;
     onVideoPlanModelChange?: (id: string) => void;
     /** Fired after either knob changes — App re-runs the (deterministic,
@@ -67,7 +70,13 @@ export const AIModal: React.FC<AIModalProps> = ({
     onVideoPlanParamsChange,
     planResolution = '768P',
     onPlanResolutionChange,
+    planTasks,
+    planNextHint,
 }) => {
+    const H3_STATUS_ZH: Record<string, string> = {
+        uploading: '上传中', submitting: '提交中', queued: '排队中',
+        running: '生成中', succeeded: '完成', failed: '失败',
+    };
     const model = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
     const durations: number[] = [];
     for (let s = model.min; s <= model.max; s++) durations.push(s);
@@ -265,7 +274,7 @@ export const AIModal: React.FC<AIModalProps> = ({
 
                     {aiMode === 'VIDEO_PLAN' && aiState.suggestion && (
                         <div className="space-y-3">
-                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t.videoPlanNext}</p>
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{planNextHint ?? t.videoPlanNext}</p>
                             <button
                                 onClick={() => {
                                     const blob = new Blob([aiState.suggestion || ''], { type: 'text/markdown' });
@@ -381,6 +390,27 @@ export const AIModal: React.FC<AIModalProps> = ({
                             <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 text-center">
                                 prompt = 各段时间轴节拍 · 参考图 = 已绑定的角色设定图 · 无需白模视频
                             </p>
+                        </div>
+                    )}
+                    {aiMode === 'VIDEO_PLAN' && !!planTasks?.length && (
+                        <div className="px-4 pb-2 space-y-1">
+                            {planTasks.map(task => (
+                                <div key={task.id} className="flex items-center justify-between gap-2 text-[11px]">
+                                    <span className="text-gray-500 dark:text-gray-400 shrink-0">段{task.segmentIndex ?? '?'}</span>
+                                    {task.status === 'succeeded' && task.resultUrl ? (
+                                        <a href={task.resultUrl} target="_blank" rel="noreferrer" download
+                                           className="text-emerald-600 dark:text-emerald-400 underline font-medium">
+                                            ✅ 生成完成 · 下载视频
+                                        </a>
+                                    ) : task.status === 'failed' ? (
+                                        <span className="text-red-500 truncate" title={task.error}>❌ 失败：{task.error?.slice(0, 60)}</span>
+                                    ) : (
+                                        <span className="text-indigo-500 dark:text-indigo-400 animate-pulse">
+                                            {H3_STATUS_ZH[task.status] ?? task.status}…（每 10s 自动刷新）
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
                     {aiState.error && (

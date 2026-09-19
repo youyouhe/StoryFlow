@@ -271,6 +271,16 @@ function App() {
   // The live plan (replaces the old window stash — state is reactive and dies
   // with the script, so a stale plan can never cross-submit into another one).
   const [videoPlan, setVideoPlan] = useState<VideoPlan | null>(null);
+  // Live H3 tasks belonging to the current plan's chain — rendered in the
+  // modal so simple-mode users see progress WITHOUT opening the graybox 3D
+  // view (where task lists used to live, invisible in simple mode).
+  const planChainId = videoPlan ? `videoplan-${videoPlan.segments[0].blockIds[0]}` : null;
+  const planTasks = useMemo(() => (
+    planChainId
+      ? h3Tasks.filter(t => t.chainId === planChainId).sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0))
+      : []
+  ), [h3Tasks, planChainId]);
+
   // Pre-flight scan: which cast members of each segment have bound sheets.
   // Recomputed whenever bindings/images change, so the checklist in the modal
   // is always current at the moment the user reads it.
@@ -2562,6 +2572,10 @@ function App() {
                     // displayed under a 10s cap) and mislead the user.
                     if (aiState.suggestion) void executeAI();
                 }}
+                planTasks={planTasks}
+                planNextHint={screenplay.productionMode === 'simple'
+                    ? '提交后任务状态实时显示在下方，生成完成可直接下载'
+                    : t.videoPlanNext}
             />
         )}
 
