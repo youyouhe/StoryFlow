@@ -7,14 +7,13 @@
  * so a pure client-side flow works with no backend.
  *
  * Pipeline: export white-model video (MediaRecorder, must be MP4) →
- * CN platform (api.minimax.cn, /v1 generation):
- * [white-model path] POST /v1/files/upload (purpose=video_generation_input)
- * → POST /v1/video_generation (MiniMax-Hailuo-2.3, flat prompt, duration
- * 6|10, resolution 768P|1080P) → GET /v1/query/video_generation?task_id=…
- * every 10s. Reference images ride on `subject_reference` (base64 data
- * URIs, character type). NOTE: the v1 CN API has no reference-video field —
- * submitting a white-model recording is rejected with a clear error; use
- * the simple (text-to-video) path.
+ * CN platform (api.minimax.cn) hosts BOTH API generations, per MODEL:
+ *   MiniMax-H3 / H3-Max → POST /v2/video_generation (content array: text +
+ *     image_url roles, variable duration 4~15) → GET
+ *     /v2/query/video_generation/{task_id}. Reference video IS supported
+ *     here (role: reference_video) — the white-model path stays alive.
+ *   MiniMax-Hailuo-2.3 → /v1/video_generation (flat prompt; no reference
+ *     video). Switch model ids together with the endpoint generation.
  *
  * Constraints encoded here (from the official guide):
  *   - reference video: MP4/MOV (H.264/265), single segment 2–15s, ≤50MB
@@ -127,25 +126,28 @@ export const createH3Task = async (
   p: H3SubmitParams,
   videoFileUri?: string,
 ): Promise<string> => {
-  if (videoFileUri) {
-    // The CN v1 API has no reference-video field (视频延续 is a separate
-    // product). Say so instead of shipping a body the server ignores.
-    throw new Error('国内站 Hailuo-2.3 的 v1 接口暂不支持白模参考视频——请使用简易模式（文本生视频）。');
+  // H3/H3-Max live on v2: content-array body with role-tagged references.
+  // The white-model reference video is OPTIONAL here (simple-mode segments
+  // generate without one, conditioned on prompt + character sheets).
+  const content: Array<Record<string, unknown>> = [
+    { type: 'text', text: p.prompt },
+    ...(videoFileUri
+      ? [{ type: 'video_url', video_url: { url: videoFileUri }, role: 'reference_video' }]
+      : []),
+  ];
+  for (const img of p.referenceImages.slice(0, 9)) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: await asBase64DataUri(img.blob) },
+      role: 'reference_image',
+    });
   }
-  // Flat prompt body (v1): our prompts are deliberately composed (timed
-  // beats + costume continuity), so the server-side prompt optimizer must
-  // not rewrite them.
-  const subjectRefs = await Promise.all(p.referenceImages.slice(0, 3).map(async img => ({
-    type: 'character',
-    image_file: await asBase64DataUri(img.blob),
-  })));
-  const body: Record<string, unknown> = {
+  const body = {
     model: p.model ?? MINIMAX_VIDEO_MODEL,
-    prompt: p.prompt,
-    duration: p.outputSeconds,
+    content,
     resolution: p.resolution,
-    prompt_optimizer: false,
-    ...(subjectRefs.length ? { subject_reference: subjectRefs } : {}),
+    duration: p.outputSeconds,
+    prompt_engineering: true,
   };
   // One automatic retry on network-level failure. Transient blips (DNS hiccup,
   // failed CORS preflight, proxy reset) present as "Failed to fetch" with a
@@ -158,7 +160,7 @@ export const createH3Task = async (
   let lastNetErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/video_generation`, {
+      res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/video_generation`, {
         method: 'POST',
         headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -189,23 +191,24 @@ export const createH3Task = async (
 
 /** Poll one task. */
 export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H3TaskStatus> => {
-  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`, {
+  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/query/video_generation/${encodeURIComponent(taskId)}`, {
     headers: authHeaders(cfg.apiKey),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     return { status: 'failed', errorMessage: `查询失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}` };
   }
-  // CN v1 shape: { status: 'Queueing'|'Processing'|'Success'|'Fail',
-  // file: { download_url, … }, base_resp }. Tolerate the nested-task shape
-  // too so an intl-style response still maps.
+  // Live-tested v2 shape: task object NESTED under "task"
+  // ({task:{id,status,content,...}}); tolerate a flat response too. Status
+  // strings arrive already lowercase (queued/running/succeeded/failed);
+  // tolerate the v1 Capitalized variants in case models move generations.
   const t = data?.task ?? data;
   const raw = t?.status as string | undefined;
   const map: Record<string, H3TaskStatus['status']> = {
     Queueing: 'queued', Processing: 'running', Success: 'succeeded', Fail: 'failed',
     queued: 'queued', running: 'running', succeeded: 'succeeded', failed: 'failed',
   };
-  const status = raw ? map[raw] : undefined;
+  const status = raw ? (map[raw] ?? raw as H3TaskStatus['status']) : undefined;
   logAiCall({ ts: Date.now(), durationMs: 0, op: 'h3-query', provider: 'minimax', model: 'poll',
     outcome: status && status !== 'failed' ? 'ok' : 'error', error: status ? undefined : JSON.stringify(data).slice(0, 200) });
   if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
@@ -215,7 +218,7 @@ export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H
     : undefined;
   return {
     status,
-    videoUrl: t?.file?.download_url ?? data?.file?.download_url ?? t?.content?.url ?? data?.content?.url,
+    videoUrl: t?.content?.url ?? data?.content?.url ?? t?.file?.download_url ?? data?.file?.download_url,
     errorMessage: failMsg,
   };
 };
