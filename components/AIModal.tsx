@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Sparkles, X, Boxes, Bot, Loader2, Wand2, Cloud } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { AIMode, AIState } from '../types';
@@ -52,6 +53,15 @@ export const AIModal: React.FC<AIModalProps> = ({
     // Live elapsed-seconds ticker while a batch runs — the user sees the
     // modal is alive during slow serial LLM calls instead of assuming a hang.
     const [elapsed, setElapsed] = React.useState(0);
+    // Preflight hover preview — portaled to <body> with fixed coords: the
+    // modal root has overflow-hidden + transform, which clips any in-tree
+    // popup (the first CSS group-hover attempt was invisible for exactly
+    // that reason). pointer-events-none so it never traps the mouse.
+    const [preview, setPreview] = React.useState<{ name: string; url?: string; missing?: boolean; x: number; y: number } | null>(null);
+    const openPreview = (e: React.MouseEvent, data: { name: string; url?: string; missing?: boolean }) => {
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setPreview({ ...data, x: r.left + r.width / 2, y: r.top });
+    };
     React.useEffect(() => {
         if (!aiState.batchProgress) { setElapsed(0); return; }
         const started = Date.now();
@@ -59,6 +69,7 @@ export const AIModal: React.FC<AIModalProps> = ({
         return () => clearInterval(iv);
     }, [aiState.batchProgress !== null]);
     return (
+        <>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
                 <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
@@ -260,22 +271,23 @@ export const AIModal: React.FC<AIModalProps> = ({
                                     <span className="text-gray-400 shrink-0">段{s.index} ({s.seconds}s/{s.beatCount}拍)</span>
                                     <span className="flex flex-wrap gap-x-2">
                                         {s.characters.map(c => (
-                                            <span key={c.name} className="relative group rounded px-0.5 -mx-0.5 text-emerald-600 dark:text-emerald-400 cursor-default hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
+                                            <span
+                                                key={c.name}
+                                                className="rounded px-0.5 -mx-0.5 text-emerald-600 dark:text-emerald-400 cursor-default hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                                                onMouseEnter={e => openPreview(e, { name: `${c.name} · ${c.sheetName}`, url: c.url })}
+                                                onMouseLeave={() => setPreview(null)}
+                                            >
                                                 ✓{c.name}
-                                                <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-50">
-                                                    <img src={c.url} alt={c.sheetName} className="w-44 rounded-lg border border-gray-200 dark:border-zinc-600 shadow-xl bg-white dark:bg-zinc-900" />
-                                                    <span className="block text-center text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">{c.sheetName}</span>
-                                                </span>
                                             </span>
                                         ))}
                                         {s.missing.map(c => (
-                                            <span key={c} className="relative group rounded px-0.5 -mx-0.5 text-amber-600 dark:text-amber-400 cursor-default hover:bg-amber-50 dark:hover:bg-amber-900/30">
+                                            <span
+                                                key={c}
+                                                className="rounded px-0.5 -mx-0.5 text-amber-600 dark:text-amber-400 cursor-default hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                                                onMouseEnter={e => openPreview(e, { name: c, missing: true })}
+                                                onMouseLeave={() => setPreview(null)}
+                                            >
                                                 ⚠{c}
-                                                <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-50">
-                                                    <span className="flex items-center justify-center w-44 h-28 rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-[10px] text-amber-600 dark:text-amber-400 text-center px-2 shadow-xl">
-                                                        未绑定设定图——将无参考提交，形象可能漂移
-                                                    </span>
-                                                </span>
                                             </span>
                                         ))}
                                         {!s.characters.length && !s.missing.length && (
@@ -370,5 +382,31 @@ export const AIModal: React.FC<AIModalProps> = ({
                 </div>
             </div>
         </div>
+        {/* Hover preview portaled outside the modal — immune to its
+            overflow-hidden/transform clipping. Flips below the chip when
+            there is no room above. */}
+        {preview && createPortal(
+            <div
+                className="fixed z-[100] pointer-events-none"
+                style={{
+                    left: preview.x,
+                    top: preview.y,
+                    transform: preview.y < 300 ? 'translate(-50%, 10px)' : 'translate(-50%, calc(-100% - 8px))',
+                }}
+            >
+                {preview.missing ? (
+                    <div className="flex items-center justify-center w-44 h-28 rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-[10px] text-amber-600 dark:text-amber-400 text-center px-2 shadow-xl">
+                        {preview.name}：未绑定设定图——将无参考提交，形象可能漂移
+                    </div>
+                ) : (
+                    <div>
+                        <img src={preview.url} alt={preview.name} className="w-44 rounded-lg border border-gray-200 dark:border-zinc-600 shadow-xl bg-white dark:bg-zinc-900" />
+                        <div className="text-center text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">{preview.name}</div>
+                    </div>
+                )}
+            </div>,
+            document.body,
+        )}
+        </>
     );
 };
