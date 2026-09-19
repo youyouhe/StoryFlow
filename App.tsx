@@ -263,8 +263,7 @@ function App() {
   const planPreflight = useMemo(() => {
     if (!videoPlan) return null;
     return videoPlan.segments.map((seg, i) => {
-      const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
-      const refs = resolveSegmentRefs(seg, segBlocks, refBindings, refImages);
+      const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       return {
         index: i + 1,
         seconds: clampSegmentSeconds(seg.duration),
@@ -616,8 +615,7 @@ function App() {
     for (let si = 0; si < plan.segments.length; si++) {
       const seg = plan.segments[si];
       setPlanH3Progress({ current: si + 1, total: plan.segments.length });
-      const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
-      const refs = resolveSegmentRefs(seg, segBlocks, refBindings, refImages);
+      const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
       shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.characters.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
       if (refs.missing.length) {

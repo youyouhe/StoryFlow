@@ -57,20 +57,34 @@ export interface SegmentRefs {
 /**
  * Character sheets for a segment: union of per-beat cast (text mentions +
  * CHARACTER cues) resolved through the same binding rules as single shots.
+ * `allBlocks` is the FULL screenplay block list — the planner's blockIds
+ * cover only the timed beat rows, so the slice below is cut by the segment's
+ * span (one row early, to keep the CHARACTER cue above the first beat) and
+ * carries the cues the cast matcher depends on.
  */
 export const resolveSegmentRefs = (
   seg: VideoSegment,
-  segBlocks: ScriptBlock[],
+  allBlocks: ScriptBlock[],
   bindings: RefBindings | undefined,
   refImages: RefImage[],
 ): SegmentRefs => {
+  const firstIdx = allBlocks.findIndex(b => b.id === seg.beats[0]?.startBlockId);
+  const lastIdx = allBlocks.findIndex(b => b.id === seg.beats[seg.beats.length - 1]?.endBlockId);
+  const segBlocks = firstIdx >= 0 && lastIdx >= firstIdx
+    ? allBlocks.slice(Math.max(0, firstIdx - 1), lastIdx + 1)
+    : [];
   const universe = collectCharacterNames(segBlocks);
   const names: string[] = [];
-  seg.beats.forEach((_, i) => {
-    for (const n of computeBeatCast(segBlocks, i, universe)) {
+  for (const beat of seg.beats) {
+    // computeBeatCast indexes BLOCKS, not beats — map each planned beat to
+    // its block position inside the segment slice (the slice also holds
+    // SCENE_HEADING/CHARACTER rows, so index !== beat number).
+    const bi = segBlocks.findIndex(b => b.id === beat.startBlockId);
+    if (bi < 0) continue;
+    for (const n of computeBeatCast(segBlocks, bi, universe)) {
       if (!names.includes(n)) names.push(n);
     }
-  });
+  }
   const urls: string[] = [];
   const characters: string[] = [];
   const missing: string[] = [];
