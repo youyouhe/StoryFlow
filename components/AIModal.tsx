@@ -25,6 +25,10 @@ interface AIModalProps {
      *  with bound character sheets). Absent → button hidden. */
     onSubmitPlanToH3?: () => void;
     planH3Progress?: { current: number; total: number } | null;
+    /** Pre-submit scan of every segment's cast: which characters have bound
+     *  design sheets, which don't. Purely informational — missing sheets
+     *  warn, never veto. */
+    planPreflight?: { index: number; seconds: number; beatCount: number; characters: string[]; missing: string[] }[] | null;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -43,6 +47,7 @@ export const AIModal: React.FC<AIModalProps> = ({
     runContinuation,
     onSubmitPlanToH3,
     planH3Progress,
+    planPreflight,
 }) => {
     // Live elapsed-seconds ticker while a batch runs — the user sees the
     // modal is alive during slow serial LLM calls instead of assuming a hang.
@@ -243,6 +248,34 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 <FileText className="w-3.5 h-3.5" />
                                 {t.videoPlanExport}
                             </button>
+                        </div>
+                    )}
+                    {aiMode === 'VIDEO_PLAN' && aiState.suggestion && planPreflight && (
+                        <div className="px-4 pb-1 space-y-1">
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                                角色设定图预检
+                            </p>
+                            {planPreflight.map(s => (
+                                <div key={s.index} className="flex items-start gap-1.5 text-[11px] leading-relaxed">
+                                    <span className="text-gray-400 shrink-0">段{s.index} ({s.seconds}s/{s.beatCount}拍)</span>
+                                    <span className="flex flex-wrap gap-x-2">
+                                        {s.characters.map(c => (
+                                            <span key={c} className="text-emerald-600 dark:text-emerald-400">✓{c}</span>
+                                        ))}
+                                        {s.missing.map(c => (
+                                            <span key={c} className="text-amber-600 dark:text-amber-400" title="未绑定设定图——该角色将以无参考图方式提交，形象可能漂移">⚠{c}</span>
+                                        ))}
+                                        {!s.characters.length && !s.missing.length && (
+                                            <span className="text-gray-400">无角色（空镜段）</span>
+                                        )}
+                                    </span>
+                                </div>
+                            ))}
+                            {planPreflight.some(s => s.missing.length) && (
+                                <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80">
+                                    ⚠ 有角色未绑定设定图——可先 Alt+S 生成设定图并在资产库绑定，再提交；仍提交则缺图角色不做形象锁定。
+                                </p>
+                            )}
                         </div>
                     )}
                     {aiMode === 'VIDEO_PLAN' && aiState.suggestion && onSubmitPlanToH3 && (

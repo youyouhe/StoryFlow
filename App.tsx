@@ -254,6 +254,26 @@ function App() {
   }, [h3Tasks]);
   // Per-segment H3 submission progress for the VIDEO_PLAN batch button.
   const [planH3Progress, setPlanH3Progress] = useState<{ current: number; total: number } | null>(null);
+  // The live plan (replaces the old window stash — state is reactive and dies
+  // with the script, so a stale plan can never cross-submit into another one).
+  const [videoPlan, setVideoPlan] = useState<VideoPlan | null>(null);
+  // Pre-flight scan: which cast members of each segment have bound sheets.
+  // Recomputed whenever bindings/images change, so the checklist in the modal
+  // is always current at the moment the user reads it.
+  const planPreflight = useMemo(() => {
+    if (!videoPlan) return null;
+    return videoPlan.segments.map((seg, i) => {
+      const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
+      const refs = resolveSegmentRefs(seg, segBlocks, refBindings, refImages);
+      return {
+        index: i + 1,
+        seconds: clampSegmentSeconds(seg.duration),
+        beatCount: seg.beats.length,
+        characters: refs.characters,
+        missing: refs.missing,
+      };
+    });
+  }, [videoPlan, screenplay.blocks, refBindings, refImages]);
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -583,11 +603,11 @@ function App() {
    *  no white-model video. Sequential — H3 bills per task and the user reads
    *  progress one segment at a time. */
   const submitPlanToH3 = useCallback(async () => {
-    const plan = (window as unknown as { __videoPlan?: VideoPlan }).__videoPlan;
-    if (!plan || !plan.segments.length) {
+    if (!videoPlan || !videoPlan.segments.length) {
       setAIState(prev => ({ ...prev, error: '没有可提交的视频分段计划——请先运行 视频分段。' }));
       return;
     }
+    const plan = videoPlan;
     setPlanH3Progress({ current: 0, total: plan.segments.length });
     shipLog('flow', 'info', `H3 plan submission start: ${plan.segments.length} segments`);
     let okCount = 0;
@@ -633,7 +653,7 @@ function App() {
     } else {
       shipLog('flow', 'info', `H3 plan submission done: ${okCount}/${plan.segments.length} tasks created`);
     }
-  }, [screenplay.blocks, refBindings, refImages, handleSubmitH3]);
+  }, [videoPlan, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
@@ -1342,6 +1362,7 @@ function App() {
 
     try {
       let result = '';
+      if (effectiveMode !== 'VIDEO_PLAN') setVideoPlan(null);
       if (effectiveMode === 'CONTINUE') {
         // Lyrics has no scene concept — skip the transition-decision step and
         // continue directly, preserving the original one-shot behavior.
@@ -1780,8 +1801,7 @@ function App() {
           return;
         }
         result = formatVideoPlan(plan);
-        // Stash the structured plan for downstream per-segment video wiring.
-        (window as unknown as { __videoPlan?: unknown }).__videoPlan = plan;
+        setVideoPlan(plan);
 
         // Per-segment graybox generation: after the plan, generate ONE
         // continuous camera per segment (LLM reads all beats + scene blocking).
@@ -2491,6 +2511,7 @@ function App() {
                 runContinuation={runContinuation}
                 onSubmitPlanToH3={() => { void submitPlanToH3(); }}
                 planH3Progress={planH3Progress}
+                planPreflight={planPreflight}
             />
         )}
 
