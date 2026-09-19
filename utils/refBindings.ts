@@ -78,7 +78,7 @@ export const resolveCharacterSheet = (
     return m ? m[1].trim() || undefined : undefined;
   };
   const variantOf = (r: RefImage): string | undefined =>
-    normIdentity(r.subject).variant ?? variantTagOf(stemOf(r));
+    r.variant ?? normIdentity(r.subject).variant ?? variantTagOf(stemOf(r));
 
   const boundId =
     (wantVariant ? eff.characters[`${wantBase}/${wantVariant}`] : undefined) ??
@@ -96,17 +96,17 @@ export const resolveCharacterSheet = (
     }
   }
 
-  // Identity candidates: match the SUBJECT or the NAME (stem, extension
-  // stripped; base may sit before a （变体） tag that trails into -gen-…).
-  // Both are user-visible identity claims — users rename assets to
-  // 女主（初始造型）.png expecting recognition, and subjects may be edited
-  // independently. Whichever field carries the identity counts.
+  // Identity candidates. PRECEDENCE: the v2 structured identity fields
+  // (charName + variant, written at generation time from the CHARACTER cue)
+  // are authoritative; subject text and filename tags are fallbacks for
+  // assets without them (manual uploads, renamed files, legacy records).
   const stemOf = (r: RefImage): string => (r.name ?? '').replace(/\.[^.]+$/, '');
   const baseOfStem = (stem: string): string => {
     const m = stem.match(/^([^()（）]*?)[（(]/);
     return (m ? m[1] : stem).trim();
   };
   const owned = refImages.filter(r => {
+    if (r.charName) return r.charName === wantBase;
     const bySubject = normIdentity(r.subject).base === wantBase;
     const byName = normIdentity(stemOf(r)).base === wantBase || baseOfStem(stemOf(r)) === wantBase;
     return bySubject || byName;
