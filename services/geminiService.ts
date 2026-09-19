@@ -247,7 +247,7 @@ Rules:
    Exception: a delivery note that belongs to ONE specific spoken line goes in that line's [PARENTHETICAL] (e.g. （语气俏皮，带展示感）).
 4. NEVER write subtitle/waveform rendering notes (字幕逐字显示…、波形随声音跳动…) — not once, and not after every line. Subtitle behavior is a video-model rule, already excluded by rule 3.
 5. Costume changes: when the input changes a character's outfit, re-cue them as NAME（SHORT COSTUME LABEL）at the beat where they re-enter. Derive ONE short label per outfit from its most distinctive feature (e.g. 女主（学院风JK）), and reuse THE SAME label every time that outfit is worn. The base name stays IDENTICAL. At the beat where the outfit FIRST appears, write the FULL outfit description into that beat's [ACTION] (e.g. 已换成第一套学院风服装：蓝黑格纹百褶短裙、白色过膝袜…); afterwards use only the short label.
-6. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim.
+6. Off-screen / voice-over lines: cue the voice as its own character with （画外） — e.g. [CHARACTER] 男声（画外） — then [DIALOGUE] with the line verbatim. While a speaker is 画外, never write them into [ACTION] staging as physically present (no entrances/gestures — voice only); the downstream video pipeline treats 画外 as off-frame and will not draw them.
 7. Dialogue must be transcribed VERBATIM. Do not paraphrase, translate, add, or drop lines.
 8. Do NOT invent characters, lines, scenes, or camera moves the input does not contain. Exactly ONE block-group per story beat — never split one beat into overlapping blocks, never describe the same beat twice.
 9. If the input has timestamps, keep each beat's time range at the START of its [ACTION] (e.g. "00:10-00:14。她…"), so shot durations survive.
@@ -356,6 +356,7 @@ ${sceneMap ? `
 
      Do not use markdown (no **bold**). Do not provide explanations. Just the labeled script blocks.
      Costume variants: when a character's OUTFIT changes from earlier (bathrobe after a shower, armor after a battle, plain clothes at home), re-cue the character with the costume in parentheses BEFORE their next beat — e.g. [CHARACTER] 张三（浴袍） — and keep using that cue until they change again. Keep the base name IDENTICAL; only the parenthetical differs. Never invent a new character name for the same person. This is how the storyboard pipeline knows which outfit to draw.
+     Off-screen voices (画外音): when a character SPEAKS but is not physically in the frame — voice-over, narrator, voice through a phone/door/wall, someone calling from off-screen — cue them with the off-screen marker: [CHARACTER] 男声（画外） (Chinese) or [CHARACTER] NAME (V.O.) (English), then their [DIALOGUE] as usual. Keep the base name IDENTICAL to their on-screen cues; the marker replaces the costume slot. While a character is 画外, do NOT write them into [ACTION] as physically present (no entrances, gestures, or movement for them — they are a voice only). A narrator is 旁白（画外）. Never drop the marker: an on-screen-looking cue for a voice-only line would put the character into the generated frame.
   ${directiveInstruction}
   `;
 
