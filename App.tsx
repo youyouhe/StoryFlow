@@ -270,6 +270,7 @@ function App() {
         beatCount: seg.beats.length,
         characters: refs.bound,
         missing: refs.missing,
+        offScreen: refs.offScreen,
       };
     });
   }, [videoPlan, screenplay.blocks, refBindings, refImages]);

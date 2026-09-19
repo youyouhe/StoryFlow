@@ -33,10 +33,21 @@ export const baseCharName = (raw: string): string => parseCharacterName(raw).bas
  *
  *  `张三` and `张三（浴袍）` collapse to ONE entry (`张三`): they are the same
  *  person, and the costume change is carried separately as a variant. */
+/**
+ * Off-screen delivery markers — the screenplay V.O./O.S. convention
+ * (画外/画外音/旁白, (V.O.), (O.S.)). Such a character SPEAKS but must never
+ * be cast into the frame: no design sheet required, no identity lock, no
+ * reference image submitted — sending one would make the video model draw
+ * the speaker INTO the shot.
+ */
+export const isOffScreen = (raw: string): boolean =>
+  /画外|旁白|(?:^|[^a-z])vo(?:$|[^a-z])|v\.o\.|o\.s\.(?:$|[^a-z])|voice.?over|off.?screen/i.test(raw);
+
 export const collectCharacterNames = (blocks: ScriptBlock[]): string[] => {
   const names: string[] = [];
   for (const b of blocks) {
     if (b.type !== 'CHARACTER') continue;
+    if (isOffScreen(b.content)) continue; // voice-only: never frame cast
     const n = baseCharName(b.content);
     if (n && !names.includes(n)) names.push(n);
   }
@@ -60,6 +71,7 @@ export const computeBeatCast = (
 ): string[] => {
   const names: string[] = [];
   const add = (raw: string) => {
+    if (isOffScreen(raw)) return; // V.O./O.S. cue: speaks, never in frame
     const n = baseCharName(raw);
     if (n && allCharNames.includes(n) && !names.includes(n)) names.push(n);
   };

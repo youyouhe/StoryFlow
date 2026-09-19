@@ -5,7 +5,7 @@
  */
 import type { ScriptBlock } from '../types';
 import type { VideoSegment } from './videoPlan';
-import { collectCharacterNames, computeBeatCast } from './beatCast';
+import { collectCharacterNames, computeBeatCast, isOffScreen, baseCharName } from './beatCast';
 import { resolveCharacterSheet } from './refBindings';
 import type { RefBindings, RefImage } from '../types';
 
@@ -53,6 +53,10 @@ export interface SegmentRefs {
    *  not veto the whole segment (unlike single ACTION shots, where the
    *  missing primary identity blocks hard). */
   missing: string[];
+  /** V.O./O.S. speakers in the segment — listed informationally in the
+   *  preflight (their dialogue stays in the H3 prompt as voice) but they
+   *  never receive a reference image. */
+  offScreen: string[];
 }
 
 /**
@@ -74,6 +78,13 @@ export const resolveSegmentRefs = (
   const segBlocks = firstIdx >= 0 && lastIdx >= firstIdx
     ? allBlocks.slice(Math.max(0, firstIdx - 1), lastIdx + 1)
     : [];
+  // Voice-only cues (画外/V.O./O.S.) in the segment span — informational.
+  const offScreen: string[] = [];
+  for (const b of segBlocks) {
+    if (b.type !== 'CHARACTER' || !isOffScreen(b.content)) continue;
+    const n = baseCharName(b.content);
+    if (n && !offScreen.includes(n)) offScreen.push(n);
+  }
   const universe = collectCharacterNames(segBlocks);
   const names: string[] = [];
   for (const beat of seg.beats) {
@@ -98,5 +109,5 @@ export const resolveSegmentRefs = (
     urls.push(sheet.url);
     bound.push({ name: n, url: sheet.url, sheetName: sheet.name ?? '' });
   }
-  return { urls: urls.slice(0, 9), bound, missing };
+  return { urls: urls.slice(0, 9), bound, missing, offScreen };
 };

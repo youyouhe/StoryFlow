@@ -29,7 +29,7 @@ interface AIModalProps {
     /** Pre-submit scan of every segment's cast: which characters have bound
      *  design sheets, which don't. Purely informational — missing sheets
      *  warn, never veto. */
-    planPreflight?: { index: number; seconds: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[] }[] | null;
+    planPreflight?: { index: number; seconds: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[] }[] | null;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -290,7 +290,10 @@ export const AIModal: React.FC<AIModalProps> = ({
                                                 ⚠{c}
                                             </span>
                                         ))}
-                                        {!s.characters.length && !s.missing.length && (
+                                        {s.offScreen.map(c => (
+                                            <span key={`vo-${c}`} className="text-gray-500 dark:text-gray-400">🎙{c}·画外</span>
+                                        ))}
+                                        {!s.characters.length && !s.missing.length && !s.offScreen.length && (
                                             <span className="text-gray-400">无角色（空镜段）</span>
                                         )}
                                     </span>
