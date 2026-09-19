@@ -1922,6 +1922,19 @@ function App() {
     }
   }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t, promptSource, videoPlanDuration]);
 
+  // Re-plan immediately when the window knob changes. The planner is
+  // deterministic and AI-free, so replanning is instant — but it MUST run
+  // from an effect (post-commit), not from the select's onChange: executeAI
+  // closes over the duration state, and calling it inside the same handler
+  // that sets the state captured the PREVIOUS value (the 'lags one beat' bug).
+  const executeAIRef = useRef(executeAI);
+  executeAIRef.current = executeAI;
+  useEffect(() => {
+    if (aiMode !== 'VIDEO_PLAN' || !aiState.suggestion) return;
+    executeAIRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoPlanDuration]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent, id: string, selectionStart: number) => {
     if (isReadOnly) return;
 
@@ -2599,13 +2612,6 @@ function App() {
                 onVideoPlanDurationChange={setVideoPlanDuration}
                 planResolution={planResolution}
                 onPlanResolutionChange={setPlanResolution}
-                onVideoPlanParamsChange={() => {
-                    // The planner is deterministic and AI-free — a knob change
-                    // can regenerate instantly. A STALE plan re-clamped to the
-                    // new window once showed 3 fake segments (14s grouping
-                    // displayed under a 10s cap) and mislead the user.
-                    if (aiState.suggestion) void executeAI();
-                }}
                 planTasks={planTasks}
                 planCostTotal={planCostTotal}
                 planNextHint={screenplay.productionMode === 'simple'
