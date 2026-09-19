@@ -487,8 +487,10 @@ function App() {
   const handleSubmitH3 = useCallback(async (payload: {
     blockId: string;
     blockContent: string;
-    videoBlob: Blob;
-    videoSeconds: number;
+    /** White-model reference video. ABSENT in simple mode: H3 generates
+     *  text-to-video conditioned only on prompt + character reference images. */
+    videoBlob?: Blob;
+    videoSeconds?: number;
     prompt: string;
     resolution: '768P' | '2K';
     outputSeconds: number;
@@ -546,8 +548,10 @@ function App() {
 
     const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
     try {
-      const fileUri = await uploadH3Video(cfg, payload.videoBlob);
       setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, status: 'submitting' } : t));
+      // Simple mode: no white-model video — H3 generates text-to-video
+      // conditioned on prompt + character reference images only.
+      const fileUri = payload.videoBlob ? await uploadH3Video(cfg, payload.videoBlob) : undefined;
       const taskId = await createH3Task(cfg, {
         prompt: payload.prompt,
         videoBlob: payload.videoBlob,

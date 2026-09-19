@@ -37,7 +37,9 @@ export interface H3ReferenceImage {
 
 export interface H3SubmitParams {
   prompt: string;
-  videoBlob: Blob;
+  /** White-model reference video. ABSENT in simple mode: H3 generates
+   *  text-to-video conditioned only on prompt + subject_reference images. */
+  videoBlob?: Blob;
   videoSeconds: number;
   referenceImages: H3ReferenceImage[];
   resolution: '768P' | '2K';
@@ -104,11 +106,15 @@ export const uploadH3Video = async (
 export const createH3Task = async (
   cfg: MiniMaxConfig,
   p: H3SubmitParams,
-  videoFileUri: string,
+  videoFileUri?: string,
 ): Promise<string> => {
   const content: Array<Record<string, unknown>> = [
     { type: 'text', text: p.prompt },
-    { type: 'video_url', video_url: { url: videoFileUri }, role: 'reference_video' },
+    // Reference video is OPTIONAL: simple-mode segments generate without a
+    // white-model recording, conditioned only on prompt + character sheets.
+    ...(videoFileUri
+      ? [{ type: 'video_url', video_url: { url: videoFileUri }, role: 'reference_video' }]
+      : []),
   ];
   for (const img of p.referenceImages.slice(0, 9)) {
     content.push({
@@ -169,12 +175,16 @@ export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H
 
 /** Pre-flight validation shared by the UI and the submit flow. */
 export const validateH3Submission = (p: H3SubmitParams): string | null => {
-  if (!p.videoBlob.type.includes('mp4')) {
-    return '白模视频必须是 MP4 格式——当前浏览器录出了 ' + (p.videoBlob.type || '未知格式') + '。请使用支持 MP4 录制的浏览器（如桌面 Chrome）重新导出。';
-  }
-  if (p.videoBlob.size > 50 * 1024 * 1024) return '白模视频超过 50MB 上限。';
-  if (p.videoSeconds < 2 || p.videoSeconds > 15) {
-    return `参考视频时长需在 2–15s（当前 ${p.videoSeconds.toFixed(1)}s）——请调整镜头 duration 后重新导出。`;
+  // Video checks: only when a white-model video is provided (cinematic mode).
+  // Simple mode generates text-to-video without a reference video.
+  if (p.videoBlob) {
+    if (!p.videoBlob.type.includes('mp4')) {
+      return '白模视频必须是 MP4 格式——当前浏览器录出了 ' + (p.videoBlob.type || '未知格式') + '。请使用支持 MP4 录制的浏览器（如桌面 Chrome）重新导出。';
+    }
+    if (p.videoBlob.size > 50 * 1024 * 1024) return '白模视频超过 50MB 上限。';
+    if (p.videoSeconds < 2 || p.videoSeconds > 15) {
+      return `参考视频时长需在 2–15s（当前 ${p.videoSeconds.toFixed(1)}s）——请调整镜头 duration 后重新导出。`;
+    }
   }
   if (p.referenceImages.length > 9) return '参考图超过 9 张上限。';
   if (p.outputSeconds < 4 || p.outputSeconds > 15 || !Number.isInteger(p.outputSeconds)) {
