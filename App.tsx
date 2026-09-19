@@ -2107,6 +2107,16 @@ function App() {
 
       if (!aiState.suggestion) return;
 
+      // VIDEO_PLAN + DUB results are INFORMATIONAL — the plan/state was
+      // already written elsewhere (window.__stashed plan / dubEmotion fields).
+      // Falling through to the block-insertion path below is exactly how a
+      // formatted plan once landed in the user's script as junk ACTION rows.
+      if (aiMode === 'VIDEO_PLAN' || aiMode === 'DUB') {
+          setShowAIModal(false);
+          setAIState({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
+          return;
+      }
+
       // IDEAS mode returns creative directions for reference, not script content.
       // Copy to clipboard instead of inserting into the script body.
       if (aiMode === 'IDEAS') {
