@@ -305,6 +305,7 @@ function App() {
         characters: refs.bound,
         missing: refs.missing,
         offScreen: refs.offScreen,
+        sceneEnv: refs.sceneEnv,
         cost: estimateH3Cost({
           outputSeconds: seconds,
           imageCount: refs.bound.length,

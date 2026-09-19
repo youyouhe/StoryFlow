@@ -29,7 +29,7 @@ interface AIModalProps {
     /** Pre-submit scan of every segment's cast: which characters have bound
      *  design sheets, which don't. Purely informational — missing sheets
      *  warn, never veto. */
-    planPreflight?: { index: number; seconds: number; span?: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[] }[] | null;
+    planPreflight?: { index: number; seconds: number; span?: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[]; sceneEnv?: { name: string; url: string } | null }[] | null;
     /** VIDEO_PLAN knobs: per-segment window (also the plan grouping target).
      *  Allowed values depend on the model — H3: 4~15, H3-Max: 5~15. */
     videoPlanDuration?: number;
@@ -369,6 +369,17 @@ export const AIModal: React.FC<AIModalProps> = ({
                                         {s.offScreen.map(c => (
                                             <span key={`vo-${c}`} className="text-gray-500 dark:text-gray-400">🎙{c}·画外</span>
                                         ))}
+                                        {s.sceneEnv ? (
+                                            <span
+                                                className="rounded px-0.5 -mx-0.5 text-sky-600 dark:text-sky-400 cursor-default hover:bg-sky-50 dark:hover:bg-sky-900/30"
+                                                onMouseEnter={e => openPreview(e, { name: `场景环境图 · ${s.sceneEnv!.name}`, url: s.sceneEnv!.url })}
+                                                onMouseLeave={() => setPreview(null)}
+                                            >
+                                                🎬场景图
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400" title="该场景未绑定环境图——固定机位视频缺少场景参考会背景漂移">无场景图</span>
+                                        )}
                                         {!s.characters.length && !s.missing.length && !s.offScreen.length && (
                                             <span className="text-gray-400">无角色（空镜段）</span>
                                         )}

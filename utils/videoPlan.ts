@@ -126,7 +126,12 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
       current = {
         startBlockId: b.id, endBlockId: b.id, blockIds: [b.id],
         start: timing.start, end: timing.end, range: timing.range,
-        text: b.content.replace(/^\s*\S+?\s*-\s*\S+\s*[。.，,]?/, '').trim() || b.content,
+        // Strip ONLY the leading NN:NN-NN:NN prefix (plus trailing
+        // punctuation). The old \S+-\S+ pattern matched to the first space —
+        // i.e. the WHOLE of a space-less Chinese line — and the `|| content`
+        // fallback then restored the raw text with the prefix still on it,
+        // doubling the range in every display and H3 prompt.
+        text: b.content.replace(/^\s*\d{1,2}:\d{2}(?:\.\d+)?\s*-\s*\d{1,2}:\d{2}(?:\.\d+)?\s*[。.，,]?\s*/, '').trim() || b.content,
         dialogues: [], sceneHeading,
       };
       continue;

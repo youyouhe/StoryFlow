@@ -6,7 +6,7 @@
 import type { ScriptBlock } from '../types';
 import type { VideoSegment } from './videoPlan';
 import { collectCharacterNames, computeBeatCast, isOffScreen, baseCharName, resolveBeatVariant } from './beatCast';
-import { resolveCharacterSheet } from './refBindings';
+import { resolveCharacterSheet, resolveRefBindings } from './refBindings';
 import type { RefBindings, RefImage } from '../types';
 
 /** H3 supports VARIABLE durations — every integer between the model's min
@@ -59,6 +59,9 @@ export interface SegmentRefs {
    *  preflight (their dialogue stays in the H3 prompt as voice) but they
    *  never receive a reference image. */
   offScreen: string[];
+  /** The scene's bound environment image (fixed-camera scripts need it in
+   *  EVERY segment or the background drifts). Prepend to the references. */
+  sceneEnv?: { name: string; url: string };
 }
 
 /**
@@ -90,6 +93,13 @@ export const resolveSegmentRefs = (
   // Universe from the FULL script (off-screen cues already excluded) — a
   // narrow slice would drop cues that sit before the segment span, and beat
   // texts that name a character explicitly would match nothing.
+  // Scene environment: the bound 环境图 for this segment's scene heading.
+  // A fixed-camera take must re-anchor the background in every segment.
+  let sceneEnv: SegmentRefs['sceneEnv'];
+  const envId = resolveRefBindings(bindings, seg.sceneHeading).environment;
+  const envIm = envId ? refImages.find(r => r.id === envId) : undefined;
+  if (envIm) sceneEnv = { name: envIm.name ?? '', url: envIm.url };
+
   const universe = collectCharacterNames(allBlocks);
   // Cast as (base, variant) pairs — computeBeatCast returns base names only,
   // and the costume variant named on the nearest preceding cue selects WHICH
@@ -119,7 +129,7 @@ export const resolveSegmentRefs = (
   // before any cue — the cued pair defines the costume; drop the bare one.
   const cued = new Set(castPairs.filter(p => p.variant).map(p => p.name));
   const consolidated = castPairs.filter(p => p.variant || !cued.has(p.name));
-  const urls: string[] = [];
+  const urls: string[] = sceneEnv ? [sceneEnv.url] : [];
   const bound: SegmentRefs['bound'] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
@@ -134,5 +144,5 @@ export const resolveSegmentRefs = (
     urls.push(sheet.url);
     bound.push({ name: label, url: sheet.url, sheetName: sheet.name ?? '' });
   }
-  return { urls: urls.slice(0, 9), bound, missing, offScreen };
+  return { urls: urls.slice(0, 9), bound, missing, offScreen, sceneEnv };
 };
