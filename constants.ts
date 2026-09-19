@@ -1285,7 +1285,27 @@ export const TRANSLATIONS = {
 };
 /** CN video models and their allowed output durations (seconds).
  *  H3-Max does not support the 4s window. */
-export const MINIMAX_VIDEO_MODELS: { id: string; label: string; min: number; max: number }[] = [
-  { id: 'MiniMax-H3', label: 'MiniMax-H3（4~15s）', min: 4, max: 15 },
-  { id: 'MiniMax-H3-Max', label: 'MiniMax-H3-Max（5~15s）', min: 5, max: 15 },
+export const MINIMAX_VIDEO_MODELS: {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  /** Resolutions priced for this model (刊例). H3's API-accepted 480P is
+   *  unpriced in the table, so it is not offered. */
+  resolutions: { id: '480P' | '768P' | '2K'; label: string; perSec: number }[];
+}[] = [
+  {
+    id: 'MiniMax-H3', label: 'MiniMax-H3（4~15s）', min: 4, max: 15,
+    resolutions: [
+      { id: '768P', label: '768P（¥0.50/s）', perSec: 0.5 },
+      { id: '2K', label: '2K（¥0.80/s）', perSec: 0.8 },
+    ],
+  },
+  {
+    id: 'MiniMax-H3-Max', label: 'MiniMax-H3-Max（5~15s）', min: 5, max: 15,
+    resolutions: [
+      { id: '480P', label: '480P（¥0.33/s）', perSec: 0.33 },
+      { id: '768P', label: '768P（¥0.50/s）', perSec: 0.5 },
+    ],
+  },
 ];

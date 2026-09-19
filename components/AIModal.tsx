@@ -37,8 +37,10 @@ interface AIModalProps {
     planResolution?: '480P' | '768P' | '2K';
     onPlanResolutionChange?: (r: '480P' | '768P' | '2K') => void;
     /** Live H3 tasks for this plan — per-segment status + download links. */
-    planTasks?: { id: string; segmentIndex?: number; status: string; resultUrl?: string; error?: string }[];
+    planTasks?: { id: string; segmentIndex?: number; status: string; resultUrl?: string; error?: string; estimatedCost?: number }[];
     planNextHint?: string;
+    /** Estimated total ¥ for the whole plan (output + over-quota images). */
+    planCostTotal?: number;
     videoPlanModelId?: string;
     onVideoPlanModelChange?: (id: string) => void;
     /** Fired after either knob changes — App re-runs the (deterministic,
@@ -72,6 +74,7 @@ export const AIModal: React.FC<AIModalProps> = ({
     onPlanResolutionChange,
     planTasks,
     planNextHint,
+    planCostTotal,
 }) => {
     const H3_STATUS_ZH: Record<string, string> = {
         uploading: '上传中', submitting: '提交中', queued: '排队中',
@@ -315,10 +318,13 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 onChange={e => onPlanResolutionChange?.(e.target.value as '480P' | '768P' | '2K')}
                                 className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
                             >
-                                <option value="480P">480P</option>
-                                <option value="768P">768P</option>
-                                <option value="2K">2K</option>
+                                {model.resolutions.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
                             </select>
+                            {planCostTotal != null && (
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-semibold">
+                                    预计 ¥{planCostTotal.toFixed(2)}
+                                </span>
+                            )}
                             {aiState.suggestion && (
                                 <span className="text-gray-400">· 改动即时重新规划</span>
                             )}
@@ -396,7 +402,9 @@ export const AIModal: React.FC<AIModalProps> = ({
                         <div className="px-4 pb-2 space-y-1">
                             {planTasks.map(task => (
                                 <div key={task.id} className="flex items-center justify-between gap-2 text-[11px]">
-                                    <span className="text-gray-500 dark:text-gray-400 shrink-0">段{task.segmentIndex ?? '?'}</span>
+                                    <span className="text-gray-500 dark:text-gray-400 shrink-0">
+                                        段{task.segmentIndex ?? '?'}{task.estimatedCost != null && ` · ¥${task.estimatedCost.toFixed(2)}`}
+                                    </span>
                                     {task.status === 'succeeded' && task.resultUrl ? (
                                         <a href={task.resultUrl} target="_blank" rel="noreferrer" download
                                            className="text-emerald-600 dark:text-emerald-400 underline font-medium">

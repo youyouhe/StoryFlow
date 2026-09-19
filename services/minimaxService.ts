@@ -19,8 +19,7 @@
  *   - reference video: MP4/MOV (H.264/265), single segment 2–15s, ≤50MB
  *   - reference images: ≤9, each ≤30MB
  *   - output duration: 4–15 integer seconds; resolution 768P / 2K
- *   - billing: output ¥/s + input video ¥/s at the SAME resolution rate
- *     (768P 0.50, 2K 0.80); images beyond 5 cost ¥0.20 each
+ *   - billing: see videoPrice() — official 刊例 price book (model×resolution)
  */
 
 import { logAiCall, classifyError } from './aiLog'
@@ -61,11 +60,48 @@ export interface H3TaskStatus {
 }
 
 /** Rough pre-submit cost estimate in CNY (warning display only). */
-export const estimateH3Cost = (p: Pick<H3SubmitParams, 'videoSeconds' | 'outputSeconds' | 'referenceImages' | 'resolution'>): number => {
-  const rate = p.resolution === '2K' ? 0.8 : 0.5;
-  const video = (p.videoSeconds + p.outputSeconds) * rate;
-  const extraImages = Math.max(0, p.referenceImages.length - 5) * 0.2;
-  return video + extraImages;
+/**
+ * Official CN 刊例 (platform price table, confirmed 2026-09-20):
+ *  output ¥/s by MODEL×RESOLUTION — H3: 768P 0.50 / 2K 0.80;
+ *    H3-Max: 480P 0.33 / 768P 0.50 (H3 480P is API-accepted but unpriced —
+ *    not offered in the UI).
+ *  input reference VIDEO ¥/s at generation-time rates — H3: same as output
+ *    (768P 0.50 / 2K 0.80); H3-Max: 480P 0.37 / 768P 0.97.
+ *  input reference IMAGES — H3: first 5 free then ¥0.20/张;
+ *    H3-Max: first 2 free then ¥0.50/张. Audio free.
+ */
+export interface VideoPriceBook {
+  outputPerSec: number;
+  inputVideoPerSec: number;
+  imageFree: number;
+  imageEach: number;
+}
+
+export const videoPrice = (model: string | undefined, resolution: string): VideoPriceBook => {
+  if (model?.includes('Max')) {
+    return {
+      outputPerSec: resolution === '480P' ? 0.33 : 0.5,
+      inputVideoPerSec: resolution === '480P' ? 0.37 : 0.97,
+      imageFree: 2,
+      imageEach: 0.5,
+    };
+  }
+  const outputPerSec = resolution === '2K' ? 0.8 : 0.5;
+  return { outputPerSec, inputVideoPerSec: outputPerSec, imageFree: 5, imageEach: 0.2 };
+};
+
+export const estimateH3Cost = (p: {
+  videoSeconds?: number;
+  outputSeconds: number;
+  imageCount: number;
+  resolution: string;
+  model?: string;
+}): number => {
+  const book = videoPrice(p.model, p.resolution);
+  const output = p.outputSeconds * book.outputPerSec;
+  const inputVideo = (p.videoSeconds ?? 0) * book.inputVideoPerSec;
+  const extraImages = Math.max(0, p.imageCount - book.imageFree) * book.imageEach;
+  return Math.round((output + inputVideo + extraImages) * 100) / 100;
 };
 
 /** Dev builds route through the Vite proxy (relative baseUrl). Tauri/prod

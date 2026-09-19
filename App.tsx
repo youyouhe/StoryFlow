@@ -296,17 +296,28 @@ function App() {
     if (!videoPlan) return null;
     return videoPlan.segments.map((seg, i) => {
       const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
+      const seconds = clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration);
       return {
         index: i + 1,
-        seconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
+        seconds,
         span: Math.round(seg.duration * 10) / 10,
         beatCount: seg.beats.length,
         characters: refs.bound,
         missing: refs.missing,
         offScreen: refs.offScreen,
+        cost: estimateH3Cost({
+          outputSeconds: seconds,
+          imageCount: refs.bound.length,
+          resolution: planResolution,
+          model: videoPlanModel.id,
+        }),
       };
     });
-  }, [videoPlan, screenplay.blocks, refBindings, refImages, videoPlanModel, videoPlanDuration]);
+  }, [videoPlan, screenplay.blocks, refBindings, refImages, videoPlanModel, videoPlanDuration, planResolution]);
+  const planCostTotal = useMemo(
+    () => (planPreflight ?? []).reduce((a, s) => a + s.cost, 0),
+    [planPreflight],
+  );
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -588,8 +599,9 @@ function App() {
     const estimatedCost = estimateH3Cost({
       videoSeconds: payload.videoSeconds,
       outputSeconds: payload.outputSeconds,
-      referenceImages: images,
+      imageCount: images.length,
       resolution: payload.resolution,
+      model: payload.model,
     });
     const baseTask: H3Task = {
       id: localId,
@@ -2574,9 +2586,13 @@ function App() {
                 videoPlanModelId={videoPlanModel.id}
                 onVideoPlanModelChange={(id) => {
                     setVideoPlanModelId(id);
-                    // H3-Max has no 4s window — keep the knob legal on switch.
+                    // Keep both knobs legal on switch: H3-Max has no 4s window,
+                    // and resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
                     const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
                     if (m && videoPlanDuration < m.min) setVideoPlanDuration(m.min);
+                    if (m && !m.resolutions.some(r => r.id === planResolution)) {
+                        setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
+                    }
                 }}
                 videoPlanDuration={videoPlanDuration}
                 onVideoPlanDurationChange={setVideoPlanDuration}
@@ -2590,6 +2606,7 @@ function App() {
                     if (aiState.suggestion) void executeAI();
                 }}
                 planTasks={planTasks}
+                planCostTotal={planCostTotal}
                 planNextHint={screenplay.productionMode === 'simple'
                     ? '提交后任务状态实时显示在下方，生成完成可直接下载'
                     : t.videoPlanNext}

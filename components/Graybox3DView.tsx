@@ -1129,7 +1129,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     const cost = estimateH3Cost({
       videoSeconds: durSec,
       outputSeconds: totalOutput,
-      referenceImages: refImageUrls.map((_, i) => ({ name: `ref-${i}`, blob: new Blob() })),
+      imageCount: refImageUrls.length,
       resolution: h3Resolution,
     });
     const imageCount = refImageUrls.length;
