@@ -131,12 +131,34 @@ export const createH3Task = async (
     duration: p.outputSeconds,
     prompt_engineering: true,
   };
+  // One automatic retry on network-level failure. Transient blips (DNS hiccup,
+  // failed CORS preflight, proxy reset) present as "Failed to fetch" with a
+  // ~1s failure and can hit 3/3 segments within seconds — the 2026-09-19
+  // session showed exactly that while the same origin reached this endpoint
+  // with a 29MB payload minutes earlier. HTTP errors are NOT retried (they
+  // are authoritative: auth, content policy, validation).
   const t0 = performance.now();
-  const res = await fetch(`${cfg.baseUrl}/v2/video_generation`, {
-    method: 'POST',
-    headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res!: Response;
+  let lastNetErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await fetch(`${cfg.baseUrl}/v2/video_generation`, {
+        method: 'POST',
+        headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      lastNetErr = undefined;
+      break;
+    } catch (e) {
+      lastNetErr = e;
+      if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  if (lastNetErr) {
+    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-create', provider: 'minimax', model: 'MiniMax-H3',
+      outcome: 'error', errorType: 'network', error: String(lastNetErr), promptChars: p.prompt.length });
+    throw new Error('网络请求失败（Failed to fetch）——请检查网络/VPN/广告拦截扩展后重试；若反复出现请刷新页面再试。');
+  }
   const data = await res.json().catch(() => ({}));
   const taskId = data?.task_id;
   logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-create', provider: 'minimax', model: body.model as string,
