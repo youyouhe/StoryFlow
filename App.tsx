@@ -280,6 +280,7 @@ function App() {
       return {
         index: i + 1,
         seconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
+        span: Math.round(seg.duration * 10) / 10,
         beatCount: seg.beats.length,
         characters: refs.bound,
         missing: refs.missing,

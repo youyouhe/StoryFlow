@@ -29,7 +29,7 @@ interface AIModalProps {
     /** Pre-submit scan of every segment's cast: which characters have bound
      *  design sheets, which don't. Purely informational — missing sheets
      *  warn, never veto. */
-    planPreflight?: { index: number; seconds: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[] }[] | null;
+    planPreflight?: { index: number; seconds: number; span?: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[] }[] | null;
     /** VIDEO_PLAN knobs: per-segment window (also the plan grouping target).
      *  Allowed values depend on the model — H3: 4~15, H3-Max: 5~15. */
     videoPlanDuration?: number;
@@ -304,7 +304,14 @@ export const AIModal: React.FC<AIModalProps> = ({
                             </p>
                             {planPreflight.map(s => (
                                 <div key={s.index} className="flex items-start gap-1.5 text-[11px] leading-relaxed">
-                                    <span className="text-gray-400 shrink-0">段{s.index} ({s.seconds}s/{s.beatCount}拍)</span>
+                                    <span className="text-gray-400 shrink-0">
+                                        段{s.index} ({s.seconds}s/{s.beatCount}拍)
+                                        {s.span != null && Math.abs(s.span - s.seconds) >= 0.5 && (
+                                            <span className="text-amber-600 dark:text-amber-400" title="节拍不可拆：该段跨度超过所选时长，模型将加速演绎；调大「每段时长」可保真">
+                                                · 跨度{s.span}s→{s.seconds}s
+                                            </span>
+                                        )}
+                                    </span>
                                     <span className="flex flex-wrap gap-x-2">
                                         {s.characters.map(c => (
                                             <span
