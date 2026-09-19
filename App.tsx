@@ -527,7 +527,7 @@ function App() {
     videoBlob?: Blob;
     videoSeconds?: number;
     prompt: string;
-    resolution: '768P' | '2K';
+    resolution: '768P' | '1080P';
     outputSeconds: number;
     referenceImageUrls: string[];
     targetSeconds?: number;
@@ -632,7 +632,7 @@ function App() {
         blockId: seg.blockIds[0],
         blockContent: seg.beats[0]?.text ?? seg.sceneHeading,
         prompt,
-        resolution: '768P',
+        resolution: '1080P',
         outputSeconds: clampSegmentSeconds(seg.duration),
         referenceImageUrls: refs.urls,
         videoSeconds: 0, // text-to-video: no white-model input, cost = output only
@@ -1797,7 +1797,7 @@ function App() {
         // prefix, groups consecutive beats into ≤target generation windows
         // (scene changes force a boundary; beats are atomic, never split).
         shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks, mode=${screenplay.productionMode ?? '?'}`);
-        const target = 15; // H3 max; adjustable when other models are wired
+        const target = 10; // Hailuo-2.3 max duration — segments must fit one window
         const plan = planVideoSegments(screenplay.blocks, target);
         shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
         if (!plan.segments.length || plan.segments.every(s => s.beats.length === 0)) {

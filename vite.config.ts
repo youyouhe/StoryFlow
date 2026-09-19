@@ -8,13 +8,12 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
  *  The frontend fires-and-forgets AI call logs here so the developer can
  *  read errors without DevTools on the user's device. */
 // Browser → same-origin /minimax-api/* → dev machine → api.minimaxi.com.
-// Some client devices cannot reach the MiniMax international domain directly
-// (evening-grade flakiness observed 2026-09-19: 'Failed to fetch' from the
-// user's browser while the dev machine itself connected fine). Proxying
-// removes CORS + client-route from the equation entirely.
+// CN platform (the account's home site — international api.minimaxi.com was
+// flaky from the user's network). Proxying removes CORS + client-route from
+// the equation entirely.
 const minimaxProxy = {
   '/minimax-api': {
-    target: 'https://api.minimaxi.com',
+    target: 'https://api.minimax.cn',
     changeOrigin: true,
     rewrite: (p: string) => p.replace(/^\/minimax-api/, ''),
     secure: true,

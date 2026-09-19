@@ -7,9 +7,14 @@
  * so a pure client-side flow works with no backend.
  *
  * Pipeline: export white-model video (MediaRecorder, must be MP4) →
- * POST /v1/files/upload (purpose=video_generation_input) → mm_file://{id}
- * → POST /v2/video_generation with the H3 prompt + reference images
- * (base64 data URIs) → poll /v2/query/video_generation/{task_id} every 10s.
+ * CN platform (api.minimax.cn, /v1 generation):
+ * [white-model path] POST /v1/files/upload (purpose=video_generation_input)
+ * → POST /v1/video_generation (MiniMax-Hailuo-2.3, flat prompt, duration
+ * 6|10, resolution 768P|1080P) → GET /v1/query/video_generation?task_id=…
+ * every 10s. Reference images ride on `subject_reference` (base64 data
+ * URIs, character type). NOTE: the v1 CN API has no reference-video field —
+ * submitting a white-model recording is rejected with a clear error; use
+ * the simple (text-to-video) path.
  *
  * Constraints encoded here (from the official guide):
  *   - reference video: MP4/MOV (H.264/265), single segment 2–15s, ≤50MB
@@ -43,7 +48,7 @@ export interface H3SubmitParams {
   videoBlob?: Blob;
   videoSeconds: number;
   referenceImages: H3ReferenceImage[];
-  resolution: '768P' | '2K';
+  resolution: '768P' | '1080P';
   outputSeconds: number;
 }
 
@@ -55,7 +60,7 @@ export interface H3TaskStatus {
 
 /** Rough pre-submit cost estimate in CNY (warning display only). */
 export const estimateH3Cost = (p: Pick<H3SubmitParams, 'videoSeconds' | 'outputSeconds' | 'referenceImages' | 'resolution'>): number => {
-  const rate = p.resolution === '2K' ? 0.8 : 0.5;
+  const rate = p.resolution === '1080P' ? 1.0 : 0.5;
   const video = (p.videoSeconds + p.outputSeconds) * rate;
   const extraImages = Math.max(0, p.referenceImages.length - 5) * 0.2;
   return video + extraImages;
@@ -65,7 +70,7 @@ export const estimateH3Cost = (p: Pick<H3SubmitParams, 'videoSeconds' | 'outputS
  *  has no dev server → fall back to the direct international host. */
 const resolveBaseUrl = (baseUrl: string): string =>
   baseUrl.startsWith('/') && typeof window !== 'undefined' && (window as unknown as { __TAURI__?: unknown }).__TAURI__
-    ? 'https://api.minimaxi.com'
+    ? 'https://api.minimax.cn'
     : baseUrl;
 
 const authHeaders = (apiKey: string): HeadersInit => ({
@@ -110,33 +115,34 @@ export const uploadH3Video = async (
   return `mm_file://${fileId}`;
 };
 
+/** CN video model in use. */
+export const MINIMAX_VIDEO_MODEL = 'MiniMax-Hailuo-2.3';
+
 /** Create the generation task; returns the MiniMax task_id. */
 export const createH3Task = async (
   cfg: MiniMaxConfig,
   p: H3SubmitParams,
   videoFileUri?: string,
 ): Promise<string> => {
-  const content: Array<Record<string, unknown>> = [
-    { type: 'text', text: p.prompt },
-    // Reference video is OPTIONAL: simple-mode segments generate without a
-    // white-model recording, conditioned only on prompt + character sheets.
-    ...(videoFileUri
-      ? [{ type: 'video_url', video_url: { url: videoFileUri }, role: 'reference_video' }]
-      : []),
-  ];
-  for (const img of p.referenceImages.slice(0, 9)) {
-    content.push({
-      type: 'image_url',
-      image_url: { url: await asBase64DataUri(img.blob) },
-      role: 'reference_image',
-    });
+  if (videoFileUri) {
+    // The CN v1 API has no reference-video field (视频延续 is a separate
+    // product). Say so instead of shipping a body the server ignores.
+    throw new Error('国内站 Hailuo-2.3 的 v1 接口暂不支持白模参考视频——请使用简易模式（文本生视频）。');
   }
-  const body = {
-    model: 'MiniMax-H3',
-    content,
-    resolution: p.resolution,
+  // Flat prompt body (v1): our prompts are deliberately composed (timed
+  // beats + costume continuity), so the server-side prompt optimizer must
+  // not rewrite them.
+  const subjectRefs = await Promise.all(p.referenceImages.slice(0, 3).map(async img => ({
+    type: 'character',
+    image_file: await asBase64DataUri(img.blob),
+  })));
+  const body: Record<string, unknown> = {
+    model: MINIMAX_VIDEO_MODEL,
+    prompt: p.prompt,
     duration: p.outputSeconds,
-    prompt_engineering: true,
+    resolution: p.resolution,
+    prompt_optimizer: false,
+    ...(subjectRefs.length ? { subject_reference: subjectRefs } : {}),
   };
   // One automatic retry on network-level failure. Transient blips (DNS hiccup,
   // failed CORS preflight, proxy reset) present as "Failed to fetch" with a
@@ -149,7 +155,7 @@ export const createH3Task = async (
   let lastNetErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/video_generation`, {
+      res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/video_generation`, {
         method: 'POST',
         headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -162,7 +168,7 @@ export const createH3Task = async (
     }
   }
   if (lastNetErr) {
-    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-create', provider: 'minimax', model: 'MiniMax-H3',
+    logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op: 'h3-create', provider: 'minimax', model: MINIMAX_VIDEO_MODEL,
       outcome: 'error', errorType: 'network', error: String(lastNetErr), promptChars: p.prompt.length });
     throw new Error('网络请求失败（Failed to fetch）——请检查网络/VPN/广告拦截扩展后重试；若反复出现请刷新页面再试。');
   }
@@ -180,26 +186,34 @@ export const createH3Task = async (
 
 /** Poll one task. */
 export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H3TaskStatus> => {
-  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/query/video_generation/${taskId}`, {
+  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`, {
     headers: authHeaders(cfg.apiKey),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     return { status: 'failed', errorMessage: `查询失败 (HTTP ${res.status}): ${JSON.stringify(data).slice(0, 300)}` };
   }
-  // Live-tested shape: the task object arrives NESTED under "task"
-  // ({task:{id,status,content,...}}); tolerate a flat response too.
+  // CN v1 shape: { status: 'Queueing'|'Processing'|'Success'|'Fail',
+  // file: { download_url, … }, base_resp }. Tolerate the nested-task shape
+  // too so an intl-style response still maps.
   const t = data?.task ?? data;
-  const status = t?.status as H3TaskStatus['status'] | undefined;
+  const raw = t?.status as string | undefined;
+  const map: Record<string, H3TaskStatus['status']> = {
+    Queueing: 'queued', Processing: 'running', Success: 'succeeded', Fail: 'failed',
+    queued: 'queued', running: 'running', succeeded: 'succeeded', failed: 'failed',
+  };
+  const status = raw ? map[raw] : undefined;
   logAiCall({ ts: Date.now(), durationMs: 0, op: 'h3-query', provider: 'minimax', model: 'poll',
     outcome: status && status !== 'failed' ? 'ok' : 'error', error: status ? undefined : JSON.stringify(data).slice(0, 200) });
   if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
+  const failMsg = status === 'failed'
+    ? String(t?.fail_code ?? data?.fail_code ?? '') + ' ' + String(t?.fail_reason ?? data?.fail_reason
+        ?? data?.base_resp?.status_msg ?? t?.error ?? data?.error ?? '')
+    : undefined;
   return {
     status,
-    videoUrl: t?.content?.url ?? data?.content?.url,
-    errorMessage: status === 'failed'
-      ? String(t?.fail_code ?? data?.fail_code ?? '') + ' ' + String(t?.fail_reason ?? data?.fail_reason ?? t?.error ?? data?.error ?? '')
-      : undefined,
+    videoUrl: t?.file?.download_url ?? data?.file?.download_url ?? t?.content?.url ?? data?.content?.url,
+    errorMessage: failMsg,
   };
 };
 
