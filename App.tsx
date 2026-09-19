@@ -268,7 +268,7 @@ function App() {
         index: i + 1,
         seconds: clampSegmentSeconds(seg.duration),
         beatCount: seg.beats.length,
-        characters: refs.characters,
+        characters: refs.bound,
         missing: refs.missing,
       };
     });
@@ -617,7 +617,7 @@ function App() {
       setPlanH3Progress({ current: si + 1, total: plan.segments.length });
       const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
-      shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.characters.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
+      shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.bound.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
       if (refs.missing.length) {
         shipLog('flow', 'warn', `H3 segment ${si + 1}: characters without sheets: ${refs.missing.join(', ')}`);
       }

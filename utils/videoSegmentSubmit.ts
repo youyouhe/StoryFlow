@@ -45,8 +45,9 @@ export const buildSegmentVideoPrompt = (
 export interface SegmentRefs {
   /** object URLs of the resolved character sheets, cast order, deduped */
   urls: string[];
-  /** character names that resolved to a sheet */
-  characters: string[];
+  /** characters that resolved to a sheet — carries what the preflight
+   *  hover-preview needs: display name, image URL, sheet file name */
+  bound: { name: string; url: string; sheetName: string }[];
   /** cast members with NO sheet bound — surfaced as a warning, not a block:
    *  a segment spans several beats; one missing secondary character should
    *  not veto the whole segment (unlike single ACTION shots, where the
@@ -86,7 +87,7 @@ export const resolveSegmentRefs = (
     }
   }
   const urls: string[] = [];
-  const characters: string[] = [];
+  const bound: SegmentRefs['bound'] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
   for (const n of names) {
@@ -95,7 +96,7 @@ export const resolveSegmentRefs = (
     if (seen.has(sheet.id)) continue;
     seen.add(sheet.id);
     urls.push(sheet.url);
-    characters.push(n);
+    bound.push({ name: n, url: sheet.url, sheetName: sheet.name ?? '' });
   }
-  return { urls: urls.slice(0, 9), characters, missing };
+  return { urls: urls.slice(0, 9), bound, missing };
 };

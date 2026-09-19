@@ -28,7 +28,7 @@ interface AIModalProps {
     /** Pre-submit scan of every segment's cast: which characters have bound
      *  design sheets, which don't. Purely informational — missing sheets
      *  warn, never veto. */
-    planPreflight?: { index: number; seconds: number; beatCount: number; characters: string[]; missing: string[] }[] | null;
+    planPreflight?: { index: number; seconds: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[] }[] | null;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -260,10 +260,23 @@ export const AIModal: React.FC<AIModalProps> = ({
                                     <span className="text-gray-400 shrink-0">段{s.index} ({s.seconds}s/{s.beatCount}拍)</span>
                                     <span className="flex flex-wrap gap-x-2">
                                         {s.characters.map(c => (
-                                            <span key={c} className="text-emerald-600 dark:text-emerald-400">✓{c}</span>
+                                            <span key={c.name} className="relative group rounded px-0.5 -mx-0.5 text-emerald-600 dark:text-emerald-400 cursor-default hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
+                                                ✓{c.name}
+                                                <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-50">
+                                                    <img src={c.url} alt={c.sheetName} className="w-44 rounded-lg border border-gray-200 dark:border-zinc-600 shadow-xl bg-white dark:bg-zinc-900" />
+                                                    <span className="block text-center text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">{c.sheetName}</span>
+                                                </span>
+                                            </span>
                                         ))}
                                         {s.missing.map(c => (
-                                            <span key={c} className="text-amber-600 dark:text-amber-400" title="未绑定设定图——该角色将以无参考图方式提交，形象可能漂移">⚠{c}</span>
+                                            <span key={c} className="relative group rounded px-0.5 -mx-0.5 text-amber-600 dark:text-amber-400 cursor-default hover:bg-amber-50 dark:hover:bg-amber-900/30">
+                                                ⚠{c}
+                                                <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-50">
+                                                    <span className="flex items-center justify-center w-44 h-28 rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-[10px] text-amber-600 dark:text-amber-400 text-center px-2 shadow-xl">
+                                                        未绑定设定图——将无参考提交，形象可能漂移
+                                                    </span>
+                                                </span>
+                                            </span>
                                         ))}
                                         {!s.characters.length && !s.missing.length && (
                                             <span className="text-gray-400">无角色（空镜段）</span>
