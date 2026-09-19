@@ -404,6 +404,30 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                 </span>
               </button>
             )}
+            {/* SCENE only: the bound ③ environment sheet can BE the result —
+                no generation, no cost. Hidden when it already is the result. */}
+            {panelBlock.type === 'SCENE_HEADING' && refPreview.environment
+              && panelBlock.imageResult?.assetId !== refPreview.environment.id && (
+              <button
+                onClick={() => {
+                  const env = refPreview.environment!;
+                  setScreenplay(prev => ({
+                    ...prev,
+                    blocks: prev.blocks.map(b => b.id === panelBlock.id
+                      ? { ...b, imageResult: { assetId: env.id, subject: env.name || '环境' } }
+                      : b),
+                    lastModified: Date.now(),
+                  }));
+                }}
+                className="flex-1 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                title={lang === 'zh'
+                  ? '把已绑定的场景参考图直接设为本块的产出图——不调用生成，零成本'
+                  : 'Promote the bound reference image to this block\'s result — no generation, zero cost'}
+              >
+                <span className="text-sm leading-none">📌</span>
+                {lang === 'zh' ? '引用参考图为场景图' : 'Use ref as scene image'}
+              </button>
+            )}
             <input
               type="file"
               accept="image/*"
