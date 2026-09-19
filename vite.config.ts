@@ -7,6 +7,20 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 /** Dev-only middleware: POST /api/debug-log → append to a local file.
  *  The frontend fires-and-forgets AI call logs here so the developer can
  *  read errors without DevTools on the user's device. */
+// Browser → same-origin /minimax-api/* → dev machine → api.minimaxi.com.
+// Some client devices cannot reach the MiniMax international domain directly
+// (evening-grade flakiness observed 2026-09-19: 'Failed to fetch' from the
+// user's browser while the dev machine itself connected fine). Proxying
+// removes CORS + client-route from the equation entirely.
+const minimaxProxy = {
+  '/minimax-api': {
+    target: 'https://api.minimaxi.com',
+    changeOrigin: true,
+    rewrite: (p: string) => p.replace(/^\/minimax-api/, ''),
+    secure: true,
+  },
+};
+
 const debugLogPlugin = () => ({
   name: 'debug-log',
   configureServer(server: import('vite').ViteDevServer) {
@@ -39,6 +53,7 @@ export default defineConfig(({ mode }) => {
     const https = env.VITE_HTTPS === '1' || process.env.VITE_HTTPS === '1';
     return {
       server: {
+      proxy: minimaxProxy,
         port: 5173,
         host: '0.0.0.0',
         strictPort: true,

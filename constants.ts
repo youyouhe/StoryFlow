@@ -608,7 +608,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   geminiModel: 'gemini-3.7-flash',
   geminiThinkingLevel: 'low',
   minimaxApiKey: '',
-  minimaxBaseUrl: 'https://api.minimaxi.com',
+  // Dev: same-origin proxy (see vite.config.ts minimaxProxy) — the dev machine
+  // forwards to api.minimaxi.com, bypassing client-side route/CORS flakiness.
+  // Tauri/prod builds have no dev server; minimaxService falls back to direct.
+  minimaxBaseUrl: '/minimax-api',
   falKey: '',
   falModel: 'openai/gpt-image-2.5/flare',
   falQuality: 'low',

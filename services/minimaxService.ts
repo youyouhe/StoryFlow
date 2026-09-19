@@ -61,6 +61,13 @@ export const estimateH3Cost = (p: Pick<H3SubmitParams, 'videoSeconds' | 'outputS
   return video + extraImages;
 };
 
+/** Dev builds route through the Vite proxy (relative baseUrl). Tauri/prod
+ *  has no dev server → fall back to the direct international host. */
+const resolveBaseUrl = (baseUrl: string): string =>
+  baseUrl.startsWith('/') && typeof window !== 'undefined' && (window as unknown as { __TAURI__?: unknown }).__TAURI__
+    ? 'https://api.minimaxi.com'
+    : baseUrl;
+
 const authHeaders = (apiKey: string): HeadersInit => ({
   Authorization: `Bearer ${apiKey}`,
 });
@@ -86,7 +93,7 @@ export const uploadH3Video = async (
   form.append('purpose', 'video_generation_input');
   const ext = videoBlob.type.includes('webm') ? 'webm' : 'mp4';
   form.append('file', videoBlob, `whitemodel.${ext}`);
-  const res = await fetch(`${cfg.baseUrl}/v1/files/upload`, {
+  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/files/upload`, {
     method: 'POST',
     headers: authHeaders(cfg.apiKey),
     body: form,
@@ -142,7 +149,7 @@ export const createH3Task = async (
   let lastNetErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      res = await fetch(`${cfg.baseUrl}/v2/video_generation`, {
+      res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/video_generation`, {
         method: 'POST',
         headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -173,7 +180,7 @@ export const createH3Task = async (
 
 /** Poll one task. */
 export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H3TaskStatus> => {
-  const res = await fetch(`${cfg.baseUrl}/v2/query/video_generation/${taskId}`, {
+  const res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v2/query/video_generation/${taskId}`, {
     headers: authHeaders(cfg.apiKey),
   });
   const data = await res.json().catch(() => ({}));
@@ -318,7 +325,7 @@ export const generateImages = async (
   let errorType: string | undefined;
   let res: Response;
   try {
-    res = await fetch(`${cfg.baseUrl}/v1/image_generation`, {
+    res = await fetch(`${resolveBaseUrl(cfg.baseUrl)}/v1/image_generation`, {
       method: 'POST',
       headers: { ...authHeaders(cfg.apiKey), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

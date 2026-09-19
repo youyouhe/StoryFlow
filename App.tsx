@@ -172,7 +172,13 @@ function App() {
                 // Migrate deprecated DeepSeek model names to the current default (V4 Flash)
                 deepseekModel: ['deepseek-chat', 'deepseek-reasoner'].includes(parsed.deepseekModel)
                     ? DEFAULT_APP_SETTINGS.deepseekModel
-                    : (parsed.deepseekModel || DEFAULT_APP_SETTINGS.deepseekModel)
+                    : (parsed.deepseekModel || DEFAULT_APP_SETTINGS.deepseekModel),
+                // Migrate the old direct MiniMax URL to the dev proxy: settings saved
+                // before the proxy shipped carry the old default verbatim and would
+                // otherwise override it forever.
+                minimaxBaseUrl: parsed.minimaxBaseUrl === 'https://api.minimaxi.com'
+                    ? DEFAULT_APP_SETTINGS.minimaxBaseUrl
+                    : (parsed.minimaxBaseUrl || DEFAULT_APP_SETTINGS.minimaxBaseUrl)
             };
         }
     } catch (e) {
