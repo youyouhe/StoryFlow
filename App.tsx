@@ -1811,6 +1811,11 @@ function App() {
         const target = videoPlanDuration; // per-segment window (user-selected)
         const plan = planVideoSegments(screenplay.blocks, target);
         shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
+        // Per-beat breakdown so span/compression questions can be answered
+        // from the server log alone (beat ranges are the ground truth).
+        for (const seg of plan.segments) {
+          shipLog('flow', 'info', `VIDEO_PLAN seg${seg.index + 1} beats: ${seg.beats.map(b => `${b.range}(${Math.round((b.end - b.start) * 10) / 10}s)`).join(' + ')} = span ${Math.round(seg.duration * 10) / 10}s${seg.oversize ? ' [OVERSIZE]' : ''}`);
+        }
         if (!plan.segments.length || plan.segments.every(s => s.beats.length === 0)) {
           shipLog('flow', 'warn', 'VIDEO_PLAN early-return: no timeline beats found');
           setAIState({ isLoading: false, suggestion: null, error: t.videoPlanNoTimeline, decision: null, grayboxDraft: null, batchProgress: null });
