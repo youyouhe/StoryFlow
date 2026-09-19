@@ -47,7 +47,7 @@ export interface H3SubmitParams {
   videoBlob?: Blob;
   videoSeconds: number;
   referenceImages: H3ReferenceImage[];
-  resolution: '768P' | '1080P';
+  resolution: '480P' | '768P' | '2K';
   outputSeconds: number;
   /** CN video model id — duration legality depends on it (H3: 4~15,
    *  H3-Max: 5~15). Defaults to MINIMAX_VIDEO_MODEL. */
@@ -62,7 +62,7 @@ export interface H3TaskStatus {
 
 /** Rough pre-submit cost estimate in CNY (warning display only). */
 export const estimateH3Cost = (p: Pick<H3SubmitParams, 'videoSeconds' | 'outputSeconds' | 'referenceImages' | 'resolution'>): number => {
-  const rate = p.resolution === '1080P' ? 1.0 : 0.5;
+  const rate = p.resolution === '2K' ? 0.8 : 0.5;
   const video = (p.videoSeconds + p.outputSeconds) * rate;
   const extraImages = Math.max(0, p.referenceImages.length - 5) * 0.2;
   return video + extraImages;

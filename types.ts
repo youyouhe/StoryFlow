@@ -399,7 +399,7 @@ export interface H3Task {
   status: 'uploading' | 'submitting' | 'queued' | 'running' | 'succeeded' | 'failed';
   error?: string;
   prompt: string;                 // submitted prompt (audit/retry)
-  resolution: '768P' | '1080P';
+  resolution: '480P' | '768P' | '2K';
   videoSeconds: number;           // input white-model length (billed!)
   outputSeconds: number;
   /** Story length this task's real-screen time sits inside. When > the model

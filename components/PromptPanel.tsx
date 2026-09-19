@@ -42,7 +42,7 @@ interface PromptPanelProps {
     videoBlob: Blob;
     videoSeconds: number;
     prompt: string;
-    resolution: '768P' | '1080P';
+    resolution: '480P' | '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
     targetSeconds?: number;

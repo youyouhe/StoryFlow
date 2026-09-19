@@ -92,7 +92,7 @@ interface Graybox3DViewProps {
     videoBlob: Blob;
     videoSeconds: number;
     prompt: string;
-    resolution: '768P' | '1080P';
+    resolution: '480P' | '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
     /** STORY length this segment sits inside — carried into the task record. */
@@ -876,7 +876,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   // health-check checklist collapsed by default; the summary is always visible
   const [healthOpen, setHealthOpen] = useState(false);
   // H3 submission state
-  const [h3Resolution, setH3Resolution] = useState<'768P' | '1080P'>('768P');
+  const [h3Resolution, setH3Resolution] = useState<'480P' | '768P' | '2K'>('768P');
   const [h3Error, setH3Error] = useState<string | null>(null);
   // STORY target length (editable in the H3 panel). Defaults to the authored
   // target, else the camera duration. Persisted back to the block when
@@ -1015,7 +1015,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     blockId: string;
     blockContent: string;
     prompt: string;
-    resolution: '768P' | '1080P';
+    resolution: '480P' | '768P' | '2K';
     outputSeconds: number;
     referenceImageUrls: string[];
     targetSeconds?: number;
@@ -1388,11 +1388,11 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                     <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 shrink-0">{L.h3Res}</span>
                     <select
                       value={h3Resolution}
-                      onChange={(e) => setH3Resolution(e.target.value as '768P' | '1080P')}
+                      onChange={(e) => setH3Resolution(e.target.value as '480P' | '768P' | '2K')}
                       className="rounded-md border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-xs text-gray-700 dark:text-gray-200"
                     >
                       <option value="768P">768P（¥0.50/s）</option>
-                      <option value="1080P">1080P（¥1.00/s）</option>
+                      <option value="2K">2K（¥0.80/s）</option>
                     </select>
                     <button
                       type="button"

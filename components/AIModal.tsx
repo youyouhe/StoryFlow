@@ -34,6 +34,8 @@ interface AIModalProps {
      *  Allowed values depend on the model — H3: 4~15, H3-Max: 5~15. */
     videoPlanDuration?: number;
     onVideoPlanDurationChange?: (n: number) => void;
+    planResolution?: '480P' | '768P' | '2K';
+    onPlanResolutionChange?: (r: '480P' | '768P' | '2K') => void;
     videoPlanModelId?: string;
     onVideoPlanModelChange?: (id: string) => void;
     /** Fired after either knob changes — App re-runs the (deterministic,
@@ -63,6 +65,8 @@ export const AIModal: React.FC<AIModalProps> = ({
     videoPlanModelId = MINIMAX_VIDEO_MODELS[0].id,
     onVideoPlanModelChange,
     onVideoPlanParamsChange,
+    planResolution = '768P',
+    onPlanResolutionChange,
 }) => {
     const model = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
     const durations: number[] = [];
@@ -295,6 +299,16 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
                             >
                                 {durations.map(s => <option key={s} value={s}>{s} 秒</option>)}
+                            </select>
+                            <span className="text-gray-500 dark:text-gray-400 ml-2">分辨率</span>
+                            <select
+                                value={planResolution}
+                                onChange={e => onPlanResolutionChange?.(e.target.value as '480P' | '768P' | '2K')}
+                                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
+                            >
+                                <option value="480P">480P</option>
+                                <option value="768P">768P</option>
+                                <option value="2K">2K</option>
                             </select>
                             {aiState.suggestion && (
                                 <span className="text-gray-400">· 改动即时重新规划</span>

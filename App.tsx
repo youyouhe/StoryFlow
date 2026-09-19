@@ -267,6 +267,7 @@ function App() {
   const [videoPlanModelId, setVideoPlanModelId] = useState(MINIMAX_VIDEO_MODELS[0].id);
   const videoPlanModel = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
   const [videoPlanDuration, setVideoPlanDuration] = useState(10);
+  const [planResolution, setPlanResolution] = useState<'480P' | '768P' | '2K'>('768P');
   // The live plan (replaces the old window stash — state is reactive and dies
   // with the script, so a stale plan can never cross-submit into another one).
   const [videoPlan, setVideoPlan] = useState<VideoPlan | null>(null);
@@ -535,7 +536,7 @@ function App() {
     videoBlob?: Blob;
     videoSeconds?: number;
     prompt: string;
-    resolution: '768P' | '1080P';
+    resolution: '480P' | '768P' | '2K';
     outputSeconds: number;
     model?: string;
     referenceImageUrls: string[];
@@ -642,7 +643,7 @@ function App() {
         blockId: seg.blockIds[0],
         blockContent: seg.beats[0]?.text ?? seg.sceneHeading,
         prompt,
-        resolution: '1080P',
+        resolution: planResolution,
         model: videoPlanModel.id,
         outputSeconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
         referenceImageUrls: refs.urls,
@@ -669,7 +670,7 @@ function App() {
     } else {
       shipLog('flow', 'info', `H3 plan submission done: ${okCount}/${plan.segments.length} tasks created`);
     }
-  }, [videoPlan, videoPlanModel, videoPlanDuration, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
+  }, [videoPlan, videoPlanModel, videoPlanDuration, planResolution, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
@@ -2552,6 +2553,8 @@ function App() {
                 }}
                 videoPlanDuration={videoPlanDuration}
                 onVideoPlanDurationChange={setVideoPlanDuration}
+                planResolution={planResolution}
+                onPlanResolutionChange={setPlanResolution}
                 onVideoPlanParamsChange={() => {
                     // The planner is deterministic and AI-free — a knob change
                     // can regenerate instantly. A STALE plan re-clamped to the
