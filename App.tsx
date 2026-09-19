@@ -1729,6 +1729,7 @@ function App() {
         // SKIPPED in simple production mode (no spatial blocking needed).
         if (screenplay.productionMode === 'simple') {
           shipLog('flow', 'info', 'VIDEO_PLAN: simple mode — skipping segment graybox batch');
+          setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;
         }
         const segLayout = (() => {
