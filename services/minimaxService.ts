@@ -209,13 +209,17 @@ export const queryH3Task = async (cfg: MiniMaxConfig, taskId: string): Promise<H
     queued: 'queued', running: 'running', succeeded: 'succeeded', failed: 'failed',
   };
   const status = raw ? (map[raw] ?? raw as H3TaskStatus['status']) : undefined;
-  logAiCall({ ts: Date.now(), durationMs: 0, op: 'h3-query', provider: 'minimax', model: 'poll',
-    outcome: status && status !== 'failed' ? 'ok' : 'error', error: status ? undefined : JSON.stringify(data).slice(0, 200) });
-  if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
+  // Failure reason fields vary per endpoint generation and may be OBJECTS —
+  // String(obj) once produced the useless '[object Object]'.
+  const reasonRaw = t?.fail_reason ?? data?.base_resp?.status_msg ?? t?.error ?? data?.error ?? t ?? data;
   const failMsg = status === 'failed'
-    ? String(t?.fail_code ?? data?.fail_code ?? '') + ' ' + String(t?.fail_reason ?? data?.fail_reason
-        ?? data?.base_resp?.status_msg ?? t?.error ?? data?.error ?? '')
+    ? (typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw)).slice(0, 300)
     : undefined;
+  logAiCall({ ts: Date.now(), durationMs: 0, op: 'h3-query', provider: 'minimax', model: 'poll',
+    outcome: status && status !== 'failed' ? 'ok' : 'error',
+    error: status === 'failed' ? (failMsg ?? JSON.stringify(data).slice(0, 200))
+         : status ? undefined : JSON.stringify(data).slice(0, 200) });
+  if (!status) return { status: 'failed', errorMessage: `未知状态: ${JSON.stringify(data).slice(0, 300)}` };
   return {
     status,
     videoUrl: t?.content?.url ?? data?.content?.url ?? t?.file?.download_url ?? data?.file?.download_url,

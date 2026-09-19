@@ -275,11 +275,19 @@ function App() {
   // modal so simple-mode users see progress WITHOUT opening the graybox 3D
   // view (where task lists used to live, invisible in simple mode).
   const planChainId = videoPlan ? `videoplan-${videoPlan.segments[0].blockIds[0]}` : null;
-  const planTasks = useMemo(() => (
-    planChainId
-      ? h3Tasks.filter(t => t.chainId === planChainId).sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0))
-      : []
-  ), [h3Tasks, planChainId]);
+  const planTasks = useMemo(() => {
+    if (!planChainId) return [];
+    // Collapse history: every submit attempt creates new records with the
+    // same chainId — show ONLY the newest task per segment.
+    const newest = new Map<number, H3Task>();
+    for (const t of h3Tasks) {
+      if (t.chainId !== planChainId) continue;
+      const k = t.segmentIndex ?? 0;
+      const cur = newest.get(k);
+      if (!cur || t.createdAt > cur.createdAt) newest.set(k, t);
+    }
+    return [...newest.values()].sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0));
+  }, [h3Tasks, planChainId]);
 
   // Pre-flight scan: which cast members of each segment have bound sheets.
   // Recomputed whenever bindings/images change, so the checklist in the modal
@@ -687,7 +695,15 @@ function App() {
   // Guards the one-time background sequence refresh on first scene-level Alt+G.
   const hasSequenceRun = useRef(false);
   useEffect(() => {
-    const active = h3Tasks.filter(t => (t.status === 'queued' || t.status === 'running') && t.taskId);
+    // Failed tasks whose error was serialized as '[object Object]' get ONE
+    // more query after the reason-extraction fix, to recover the real
+    // server-side failure message.
+    const staleErrors = h3Tasks.filter(t =>
+      t.status === 'failed' && t.taskId && t.error?.includes('[object Object]'));
+    const active = [
+      ...h3Tasks.filter(t => (t.status === 'queued' || t.status === 'running') && t.taskId),
+      ...staleErrors,
+    ];
     if (!active.length || !h3Ready) return;
     const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
     const timer = window.setInterval(async () => {
@@ -705,7 +721,8 @@ function App() {
             setH3Tasks(prev => prev.map(x => x.id === t.id
               ? {
                   ...x,
-                  status: s.status === 'cancelled' ? 'failed' as const : s.status,
+                  status: x.status === 'failed' ? 'failed' as const
+                    : s.status === 'cancelled' ? 'failed' as const : s.status,
                   resultUrl: s.videoUrl ?? x.resultUrl,
                   error: s.errorMessage || (s.status === 'cancelled' ? '任务已取消' : x.error),
                 }
