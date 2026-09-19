@@ -5,7 +5,7 @@
  */
 import type { ScriptBlock } from '../types';
 import type { VideoSegment } from './videoPlan';
-import { collectCharacterNames, computeBeatCast, isOffScreen, baseCharName } from './beatCast';
+import { collectCharacterNames, computeBeatCast, isOffScreen, baseCharName, resolveBeatVariant } from './beatCast';
 import { resolveCharacterSheet } from './refBindings';
 import type { RefBindings, RefImage } from '../types';
 
@@ -46,7 +46,10 @@ export interface SegmentRefs {
   /** object URLs of the resolved character sheets, cast order, deduped */
   urls: string[];
   /** characters that resolved to a sheet — carries what the preflight
-   *  hover-preview needs: display name, image URL, sheet file name */
+   *  hover-preview needs: display name (variant-qualified), image URL, sheet
+   *  file name. Variants matter: 女主（黑白条纹） and 女主（酒红学院风） are
+   *  DIFFERENT sheets and the whole point of the preflight is to show which
+   *  costume each segment will wear. */
   bound: { name: string; url: string; sheetName: string }[];
   /** cast members with NO sheet bound — surfaced as a warning, not a block:
    *  a segment spans several beats; one missing secondary character should
@@ -89,7 +92,13 @@ export const resolveSegmentRefs = (
   // narrow slice would drop cues that sit before the segment span, and beat
   // texts that name a character explicitly would match nothing.
   const universe = collectCharacterNames(allBlocks);
-  const names: string[] = [];
+  // Cast as (base, variant) pairs — computeBeatCast returns base names only,
+  // and the costume variant named on the nearest preceding cue selects WHICH
+  // sheet of that character applies to the beat. 女主 in one segment may be
+  // 黑白条纹 and 酒红学院风 in the next; collapsing to the base name resolved
+  // every segment to the same generic sheet.
+  const castPairs: { name: string; variant?: string }[] = [];
+  const pairSeen = new Set<string>();
   for (const beat of seg.beats) {
     // computeBeatCast indexes BLOCKS, not beats — map each planned beat to
     // its block position inside the segment slice (the slice also holds
@@ -97,20 +106,23 @@ export const resolveSegmentRefs = (
     const bi = segBlocks.findIndex(b => b.id === beat.startBlockId);
     if (bi < 0) continue;
     for (const n of computeBeatCast(segBlocks, bi, universe)) {
-      if (!names.includes(n)) names.push(n);
+      const variant = resolveBeatVariant(segBlocks, bi, n);
+      const key = `${n}/${variant ?? ''}`;
+      if (!pairSeen.has(key)) { pairSeen.add(key); castPairs.push({ name: n, variant }); }
     }
   }
   const urls: string[] = [];
   const bound: SegmentRefs['bound'] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
-  for (const n of names) {
-    const sheet = resolveCharacterSheet(n, bindings, refImages, seg.sceneHeading);
-    if (!sheet) { missing.push(n); continue; }
+  for (const { name, variant } of castPairs) {
+    const label = variant ? `${name}（${variant}）` : name;
+    const sheet = resolveCharacterSheet(name, bindings, refImages, seg.sceneHeading, undefined, variant);
+    if (!sheet) { missing.push(label); continue; }
     if (seen.has(sheet.id)) continue;
     seen.add(sheet.id);
     urls.push(sheet.url);
-    bound.push({ name: n, url: sheet.url, sheetName: sheet.name ?? '' });
+    bound.push({ name: label, url: sheet.url, sheetName: sheet.name ?? '' });
   }
   return { urls: urls.slice(0, 9), bound, missing, offScreen };
 };
