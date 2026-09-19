@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import type { AIMode, AIState } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { grayboxOverviewLine } from '../utils/exportData';
+import { collectDebugInfo } from '../utils/debugInfo';
 import { copyToClipboard } from '../utils/clipboard';
 
 interface AIModalProps {
@@ -232,6 +233,15 @@ export const AIModal: React.FC<AIModalProps> = ({
                     {aiState.error && (
                         <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-900/50">
                             {aiState.error}
+                            <button
+                                onClick={() => {
+                                    const debug = collectDebugInfo(aiState.error);
+                                    navigator.clipboard?.writeText(debug).catch(() => {});
+                                }}
+                                className="mt-2 block text-[10px] underline text-red-400 hover:text-red-600"
+                            >
+                                复制调试信息
+                            </button>
                         </div>
                     )}
 
