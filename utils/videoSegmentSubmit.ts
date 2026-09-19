@@ -106,16 +106,25 @@ export const resolveSegmentRefs = (
     const bi = segBlocks.findIndex(b => b.id === beat.startBlockId);
     if (bi < 0) continue;
     for (const n of computeBeatCast(segBlocks, bi, universe)) {
-      const variant = resolveBeatVariant(segBlocks, bi, n);
+      // Variant lookup runs on the FULL block list from the beat's real
+      // position: cues attach to DIALOGUE rows in common layouts while the
+      // timed beats are ACTION rows, so the narrow slice regularly cuts the
+      // cue off and the variant was lost → bare 女主 resolved the wrong sheet.
+      const gi = allBlocks.findIndex(b => b.id === beat.startBlockId);
+      const variant = gi >= 0 ? resolveBeatVariant(allBlocks, gi, n) : undefined;
       const key = `${n}/${variant ?? ''}`;
       if (!pairSeen.has(key)) { pairSeen.add(key); castPairs.push({ name: n, variant }); }
     }
   }
+  // A segment that carries both (女主) and (女主, 黑白条纹) means one beat sat
+  // before any cue — the cued pair defines the costume; drop the bare one.
+  const cued = new Set(castPairs.filter(p => p.variant).map(p => p.name));
+  const consolidated = castPairs.filter(p => p.variant || !cued.has(p.name));
   const urls: string[] = [];
   const bound: SegmentRefs['bound'] = [];
   const missing: string[] = [];
   const seen = new Set<string>();
-  for (const { name, variant } of castPairs) {
+  for (const { name, variant } of consolidated) {
     const label = variant ? `${name}（${variant}）` : name;
     // strictVariant: an unbound costume must surface as ⚠ in the preflight,
     // not silently borrow another costume's sheet (that IS the drift).
