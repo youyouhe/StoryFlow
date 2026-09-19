@@ -85,7 +85,10 @@ export const resolveSegmentRefs = (
     const n = baseCharName(b.content);
     if (n && !offScreen.includes(n)) offScreen.push(n);
   }
-  const universe = collectCharacterNames(segBlocks);
+  // Universe from the FULL script (off-screen cues already excluded) — a
+  // narrow slice would drop cues that sit before the segment span, and beat
+  // texts that name a character explicitly would match nothing.
+  const universe = collectCharacterNames(allBlocks);
   const names: string[] = [];
   for (const beat of seg.beats) {
     // computeBeatCast indexes BLOCKS, not beats — map each planned beat to
