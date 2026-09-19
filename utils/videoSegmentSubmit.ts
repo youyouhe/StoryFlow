@@ -117,7 +117,9 @@ export const resolveSegmentRefs = (
   const seen = new Set<string>();
   for (const { name, variant } of castPairs) {
     const label = variant ? `${name}（${variant}）` : name;
-    const sheet = resolveCharacterSheet(name, bindings, refImages, seg.sceneHeading, undefined, variant);
+    // strictVariant: an unbound costume must surface as ⚠ in the preflight,
+    // not silently borrow another costume's sheet (that IS the drift).
+    const sheet = resolveCharacterSheet(name, bindings, refImages, seg.sceneHeading, undefined, variant, { strictVariant: true });
     if (!sheet) { missing.push(label); continue; }
     if (seen.has(sheet.id)) continue;
     seen.add(sheet.id);

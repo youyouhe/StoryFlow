@@ -56,6 +56,8 @@ export const resolveCharacterSheet = (
   sceneHeading?: string,
   age?: string,
   variant?: string,
+  opts?: { /** when variant is set, never fall back to a base/different-variant sheet */
+    strictVariant?: boolean },
 ): RefImage | undefined => {
   const wanted = normIdentity(name);
   const wantBase = wanted.base;
@@ -94,6 +96,7 @@ export const resolveCharacterSheet = (
   if (wantVariant) {
     const tagged = owned.find(r => variantOf(r) === wantVariant);
     if (tagged) return tagged;
+    if (opts?.strictVariant) return undefined; // no silent cross-costume stand-in
   }
   if (age) {
     const tagged = owned.find(r => variantOf(r) === age);
