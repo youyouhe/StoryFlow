@@ -38,6 +38,15 @@ export const AIModal: React.FC<AIModalProps> = ({
     onPromptSourceChange,
     runContinuation,
 }) => {
+    // Live elapsed-seconds ticker while a batch runs — the user sees the
+    // modal is alive during slow serial LLM calls instead of assuming a hang.
+    const [elapsed, setElapsed] = React.useState(0);
+    React.useEffect(() => {
+        if (!aiState.batchProgress) { setElapsed(0); return; }
+        const started = Date.now();
+        const iv = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
+        return () => clearInterval(iv);
+    }, [aiState.batchProgress !== null]);
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
@@ -93,7 +102,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 />
                             </div>
                             <p className="text-[11px] text-gray-400 dark:text-gray-500 px-4">
-                                {t.graybox3dHint}
+                                已等待 {elapsed}s · 每段需调一次 LLM（10~30s），未到 180s 超时前都是正常等待
                             </p>
                         </div>
                     )}
