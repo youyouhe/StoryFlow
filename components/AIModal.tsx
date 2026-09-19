@@ -104,7 +104,7 @@ export const AIModal: React.FC<AIModalProps> = ({
     return (
         <>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
+            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-[34rem] md:max-w-2xl lg:max-w-3xl overflow-hidden border border-gray-200 dark:border-zinc-800 transform transition-all scale-100 ring-1 ring-black/5">
                 <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
                         <Sparkles className="w-5 h-5" />
@@ -295,7 +295,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                         </div>
                     )}
                     {aiMode === 'VIDEO_PLAN' && onVideoPlanDurationChange && (
-                        <div className="px-4 pb-2 flex items-center gap-2 text-[11px]">
+                        <div className="px-4 pb-2 flex flex-wrap items-center gap-2 gap-y-1.5 text-[11px]">
                             <span className="text-gray-500 dark:text-gray-400">模型</span>
                             <select
                                 value={model.id}
