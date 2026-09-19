@@ -18,6 +18,8 @@ import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { shipLog } from './services/debugLog';
+import { buildSegmentVideoPrompt, clampSegmentSeconds, resolveSegmentRefs } from './utils/videoSegmentSubmit';
+import type { VideoPlan } from './utils/videoPlan';
 
 // Boot ping — a mere page load produces a log entry, proving the debug
 // shipping pipeline works end-to-end and telling us which build the user runs.
@@ -250,6 +252,8 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem('h3_tasks', JSON.stringify(h3Tasks.slice(0, 50))); } catch { /* ignore */ }
   }, [h3Tasks]);
+  // Per-segment H3 submission progress for the VIDEO_PLAN batch button.
+  const [planH3Progress, setPlanH3Progress] = useState<{ current: number; total: number } | null>(null);
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -573,6 +577,63 @@ function App() {
       return { ok: false, error: msg };
     }
   }, [appSettings.minimaxApiKey, appSettings.minimaxBaseUrl]);
+
+  /** Submit every VIDEO_PLAN segment to H3 as text-to-video (simple mode):
+   *  prompt = the segment's timed beats, references = bound character sheets,
+   *  no white-model video. Sequential — H3 bills per task and the user reads
+   *  progress one segment at a time. */
+  const submitPlanToH3 = useCallback(async () => {
+    const plan = (window as unknown as { __videoPlan?: VideoPlan }).__videoPlan;
+    if (!plan || !plan.segments.length) {
+      setAIState(prev => ({ ...prev, error: '没有可提交的视频分段计划——请先运行 视频分段。' }));
+      return;
+    }
+    setPlanH3Progress({ current: 0, total: plan.segments.length });
+    shipLog('flow', 'info', `H3 plan submission start: ${plan.segments.length} segments`);
+    let okCount = 0;
+    let firstErr: string | null = null;
+    const chainId = `videoplan-${plan.segments[0].blockIds[0]}`;
+    for (let si = 0; si < plan.segments.length; si++) {
+      const seg = plan.segments[si];
+      setPlanH3Progress({ current: si + 1, total: plan.segments.length });
+      const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
+      const refs = resolveSegmentRefs(seg, segBlocks, refBindings, refImages);
+      const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
+      shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.characters.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
+      if (refs.missing.length) {
+        shipLog('flow', 'warn', `H3 segment ${si + 1}: characters without sheets: ${refs.missing.join(', ')}`);
+      }
+      const submitRes = await handleSubmitH3({
+        blockId: seg.blockIds[0],
+        blockContent: seg.beats[0]?.text ?? seg.sceneHeading,
+        prompt,
+        resolution: '768P',
+        outputSeconds: clampSegmentSeconds(seg.duration),
+        referenceImageUrls: refs.urls,
+        videoSeconds: 0, // text-to-video: no white-model input, cost = output only
+        targetSeconds: Math.round(seg.duration),
+        segmentIndex: si + 1,
+        segmentCount: plan.segments.length,
+        chainId,
+      });
+      // `in`-narrowing: this project runs without strictNullChecks, which
+      // widens the `ok: true|false` literal discriminant and breaks boolean
+      // narrowing — `'error' in` stays reliable under both configs.
+      if ('error' in submitRes) {
+        if (!firstErr) firstErr = submitRes.error;
+        shipLog('flow', 'error', `H3 segment ${si + 1} FAILED: ${submitRes.error}`);
+      } else {
+        okCount++;
+        shipLog('flow', 'info', `H3 segment ${si + 1}: task ${submitRes.taskId}`);
+      }
+    }
+    setPlanH3Progress(null);
+    if (firstErr) {
+      setAIState(prev => ({ ...prev, error: `${plan.segments.length - okCount}/${plan.segments.length} 段提交失败——${firstErr}` }));
+    } else {
+      shipLog('flow', 'info', `H3 plan submission done: ${okCount}/${plan.segments.length} tasks created`);
+    }
+  }, [screenplay.blocks, refBindings, refImages, handleSubmitH3]);
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
@@ -2428,6 +2489,8 @@ function App() {
                 promptSource={promptSource}
                 onPromptSourceChange={setPromptSource}
                 runContinuation={runContinuation}
+                onSubmitPlanToH3={() => { void submitPlanToH3(); }}
+                planH3Progress={planH3Progress}
             />
         )}
 

@@ -21,6 +21,10 @@ interface AIModalProps {
     promptSource: string;
     onPromptSourceChange: (v: string) => void;
     runContinuation: (directive?: { allowTransition: boolean; targetSceneHeading?: string }) => void;
+    /** VIDEO_PLAN only: submit every planned segment to H3 (text-to-video
+     *  with bound character sheets). Absent → button hidden. */
+    onSubmitPlanToH3?: () => void;
+    planH3Progress?: { current: number; total: number } | null;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -37,6 +41,8 @@ export const AIModal: React.FC<AIModalProps> = ({
     promptSource,
     onPromptSourceChange,
     runContinuation,
+    onSubmitPlanToH3,
+    planH3Progress,
 }) => {
     // Live elapsed-seconds ticker while a batch runs — the user sees the
     // modal is alive during slow serial LLM calls instead of assuming a hang.
@@ -237,6 +243,22 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 <FileText className="w-3.5 h-3.5" />
                                 {t.videoPlanExport}
                             </button>
+                        </div>
+                    )}
+                    {aiMode === 'VIDEO_PLAN' && aiState.suggestion && onSubmitPlanToH3 && (
+                        <div className="px-4 pb-1">
+                            <button
+                                onClick={onSubmitPlanToH3}
+                                disabled={!!planH3Progress}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-sm font-semibold disabled:opacity-60"
+                            >
+                                {planH3Progress
+                                    ? `提交中 ${planH3Progress.current}/${planH3Progress.total} …`
+                                    : '逐段提交 MiniMax H3 生成视频'}
+                            </button>
+                            <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500 text-center">
+                                prompt = 各段时间轴节拍 · 参考图 = 已绑定的角色设定图 · 无需白模视频
+                            </p>
                         </div>
                     )}
                     {aiState.error && (
