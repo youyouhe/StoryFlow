@@ -267,14 +267,14 @@ export const generateImages = async (
   // single front-facing subject works best (exactly our turnaround sheets).
   // subject_reference is an ARRAY — every present character sheet conditions
   // its own identity, so multi-character ACTIONs can lock all of them.
-  const identityRefs = [
-    ...(opts?.subjectReference ? [opts.subjectReference] : []),
-    ...(opts?.references?.characters ?? []),
-  ];
-  if (identityRefs.length) {
-    body.subject_reference = await Promise.all(
-      identityRefs.slice(0, 4).map(b => asBase64DataUri(b).then(uri => ({ type: 'character', image_file: uri }))),
-    );
+  // MiniMax image-01 subject_reference accepts EXACTLY ONE character image
+  // (confirmed: sending >1 triggers status 2013 'image_reference must be one').
+  // Multi-character conditioning is a FAL /edit capability — on MiniMax the
+  // primary cast sheet is the sole identity lock, secondary cast rely on the
+  // prompt description.
+  const identityRef = opts?.subjectReference ?? opts?.references?.characters?.[0];
+  if (identityRef) {
+    body.subject_reference = [await asBase64DataUri(identityRef).then(uri => ({ type: 'character', image_file: uri }))];
   }
   // MiniMax image-01 exposes no landscape/scenery slot (only character
   // subject_reference). A scene backdrop on MiniMax is therefore carried in the
