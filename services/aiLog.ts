@@ -39,6 +39,16 @@ export function logAiCall(e: AiLogEntry): void {
     `${e.promptChars ? ` in=${e.promptChars}` : ''}${e.responseChars ? ` out=${e.responseChars}` : ''}` +
     `${e.errorType ? ` (${e.errorType})` : ''}${e.error ? ` ${e.error.slice(0, 80)}` : ''}`,
   );
+
+  // Dev server shipping: fire-and-forget POST to the Vite debug middleware.
+  // In production the endpoint 404s and the fetch is silently ignored.
+  try {
+    fetch('/api/debug-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'ai-call', ...e }),
+    }).catch(() => {});
+  } catch { /* never break the call path */ }
 }
 
 export function getAiLog(opts?: { last?: number; op?: string; failuresOnly?: boolean }): AiLogEntry[] {
@@ -63,4 +73,16 @@ export function classifyError(e: unknown): { errorType: string; message: string 
   const http = msg.match(/HTTP (\d+)/i);
   if (http) return { errorType: `http:${http[1]}`, message: msg };
   return { errorType: 'unknown', message: msg };
+}
+
+/** Ship an uncaught error to the dev-server debug log. Fire-and-forget. */
+export function shipError(context: string, error: unknown): void {
+  try {
+    const msg = String((error as Error)?.message ?? error);
+    fetch('/api/debug-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'app-error', context, error: msg, ts: Date.now() }),
+    }).catch(() => {});
+  } catch { /* never break the call path */ }
 }

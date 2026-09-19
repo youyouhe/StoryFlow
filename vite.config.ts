@@ -1,7 +1,34 @@
 import path from 'path';
+import { appendFileSync, mkdirSync } from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+
+/** Dev-only middleware: POST /api/debug-log → append to a local file.
+ *  The frontend fires-and-forgets AI call logs here so the developer can
+ *  read errors without DevTools on the user's device. */
+const debugLogPlugin = () => ({
+  name: 'debug-log',
+  configureServer(server: import('vite').ViteDevServer) {
+    const logDir = '/tmp/storyflow-dev';
+    try { mkdirSync(logDir, { recursive: true }); } catch {}
+    server.middlewares.use('/api/debug-log', (req, res) => {
+      if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const entry = JSON.parse(body);
+          const line = JSON.stringify({ ...entry, receivedAt: new Date().toISOString() }) + '\n';
+          appendFileSync(`${logDir}/debug.log`, line);
+        } catch { /* ignore malformed */ }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end('{"ok":true}');
+      });
+    });
+  },
+});
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
@@ -16,7 +43,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         strictPort: true,
       },
-      plugins: [react(), ...(https ? [basicSsl()] : [])],
+      plugins: [react(), debugLogPlugin(), ...(https ? [basicSsl()] : [])],
       build: {
         // 'assets/' collides with the gallery API route /assets/* when the
         // gallery hosts this SPA — bundle files live under /static/ instead.
