@@ -8,7 +8,7 @@
  * The developer reads /tmp/storyflow-dev/debug.log to diagnose issues
  * without DevTools on the user's device.
  */
-export function shipLog(source: string, level: 'warn' | 'error', message: string, detail?: unknown): void {
+export function shipLog(source: string, level: 'info' | 'warn' | 'error', message: string, detail?: unknown): void {
   try {
     fetch('/api/debug-log', {
       method: 'POST',

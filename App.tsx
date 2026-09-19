@@ -1301,6 +1301,7 @@ function App() {
             result = t.aiErrorGeneric;
         }
       } else if (effectiveMode === 'STORYBOARD') {
+        shipLog('flow', 'info', `STORYBOARD batch start: ${screenplay.blocks.length} blocks`);
         const currentBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
         if (!currentBlock || (currentBlock.type !== 'ACTION' && currentBlock.type !== 'CHARACTER' && currentBlock.type !== 'SCENE_HEADING')) {
             setAIState({ isLoading: false, suggestion: null, error: t.storyboardWrongBlock, decision: null, grayboxDraft: null, batchProgress: null });
@@ -1470,6 +1471,7 @@ function App() {
           : undefined;
         result = await generateImagePrompt(sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind, screenplay.metadata.styleHead, shotGraybox, globalCharDesigns, wardrobe, charName, variant);
       } else if (effectiveMode === 'GRAYBOX') {
+        shipLog('flow', 'info', `GRAYBOX batch start: ${screenplay.blocks.length} blocks`);
         // Graybox: structured 3D previs JSON (scene layout or shot camera).
         // Mirrors the STORYBOARD scene-slice, but emits a GrayboxData object
         // stored in `grayboxDraft` (never `suggestion`).
@@ -1686,6 +1688,7 @@ function App() {
         }));
         result = `Dubbing direction written to ${applied}/${total} dialogue line${total === 1 ? '' : 's'}. (emotion + delivery + intensity per line)`;
       } else if (effectiveMode === 'FROM_PROMPT') {
+        shipLog('flow', 'info', `FROM_PROMPT start: promptSource ${promptSource.length} chars`);
         // FROM_PROMPT: transcribe a pasted production prompt into a full
         // screenplay. The result flows through the normal suggestion → accept
         // path; accept creates a NEW script (not an append).
@@ -1702,9 +1705,12 @@ function App() {
         // Deterministic planner — no AI call. Reads each beat's timestamp
         // prefix, groups consecutive beats into ≤target generation windows
         // (scene changes force a boundary; beats are atomic, never split).
+        shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks, mode=${screenplay.productionMode ?? '?'}`);
         const target = 15; // H3 max; adjustable when other models are wired
         const plan = planVideoSegments(screenplay.blocks, target);
+        shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
         if (!plan.segments.length || plan.segments.every(s => s.beats.length === 0)) {
+          shipLog('flow', 'warn', 'VIDEO_PLAN early-return: no timeline beats found');
           setAIState({ isLoading: false, suggestion: null, error: t.videoPlanNoTimeline, decision: null, grayboxDraft: null, batchProgress: null });
           return;
         }
@@ -1717,7 +1723,10 @@ function App() {
         // Results land in screenplay.segmentGrayboxes keyed by the segment's
         // first block id — the white-model render / H3 flow reads them.
         // SKIPPED in simple production mode (no spatial blocking needed).
-        if (screenplay.productionMode === 'simple') return;
+        if (screenplay.productionMode === 'simple') {
+          shipLog('flow', 'info', 'VIDEO_PLAN: simple mode — skipping segment graybox batch');
+          return;
+        }
         const segLayout = (() => {
           const h = screenplay.blocks.find(b => b.type === 'SCENE_HEADING');
           return h?.graybox && h.graybox.kind === 'scene' && !h.graybox.error ? h.graybox : null;
@@ -1729,10 +1738,12 @@ function App() {
           const seg = plan.segments[si];
           setAIState({ isLoading: true, suggestion: result || null, error: null, info: null, decision: null, grayboxDraft: null, batchProgress: { current: si + 1, total: plan.segments.length } });
           const segBlocks = screenplay.blocks.filter(b => seg.blockIds.includes(b.id));
+          shipLog('flow', 'info', `VIDEO_PLAN segment ${si + 1}/${plan.segments.length}: calling LLM (${seg.beats.length} beats, ${Math.round(seg.duration)}s, layout=${segLayout ? 'yes' : 'none'})`);
           const gb = await generateSegmentGraybox(
             segBlocks, seg.beats, segLayout, seg.sceneHeading,
             Math.round(seg.duration * 10) / 10, appSettings, activeTemplate.systemPrompt,
           );
+          shipLog('flow', gb.error ? 'warn' : 'info', `VIDEO_PLAN segment ${si + 1}/${plan.segments.length}: ${gb.error ? `FAILED — ${gb.error}` : 'ok'}`);
           if (!gb.error) {
             segGrayboxes[seg.blockIds[0]] = gb;
             setScreenplay(prev => ({
@@ -1746,12 +1757,14 @@ function App() {
             console.warn('Segment graybox failed:', gb.error); shipLog("segment-graybox", "error", `Segment graybox failed: ${gb.error}`);
           }
         }
+        shipLog('flow', segFailures ? 'warn' : 'info', `VIDEO_PLAN batch done: ${plan.segments.length - segFailures}/${plan.segments.length} ok`);
         if (segFailures) {
           setAIState({ isLoading: false, suggestion: result || null, error: `${segFailures}/${plan.segments.length} 段灰盒生成失败——${segFirstError ?? '未知原因'}`, decision: null, grayboxDraft: null, batchProgress: null });
         }
       }
       setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
     } catch (err: any) {
+      shipLog('flow', 'error', `executeAI(${effectiveMode}) threw`, err);
       const msg = err?.message || '';
       // Map known sentinel errors from the service layer to localized messages
       const friendly = msg === 'GEMINI_KEY_MISSING' || msg === 'DEEPSEEK_KEY_MISSING'
