@@ -36,6 +36,9 @@ interface AIModalProps {
     onVideoPlanDurationChange?: (n: number) => void;
     videoPlanModelId?: string;
     onVideoPlanModelChange?: (id: string) => void;
+    /** Fired after either knob changes — App re-runs the (deterministic,
+     *  instant) planner so a stale plan is never re-clamped for display. */
+    onVideoPlanParamsChange?: () => void;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -59,6 +62,7 @@ export const AIModal: React.FC<AIModalProps> = ({
     onVideoPlanDurationChange,
     videoPlanModelId = MINIMAX_VIDEO_MODELS[0].id,
     onVideoPlanModelChange,
+    onVideoPlanParamsChange,
 }) => {
     const model = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
     const durations: number[] = [];
@@ -279,7 +283,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                             <span className="text-gray-500 dark:text-gray-400">模型</span>
                             <select
                                 value={model.id}
-                                onChange={e => onVideoPlanModelChange?.(e.target.value)}
+                                onChange={e => { onVideoPlanModelChange?.(e.target.value); onVideoPlanParamsChange?.(); }}
                                 className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
                             >
                                 {MINIMAX_VIDEO_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -287,13 +291,13 @@ export const AIModal: React.FC<AIModalProps> = ({
                             <span className="text-gray-500 dark:text-gray-400 ml-2">每段时长</span>
                             <select
                                 value={videoPlanDuration}
-                                onChange={e => onVideoPlanDurationChange(Number(e.target.value))}
+                                onChange={e => { onVideoPlanDurationChange(Number(e.target.value)); onVideoPlanParamsChange?.(); }}
                                 className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
                             >
                                 {durations.map(s => <option key={s} value={s}>{s} 秒</option>)}
                             </select>
                             {aiState.suggestion && (
-                                <span className="text-gray-400">· 改动后需重新生成计划</span>
+                                <span className="text-gray-400">· 改动即时重新规划</span>
                             )}
                         </div>
                     )}

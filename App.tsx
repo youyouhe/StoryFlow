@@ -2542,6 +2542,13 @@ function App() {
                 }}
                 videoPlanDuration={videoPlanDuration}
                 onVideoPlanDurationChange={setVideoPlanDuration}
+                onVideoPlanParamsChange={() => {
+                    // The planner is deterministic and AI-free — a knob change
+                    // can regenerate instantly. A STALE plan re-clamped to the
+                    // new window once showed 3 fake segments (14s grouping
+                    // displayed under a 10s cap) and mislead the user.
+                    if (aiState.suggestion) void executeAI();
+                }}
             />
         )}
 
