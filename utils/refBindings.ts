@@ -69,29 +69,49 @@ export const resolveCharacterSheet = (
   // character's general sheet) → the name as passed. Per-variant keys are what
   // make in-scene 换装 bindable: different beats of one character can link to
   // DIFFERENT pngs, and re-linking a slot never disturbs the others.
+  // Costume tag embedded in a filename BEFORE a suffix:
+  // 女主（黑白条纹）-gen-mu84fh6x.png → 黑白条纹. Unanchored (unlike
+  // parseCharacterName) because generated names carry -gen-<id> tails after
+  // the closing paren.
+  const variantTagOf = (stem: string): string | undefined => {
+    const m = stem.match(/^[^()（）]*?[（(]([^()（）]+)[)）]/);
+    return m ? m[1].trim() || undefined : undefined;
+  };
+  const variantOf = (r: RefImage): string | undefined =>
+    normIdentity(r.subject).variant ?? variantTagOf(stemOf(r));
+
   const boundId =
     (wantVariant ? eff.characters[`${wantBase}/${wantVariant}`] : undefined) ??
-    eff.characters[wantBase] ??
-    eff.characters[name];
+    // strict + variant: a BASE binding (女主 → 初始造型) must not masquerade
+    // as the costume — fall through to the tagged asset below.
+    (opts?.strictVariant && wantVariant ? undefined : (eff.characters[wantBase] ?? eff.characters[name]));
   if (boundId) {
     const im = refImages.find(r => r.id === boundId);
-    if (im) return im;
+    if (im) {
+      // strict + variant: even a variant-KEY binding pointing at an asset
+      // tagged as a different/untagged costume is a stale link — reject and
+      // let the tagged asset win. (Live case: both 女主/黑白条纹 and
+      // 女主/酒红学院风 were linked to the same 初始造型 png.)
+      if (!(opts?.strictVariant && wantVariant) || variantOf(im) === wantVariant) return im;
+    }
   }
 
   // Identity candidates: match the SUBJECT or the NAME (stem, extension
-  // stripped). Both are user-visible identity claims — users rename assets to
+  // stripped; base may sit before a （变体） tag that trails into -gen-…).
+  // Both are user-visible identity claims — users rename assets to
   // 女主（初始造型）.png expecting recognition, and subjects may be edited
   // independently. Whichever field carries the identity counts.
   const stemOf = (r: RefImage): string => (r.name ?? '').replace(/\.[^.]+$/, '');
+  const baseOfStem = (stem: string): string => {
+    const m = stem.match(/^([^()（）]*?)[（(]/);
+    return (m ? m[1] : stem).trim();
+  };
   const owned = refImages.filter(r => {
     const bySubject = normIdentity(r.subject).base === wantBase;
-    const byName = normIdentity(stemOf(r)).base === wantBase;
+    const byName = normIdentity(stemOf(r)).base === wantBase || baseOfStem(stemOf(r)) === wantBase;
     return bySubject || byName;
   });
   if (!owned.length) return undefined;
-
-  const variantOf = (r: RefImage): string | undefined =>
-    normIdentity(r.subject).variant ?? normIdentity(stemOf(r)).variant;
 
   if (wantVariant) {
     const tagged = owned.find(r => variantOf(r) === wantVariant);
