@@ -17,6 +17,7 @@ import { checkGrayboxHealth } from './utils/grayboxHealth';
 import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
+import { shipLog } from './services/debugLog';
 import { copyToClipboard } from './utils/clipboard';
 import { planVideoSegments, formatVideoPlan } from './utils/videoPlan';
 import { sanitizeParsedBlocks } from './utils/scriptParse';
@@ -95,7 +96,7 @@ function App() {
           const indexJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_INDEX);
           return indexJson ? JSON.parse(indexJson) : [];
       } catch (e) {
-          console.warn("Failed to load script index", e);
+          console.warn("Failed to load script index", e); shipLog("script", "error", "Failed to load script index", e);
           return [];
       }
   });
@@ -136,7 +137,7 @@ function App() {
             }
         }
     } catch (e) {
-        console.warn("Failed to load recent script", e);
+        console.warn("Failed to load recent script", e); shipLog("script", "error", "Failed to load recent script", e);
     }
 
     // 3. Fallback to default
@@ -353,7 +354,7 @@ function App() {
         return stored.id;
       }
     } catch (e) {
-      console.warn('Failed to store reference image', e);
+      console.warn('Failed to store reference image', e); shipLog("asset", "error", "Failed to store reference image", e);
       return null;
     }
   }, [assetDir, screenplay.id, refImages]);
@@ -395,7 +396,7 @@ function App() {
       if (migratedNote) console.info('[assets]', migratedNote);
       setRefImages(assets.map((a) => toRefImage(a)));
     } catch (e) {
-      console.warn('Failed to open asset folder', e);
+      console.warn('Failed to open asset folder', e); shipLog("asset", "error", "Failed to open asset folder", e);
     }
   }, [assetDir]);
 
@@ -420,7 +421,7 @@ function App() {
       setAssetDir(h);
       setRefImages(assets.map((a) => toRefImage(a)));
     } catch (e) {
-      console.warn('Failed to switch asset folder', e);
+      console.warn('Failed to switch asset folder', e); shipLog("asset", "error", "Failed to switch asset folder", e);
     }
   }, []);
 
@@ -437,7 +438,7 @@ function App() {
       const assets = await listDirAssets(assetDir);
       setRefImages(assets.map((a) => toRefImage(a)));
     } catch (e) {
-      console.warn('Failed to rescan asset folder', e);
+      console.warn('Failed to rescan asset folder', e); shipLog("asset", "warn", "Failed to rescan asset folder", e);
     }
   }, [assetDir]);
   const handleRemoveRefImage = useCallback((id: string) => {
@@ -664,7 +665,7 @@ function App() {
         // first push is always the explicit one-click sync.
         syncEngine.markDirty(screenplay);
       } catch (e) {
-        console.error("Autosave failed", e);
+        console.error("Autosave failed", e); shipLog("autosave", "error", "Autosave failed", e);
       }
     }, 1000);
 
@@ -791,7 +792,7 @@ function App() {
           setSelectedBlockId(imported.blocks[0].id);
           setIsReadOnly(false);
       } catch (e) {
-          console.warn('Import failed:', e);
+          console.warn('Import failed:', e); shipLog("import", "error", "Import failed", e);
           alert(t.importScriptError);
       }
   }, [t]);
@@ -969,7 +970,7 @@ function App() {
               setSidebarOpen(true);
           }
       } catch (e) {
-          console.error("Failed to load script", e);
+          console.error("Failed to load script", e); shipLog("script", "error", "Failed to load script", e);
       }
   };
 
@@ -1011,7 +1012,7 @@ function App() {
               }
           }
       } catch (e) {
-          console.error("Failed to delete script", e);
+          console.error("Failed to delete script", e); shipLog("script", "error", "Failed to delete script", e);
       }
   };
 
@@ -1204,7 +1205,7 @@ function App() {
               exportJSON(sp, options);
           }
       } catch (error) {
-          console.error('Export failed:', error);
+          console.error('Export failed:', error); shipLog("export", "error", "Export failed", error);
           // Surface the error without reloading the page \u2014 autosave may not
           // have captured the very latest edits, and a reload would discard them.
           window.alert(t.pdfExportError);
@@ -1400,7 +1401,7 @@ function App() {
               if (!prompt || !prompt.trim()) {
                 failures++;
                 if (!firstError) firstError = t.aiErrorGeneric;
-                console.warn(`Storyboard for block ${job.blockId} returned empty`);
+                console.warn(`Storyboard for block ${job.blockId} returned empty`); shipLog("storyboard", "warn", "Storyboard returned empty");
                 continue;
               }
               // Write live. CHARACTER prompts propagate to the same BASE+variant
@@ -1421,7 +1422,7 @@ function App() {
             } catch (err: any) {
               failures++;
               if (!firstError) firstError = err?.message || t.aiErrorGeneric;
-              console.warn(`Storyboard for block ${job.blockId} failed:`, err);
+              console.warn(`Storyboard for block ${job.blockId} failed:`, err); shipLog("storyboard", "error", `Storyboard for block ${job.blockId} failed`, err); shipLog("storyboard", "error", `Storyboard for block ${job.blockId} failed`, err);
             }
           }
 
@@ -1600,7 +1601,7 @@ function App() {
               if (shotGraybox.error) {
                 failures++;
                 if (!firstError) firstError = shotGraybox.error;
-                console.warn(`Graybox for block ${block.id} degraded:`, shotGraybox.error);
+                console.warn(`Graybox for block ${block.id} degraded:`, shotGraybox.error); shipLog("graybox", "warn", `Graybox degraded: ${shotGraybox.error}`);
               } else {
                 setScreenplay(prev => ({
                   ...prev,
@@ -1613,7 +1614,7 @@ function App() {
             } catch (err: any) {
               failures++;
               if (!firstError) firstError = err?.message || t.aiErrorGeneric;
-              console.warn(`Graybox for block ${block.id} failed:`, err);
+              console.warn(`Graybox for block ${block.id} failed:`, err); shipLog("graybox", "error", `Graybox for block ${block.id} failed`, err);
             }
           }
 
@@ -1742,7 +1743,7 @@ function App() {
           } else {
             segFailures++;
             if (!segFirstError) segFirstError = gb.error;
-            console.warn('Segment graybox failed:', gb.error);
+            console.warn('Segment graybox failed:', gb.error); shipLog("segment-graybox", "error", `Segment graybox failed: ${gb.error}`);
           }
         }
         if (segFailures) {

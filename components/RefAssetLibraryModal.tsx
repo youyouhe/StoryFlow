@@ -11,6 +11,7 @@ import {
   cloudObjectUrl
 } from '../services/assetCloud';
 import { addRefImage } from '../services/refImageStore';
+import { shipLog } from '../services/debugLog';
 import { isGalleryApiError } from '../services/apiClient';
 import type { CloudAsset } from '../services/apiClient';
 /**
@@ -713,7 +714,7 @@ export const RefAssetLibraryModal: React.FC<Props> = ({ images, onUpdateMeta, on
                 src={preview.url}
                 className="flex-1 rounded-lg overflow-hidden"
                 onLoaded={(w, h) => {
-                  if (w / h < 1.8) console.warn('[assets] panorama is not 2:1 equirectangular:', w, h);
+                  if (w / h < 1.8) console.warn('[assets] panorama is not 2:1 equirectangular:', w, h)
                 }}
               />
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-200">

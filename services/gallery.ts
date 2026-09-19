@@ -34,6 +34,7 @@ function upsertIndex(id: string, title: string) {
     localStorage.setItem(SCRIPT_INDEX, JSON.stringify(idx));
   } catch (e) {
     console.warn('gallery: failed to update script index', e);
+  shipLog('gallery', 'warn', 'gallery: failed to update script index', e);
   }
 }
 
@@ -53,6 +54,7 @@ export const syncStore: SyncStoreAdapter = {
       upsertIndex(s.id, s.metadata.title);
     } catch (e) {
       console.warn('gallery: failed to persist screenplay', e);
+  shipLog('gallery', 'warn', 'gallery: failed to persist screenplay', e);
     }
   },
 
@@ -83,6 +85,7 @@ export const syncStore: SyncStoreAdapter = {
       else localStorage.removeItem(SYNC_PREFIX + scriptId);
     } catch (e) {
       console.warn('gallery: failed to persist sync state', e);
+  shipLog('gallery', 'warn', 'gallery: failed to persist sync state', e);
     }
   }
 };
@@ -94,6 +97,7 @@ export const syncStore: SyncStoreAdapter = {
 // 'same-origin' = the gallery hosts this SPA and its API on one domain
 // (production topology); requests go to relative /auth /scripts … paths.
 import { HttpGalleryApi } from './apiClient';
+import { shipLog } from './debugLog';
 const galleryUrl = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_GALLERY_URL ?? '').trim();
 const SAME_ORIGIN = galleryUrl.toLowerCase() === 'same-origin';
 const api = SAME_ORIGIN

@@ -2,6 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { logAiCall, classifyError } from "./aiLog";
 import { buildSequenceContext } from '../utils/sequence';
 import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion, CharacterWardrobe, ScriptSequence } from "../types";
+import { shipLog } from './debugLog';
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -118,6 +119,7 @@ const callAIProvider = async (
           continue;
         }
         console.error("DeepSeek API Error:", e);
+  shipLog('gemini', 'error', "DeepSeek API Error:", e);
         finish(model, errorType === 'timeout' ? 'timeout' : 'error', '',
           { errorType, error: message, attempt });
         throw new Error(message);
@@ -160,6 +162,7 @@ const callAIProvider = async (
   } catch (error) {
     const { errorType, message } = classifyError(error);
     console.error("Gemini Generate Error:", error);
+  shipLog('gemini', 'error', "Gemini Generate Error:", error);
     finish(model, 'error', '', { errorType, error: message });
     // Same contract as the DeepSeek branch: hard failures THROW the real
     // message so the UI shows 余额不足/invalid key instead of a generic retry.
@@ -1536,6 +1539,7 @@ Output only the JSON.`;
     raw = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, true, 'dub');
   } catch (err: any) {
     console.warn('analyzeDubbing failed:', err);
+  shipLog('gemini', 'warn', 'analyzeDubbing failed:', err);
     return {};
   }
 

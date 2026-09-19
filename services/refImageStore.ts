@@ -1,4 +1,5 @@
 import { parseCharacterName } from '../utils/beatCast';
+import { shipLog } from './debugLog';
 
 /**
  * Reference-image library — IndexedDB persistence for the white-model
@@ -167,6 +168,7 @@ export const addRefImage = async (file: File, meta?: RefImageMetaPatch): Promise
     const m = file.name.match(/^(.+)-gen-[a-z0-9]+\.(?:png|jpe?g|webp)$/i);
     if (m) {
       console.warn('[refImageStore] subject missing in meta — recovered from filename:', m[1]);
+  shipLog('ref-store', 'warn', '[refImageStore] subject missing in meta — recovered from filename:', m[1]);
       Object.assign(effective, parseLegacySubject(m[1]));
     }
   }

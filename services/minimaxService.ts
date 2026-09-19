@@ -19,7 +19,8 @@
  *     (768P 0.50, 2K 0.80); images beyond 5 cost ¥0.20 each
  */
 
-import { logAiCall, classifyError } from './aiLog';
+import { logAiCall, classifyError } from './aiLog'
+import { shipLog } from './debugLog';
 import { falTextToImage, falDownloadImages, DEFAULT_FAL_MODEL, FAL_SIZE_FOR_ASPECT, FalConfig } from './falService';
 
 /** Backend selector for generateImages — mirrors AppSettings.imageProvider. */
