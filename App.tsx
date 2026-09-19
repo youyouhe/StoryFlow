@@ -18,6 +18,10 @@ import { resolveActionRef } from './utils/refBindings';
 import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { shipLog } from './services/debugLog';
+
+// Boot ping — a mere page load produces a log entry, proving the debug
+// shipping pipeline works end-to-end and telling us which build the user runs.
+shipLog('boot', 'info', `app loaded @ ${new Date().toISOString()} · UA=${navigator.userAgent.slice(0, 60)} · ${screen.width}x${screen.height}`);
 import { copyToClipboard } from './utils/clipboard';
 import { planVideoSegments, formatVideoPlan } from './utils/videoPlan';
 import { sanitizeParsedBlocks } from './utils/scriptParse';
