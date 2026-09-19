@@ -2218,7 +2218,25 @@ function App() {
                   </>
                 )}
              </div>
-          </div>
+             {/* Production mode badge: shows the pipeline level, click to toggle */}
+             <button
+               onClick={() => setScreenplay(prev => ({
+                   ...prev,
+                   productionMode: prev.productionMode === 'simple' ? 'cinematic' : 'simple',
+                   lastModified: Date.now(),
+               }))}
+               title={screenplay.productionMode === 'simple'
+                   ? '简易模式——无灰盒/白模，适合固定机位内容'
+                   : '专业模式——含灰盒+白模完整管线'}
+               className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                   screenplay.productionMode === 'simple'
+                       ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
+                       : 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-800'
+               }`}
+             >
+                 {screenplay.productionMode === 'simple' ? '简易' : '专业'}
+             </button>
+           </div>
           <div className="flex items-center gap-2">
              <button 
                 onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
