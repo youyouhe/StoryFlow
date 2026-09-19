@@ -50,6 +50,9 @@ export interface H3SubmitParams {
   referenceImages: H3ReferenceImage[];
   resolution: '768P' | '1080P';
   outputSeconds: number;
+  /** CN video model id — duration legality depends on it (H3: 4~15,
+   *  H3-Max: 5~15). Defaults to MINIMAX_VIDEO_MODEL. */
+  model?: string;
 }
 
 export interface H3TaskStatus {
@@ -137,7 +140,7 @@ export const createH3Task = async (
     image_file: await asBase64DataUri(img.blob),
   })));
   const body: Record<string, unknown> = {
-    model: MINIMAX_VIDEO_MODEL,
+    model: p.model ?? MINIMAX_VIDEO_MODEL,
     prompt: p.prompt,
     duration: p.outputSeconds,
     resolution: p.resolution,

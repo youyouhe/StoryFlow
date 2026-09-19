@@ -19,6 +19,7 @@ import { sequenceAt, wardrobeIn } from './utils/sequence';
 import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { shipLog } from './services/debugLog';
 import { buildSegmentVideoPrompt, clampSegmentSeconds, resolveSegmentRefs } from './utils/videoSegmentSubmit';
+import { MINIMAX_VIDEO_MODELS } from './constants';
 import type { VideoPlan } from './utils/videoPlan';
 
 // Boot ping — a mere page load produces a log entry, proving the debug
@@ -260,6 +261,12 @@ function App() {
   }, [h3Tasks]);
   // Per-segment H3 submission progress for the VIDEO_PLAN batch button.
   const [planH3Progress, setPlanH3Progress] = useState<{ current: number; total: number } | null>(null);
+  // VIDEO_PLAN knobs: which CN model renders, and the per-segment window.
+  // The window is BOTH the planner grouping target and the submitted
+  // duration cap — one knob, no drift between plan and submission.
+  const [videoPlanModelId, setVideoPlanModelId] = useState(MINIMAX_VIDEO_MODELS[0].id);
+  const videoPlanModel = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
+  const [videoPlanDuration, setVideoPlanDuration] = useState(10);
   // The live plan (replaces the old window stash — state is reactive and dies
   // with the script, so a stale plan can never cross-submit into another one).
   const [videoPlan, setVideoPlan] = useState<VideoPlan | null>(null);
@@ -272,14 +279,14 @@ function App() {
       const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       return {
         index: i + 1,
-        seconds: clampSegmentSeconds(seg.duration),
+        seconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
         beatCount: seg.beats.length,
         characters: refs.bound,
         missing: refs.missing,
         offScreen: refs.offScreen,
       };
     });
-  }, [videoPlan, screenplay.blocks, refBindings, refImages]);
+  }, [videoPlan, screenplay.blocks, refBindings, refImages, videoPlanModel, videoPlanDuration]);
   const openImagePromptPanel = useCallback((id: string) => {
     setPanelTab('prompt');
     setPromptPanelBlockId(id);
@@ -529,6 +536,7 @@ function App() {
     prompt: string;
     resolution: '768P' | '1080P';
     outputSeconds: number;
+    model?: string;
     referenceImageUrls: string[];
     targetSeconds?: number;
     segmentIndex?: number;
@@ -594,6 +602,7 @@ function App() {
         referenceImages: images,
         resolution: payload.resolution,
         outputSeconds: payload.outputSeconds,
+        model: payload.model,
       }, fileUri);
       setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, taskId, status: 'queued' } : t));
       return { ok: true, taskId };
@@ -633,7 +642,8 @@ function App() {
         blockContent: seg.beats[0]?.text ?? seg.sceneHeading,
         prompt,
         resolution: '1080P',
-        outputSeconds: clampSegmentSeconds(seg.duration),
+        model: videoPlanModel.id,
+        outputSeconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
         referenceImageUrls: refs.urls,
         videoSeconds: 0, // text-to-video: no white-model input, cost = output only
         targetSeconds: Math.round(seg.duration),
@@ -658,7 +668,7 @@ function App() {
     } else {
       shipLog('flow', 'info', `H3 plan submission done: ${okCount}/${plan.segments.length} tasks created`);
     }
-  }, [videoPlan, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
+  }, [videoPlan, videoPlanModel, videoPlanDuration, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
@@ -1797,7 +1807,7 @@ function App() {
         // prefix, groups consecutive beats into ≤target generation windows
         // (scene changes force a boundary; beats are atomic, never split).
         shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks, mode=${screenplay.productionMode ?? '?'}`);
-        const target = 10; // Hailuo-2.3 max duration — segments must fit one window
+        const target = videoPlanDuration; // per-segment window (user-selected)
         const plan = planVideoSegments(screenplay.blocks, target);
         shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
         if (!plan.segments.length || plan.segments.every(s => s.beats.length === 0)) {
@@ -1863,7 +1873,7 @@ function App() {
         : (err?.message || t.aiErrorGeneric);
       setAIState({ isLoading: false, suggestion: null, error: friendly, decision: null, grayboxDraft: null, batchProgress: null });
     }
-  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t, promptSource]);
+  }, [aiMode, appSettings, screenplay.blocks, screenplay.metadata.scriptLanguage, screenplay.metadata.templateId, selectedBlockId, t, promptSource, videoPlanDuration]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent, id: string, selectionStart: number) => {
     if (isReadOnly) return;
@@ -2517,6 +2527,15 @@ function App() {
                 onSubmitPlanToH3={() => { void submitPlanToH3(); }}
                 planH3Progress={planH3Progress}
                 planPreflight={planPreflight}
+                videoPlanModelId={videoPlanModel.id}
+                onVideoPlanModelChange={(id) => {
+                    setVideoPlanModelId(id);
+                    // H3-Max has no 4s window — keep the knob legal on switch.
+                    const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
+                    if (m && videoPlanDuration < m.min) setVideoPlanDuration(m.min);
+                }}
+                videoPlanDuration={videoPlanDuration}
+                onVideoPlanDurationChange={setVideoPlanDuration}
             />
         )}
 

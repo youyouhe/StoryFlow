@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { FileText, Sparkles, X, Boxes, Bot, Loader2, Wand2, Cloud } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { AIMode, AIState } from '../types';
-import { TRANSLATIONS } from '../constants';
+import { TRANSLATIONS, MINIMAX_VIDEO_MODELS } from '../constants';
 import { grayboxOverviewLine } from '../utils/exportData';
 import { collectDebugInfo } from '../utils/debugInfo';
 import { copyToClipboard } from '../utils/clipboard';
@@ -30,6 +30,12 @@ interface AIModalProps {
      *  design sheets, which don't. Purely informational — missing sheets
      *  warn, never veto. */
     planPreflight?: { index: number; seconds: number; beatCount: number; characters: { name: string; url: string; sheetName: string }[]; missing: string[]; offScreen: string[] }[] | null;
+    /** VIDEO_PLAN knobs: per-segment window (also the plan grouping target).
+     *  Allowed values depend on the model — H3: 4~15, H3-Max: 5~15. */
+    videoPlanDuration?: number;
+    onVideoPlanDurationChange?: (n: number) => void;
+    videoPlanModelId?: string;
+    onVideoPlanModelChange?: (id: string) => void;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -49,7 +55,14 @@ export const AIModal: React.FC<AIModalProps> = ({
     onSubmitPlanToH3,
     planH3Progress,
     planPreflight,
+    videoPlanDuration = 10,
+    onVideoPlanDurationChange,
+    videoPlanModelId = MINIMAX_VIDEO_MODELS[0].id,
+    onVideoPlanModelChange,
 }) => {
+    const model = MINIMAX_VIDEO_MODELS.find(m => m.id === videoPlanModelId) ?? MINIMAX_VIDEO_MODELS[0];
+    const durations: number[] = [];
+    for (let s = model.min; s <= model.max; s++) durations.push(s);
     // Live elapsed-seconds ticker while a batch runs — the user sees the
     // modal is alive during slow serial LLM calls instead of assuming a hang.
     const [elapsed, setElapsed] = React.useState(0);
@@ -259,6 +272,29 @@ export const AIModal: React.FC<AIModalProps> = ({
                                 <FileText className="w-3.5 h-3.5" />
                                 {t.videoPlanExport}
                             </button>
+                        </div>
+                    )}
+                    {aiMode === 'VIDEO_PLAN' && onVideoPlanDurationChange && (
+                        <div className="px-4 pb-2 flex items-center gap-2 text-[11px]">
+                            <span className="text-gray-500 dark:text-gray-400">模型</span>
+                            <select
+                                value={model.id}
+                                onChange={e => onVideoPlanModelChange?.(e.target.value)}
+                                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
+                            >
+                                {MINIMAX_VIDEO_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </select>
+                            <span className="text-gray-500 dark:text-gray-400 ml-2">每段时长</span>
+                            <select
+                                value={videoPlanDuration}
+                                onChange={e => onVideoPlanDurationChange(Number(e.target.value))}
+                                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-200"
+                            >
+                                {durations.map(s => <option key={s} value={s}>{s} 秒</option>)}
+                            </select>
+                            {aiState.suggestion && (
+                                <span className="text-gray-400">· 改动后需重新生成计划</span>
+                            )}
                         </div>
                     )}
                     {aiMode === 'VIDEO_PLAN' && aiState.suggestion && planPreflight && (

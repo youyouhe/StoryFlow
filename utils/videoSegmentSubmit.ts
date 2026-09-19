@@ -9,18 +9,11 @@ import { collectCharacterNames, computeBeatCast, isOffScreen, baseCharName, reso
 import { resolveCharacterSheet } from './refBindings';
 import type { RefBindings, RefImage } from '../types';
 
-/** Hailuo-2.3 (CN) accepted durations: 6 or 10 seconds, nothing else. */
-export const H3_ALLOWED_SECONDS = [6, 10] as const;
-
-/** Snap a segment span to the nearest allowed model duration. A 14s span
- *  becomes a 10s video (the model paces the action faster), never a silent
- *  trim. */
-export const clampSegmentSeconds = (d: number): number => {
-  const rounded = Math.round(d);
-  return H3_ALLOWED_SECONDS.reduce((best, s) =>
-    Math.abs(s - rounded) < Math.abs(best - rounded) ? s : best,
-  );
-};
+/** H3 supports VARIABLE durations — every integer between the model's min
+ *  (H3: 4, H3-Max: 5) and 15 is a valid `duration`. The chosen plan window
+ *  caps the top: segments render at their own span, never padded. */
+export const clampSegmentSeconds = (d: number, min = 4, max = 15): number =>
+  Math.min(Math.max(Math.round(d), min), max);
 
 /**
  * The H3 prompt for one segment: fixed-camera one-take instruction + the
