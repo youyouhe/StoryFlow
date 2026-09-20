@@ -17,7 +17,8 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 // COMFY_TARGET when the pod URL rotates.
 const comfyProxy = {
   '/comfy-api': {
-    target: process.env.COMFY_TARGET || 'https://8188-cpod-1vi7p2bgmhbc-s1.pod.compshare.cn',
+    // .env.local COMFY_TARGET (read via loadEnv below) — pod URLs rotate on restart
+    target: env.COMFY_TARGET || 'https://8188-cpod-1vi7p2bgmhbc-s1.pod.compshare.cn',
     changeOrigin: true,
     rewrite: (p: string) => p.replace(/^\/comfy-api/, ''),
     secure: true,
