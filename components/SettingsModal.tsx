@@ -649,6 +649,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             />
                         </div>
                         <button
+                            type="button"
                             onClick={() => { void runImageTest(); }}
                             disabled={testBusy || !testPrompt.trim()}
                             className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
@@ -700,7 +701,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                             placeholder="https://8188-xxx.pod.compshare.cn"
                                             className="flex-1 px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-xs"
                                         />
-                                        <button
+                                        <button type="button"
                                             onClick={() => {
                                                 if (!appSettingsForm.comfyServerUrl.trim()) { setComfyTest({ busy: false, error: '请先填写服务器地址' }); return; }
                                                 setComfyTest({ busy: true });
