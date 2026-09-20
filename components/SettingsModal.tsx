@@ -4,6 +4,8 @@ import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
 import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
+import { generateImages } from '../services/minimaxService';
+import { logAiCall } from '../services/aiLog';
 
 interface SettingsModalProps {
   metadata: ScriptMetadata;
@@ -58,6 +60,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
 
   const [authError, setAuthError] = useState<string | null>(null);
   const [syncAllBusy, setSyncAllBusy] = useState(false);
+  // Image-backend test harness state (AI tab → 文生图引擎测试).
+  const [testPrompt, setTestPrompt] = useState('');
+  const [testFile, setTestFile] = useState<File | null>(null);
+  const [testPreview, setTestPreview] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testResult, setTestResult] = useState<{ url: string; ms: number } | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  /** Fire one generation at the FORM's current backend config (pre-save) —
+   *  no reference image = text-to-image; one uploaded = image-to-image. */
+  const runImageTest = async () => {
+    const prompt = testPrompt.trim();
+    if (!prompt) { setTestError('请输入测试提示词。'); return; }
+    setTestBusy(true); setTestError(null); setTestResult(null);
+    const t0 = performance.now();
+    const op = testFile ? 'image-test-ref' : 'image-test';
+    const model = appSettingsForm.imageProvider === 'fal'
+      ? (appSettingsForm.falModel.trim() || 'openai/gpt-image-2.5/flare')
+      : 'image-01';
+    try {
+      const cfg = appSettingsForm.imageProvider === 'fal'
+        ? { provider: 'fal' as const, falKey: appSettingsForm.falKey.trim(), falModel: model, falQuality: appSettingsForm.falQuality, apiKey: appSettingsForm.minimaxApiKey.trim(), baseUrl: appSettingsForm.minimaxBaseUrl }
+        : { apiKey: appSettingsForm.minimaxApiKey.trim(), baseUrl: appSettingsForm.minimaxBaseUrl };
+      const imgs = await generateImages(cfg, prompt, {
+        n: 1, aspectRatio: '16:9',
+        ...(testFile ? { references: { landscape: testFile }, subjectReference: testFile } : {}),
+      });
+      setTestResult({ url: URL.createObjectURL(imgs[0].blob), ms: Math.round(performance.now() - t0) });
+      logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op, provider: appSettingsForm.imageProvider, model, outcome: 'ok', promptChars: prompt.length });
+    } catch (e) {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
+      setTestError(msg.slice(0, 300));
+      logAiCall({ ts: Date.now(), durationMs: Math.round(performance.now() - t0), op, provider: appSettingsForm.imageProvider, model, outcome: 'error', errorType: 'error', error: msg.slice(0, 200), promptChars: prompt.length });
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
 
   const handleSignOut = async () => {
     setAuthError(null);
@@ -570,6 +609,69 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             </div>
                         </div>
                     )}
+
+                    {/* Test harness: text-to-image, or image-to-image with an
+                        uploaded reference. Uses the FORM values (test before
+                        saving); every run logs to the debug pipeline. */}
+                    <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-2">
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            {t.imageTestLabel || '引擎测试（文生图 / 图生图）'}
+                        </label>
+                        <div className="flex gap-2 items-start">
+                            <div className="shrink-0">
+                                <input type="file" accept="image/*" className="hidden" id="sf-imgtest-file"
+                                    onChange={e => {
+                                        const f = e.target.files?.[0] ?? null;
+                                        e.target.value = '';
+                                        setTestFile(f);
+                                        setTestPreview(f ? URL.createObjectURL(f) : null);
+                                    }} />
+                                <label htmlFor="sf-imgtest-file"
+                                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-indigo-400 cursor-pointer overflow-hidden"
+                                    title={t.imageTestRefHint || '可选：上传参考图 → 图生图；不上传 → 文生图'}>
+                                    {testPreview
+                                        ? <img src={testPreview} alt="" className="w-full h-full object-cover" />
+                                        : <span className="text-[10px] text-gray-400 text-center px-1">{t.imageTestUpload || '上传参考图'}</span>}
+                                </label>
+                                {testFile && (
+                                    <button type="button" onClick={() => { setTestFile(null); setTestPreview(null); }}
+                                        className="mt-0.5 w-full text-[9px] text-gray-400 hover:text-red-500">{t.imageTestClear || '移除'}</button>
+                                )}
+                            </div>
+                            <textarea
+                                value={testPrompt}
+                                onChange={e => setTestPrompt(e.target.value)}
+                                rows={3}
+                                placeholder={t.imageTestPromptPh || '输入测试提示词，例如：一位年轻女性坐在黑色沙发上，微笑看向镜头'}
+                                className="flex-1 px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-xs"
+                            />
+                        </div>
+                        <button
+                            onClick={() => { void runImageTest(); }}
+                            disabled={testBusy || !testPrompt.trim()}
+                            className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                        >
+                            {testBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            {testBusy ? (t.imageTestRunning || '生成中…') : (t.imageTestRun || '测试生成')}
+                        </button>
+                        {testError && (
+                            <div className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-lg border border-red-100 dark:border-red-900/50 break-all">
+                                {testError}
+                            </div>
+                        )}
+                        {testResult && (
+                            <div className="flex gap-2 items-start p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-900/50">
+                                <img src={testResult.url} alt="test result" className="w-28 rounded-lg border border-emerald-200 dark:border-emerald-800" />
+                                <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                                    <div className="text-emerald-600 dark:text-emerald-400 font-semibold">{t.imageTestOk || '✅ 生成成功'}</div>
+                                    <div>后端：{appSettingsForm.imageProvider === 'fal' ? 'FAL' : 'MiniMax image-01'}</div>
+                                    <div>{testFile ? '图生图（含参考图）' : '文生图'}</div>
+                                    <div>耗时 {testResult.ms}ms</div>
+                                    <div className="mt-1 text-gray-400">{t.imageTestNote || '以上为表单当前配置（保存前即可测试）'}</div>
+                                </div>
+                              </div>
+                        )}
+                    </div>
                  </div>
               </div>
             )}
