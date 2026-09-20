@@ -11,6 +11,19 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 // CN platform (the account's home site — international api.minimaxi.com was
 // flaky from the user's network). Proxying removes CORS + client-route from
 // the equation entirely.
+// ComfyUI self-hosted server — same CORS rationale as minimaxProxy: the
+// browser cannot call the pod cross-origin (ComfyUI sends no CORS headers),
+// but the dev machine reaches it fine. Target overridable via .env.local
+// COMFY_TARGET when the pod URL rotates.
+const comfyProxy = {
+  '/comfy-api': {
+    target: process.env.COMFY_TARGET || 'https://8188-cpod-1vi7p2bgmhbc-s1.pod.compshare.cn',
+    changeOrigin: true,
+    rewrite: (p: string) => p.replace(/^\/comfy-api/, ''),
+    secure: true,
+  },
+};
+
 const minimaxProxy = {
   '/minimax-api': {
     target: 'https://api.minimax.cn',
@@ -52,7 +65,7 @@ export default defineConfig(({ mode }) => {
     const https = env.VITE_HTTPS === '1' || process.env.VITE_HTTPS === '1';
     return {
       server: {
-      proxy: minimaxProxy,
+      proxy: { ...minimaxProxy, ...comfyProxy },
         port: 5173,
         host: '0.0.0.0',
         strictPort: true,

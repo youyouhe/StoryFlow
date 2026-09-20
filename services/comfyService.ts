@@ -23,7 +23,19 @@ export interface ComfyConfig {
   serverUrl: string;
 }
 
-const base = (serverUrl: string): string => serverUrl.trim().replace(/\/+$/, '');
+/** The browser cannot reach the pod cross-origin (no CORS headers) — all
+ *  requests route through the dev-server proxy. The stored URL is the
+ *  logical target (keep .env.local COMFY_TARGET in sync); Tauri/prod builds
+ *  have no dev server and go direct. */
+const resolveBase = (serverUrl: string): string => {
+  const url = serverUrl.trim().replace(/\/+$/, '');
+  if (url.startsWith('/')) return url;
+  if (typeof window !== 'undefined' && !(window as unknown as { __TAURI__?: unknown }).__TAURI__) {
+    return '/comfy-api';
+  }
+  return url;
+};
+const base = resolveBase;
 
 export const comfySystemStats = async (cfg: ComfyConfig): Promise<{ version: string; device: string }> => {
   const res = await fetch(`${base(cfg.serverUrl)}/system_stats`, { signal: AbortSignal.timeout(10_000) });
