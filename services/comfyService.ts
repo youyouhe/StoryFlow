@@ -63,6 +63,12 @@ export interface ComfyGraphPatch {
   prompt: string;
   refImageNames?: string[];
   firstFrameName?: string;
+  /** Desired output seconds — written into the duration source the graph's
+   *  `length` chain resolves to (H3 templates compute frames from seconds
+   *  via a math node, e.g. max(5, round(a*24)) adjusted to the %17 rhythm). */
+  durationSeconds?: number;
+  /** Randomize sampler noise_seed per submission so identical prompts vary. */
+  randomizeSeed?: boolean;
 }
 
 /** Structural patch of an API-format workflow graph (see module docblock). */
@@ -84,6 +90,7 @@ export const comfyPatchWorkflow = (
     throw new Error('导入的 JSON 是 UI 格式，不是 API 格式——请在 ComfyUI 菜单 Workflow → Export (API) 重新导出。');
   }
   let h3 = false;
+  let lengthNodeRef: [string, string] | null = null; // [nodeId, inputKey] carrying length
   // T2V positive text: the LONGEST current text (negatives are short/empty).
   let textNode: string | null = null;
   let textLen = -1;
@@ -93,18 +100,49 @@ export const comfyPatchWorkflow = (
       h3 = true;
       node.inputs.prompt = patch.prompt;
       if (patch.refImageNames?.length) node.inputs.ref_images = patch.refImageNames;
+      if (typeof node.inputs.length !== 'number') lengthNodeRef = [id, 'length'];
     } else if (ct === 'MiniMaxH3ImageToVideo') {
       h3 = true;
       node.inputs.prompt = patch.prompt;
       if (patch.firstFrameName) node.inputs.first_frame = patch.firstFrameName;
+      if (typeof node.inputs.length !== 'number') lengthNodeRef = [id, 'length'];
     } else if (ct === 'CLIPTextEncode') {
       const t = node.inputs.text;
       if (typeof t === 'string' && t.length > textLen) { textLen = t.length; textNode = id; }
+    }
+    // Randomize every sampler seed so equal prompts don't repeat renders.
+    if (patch.randomizeSeed && 'noise_seed' in node.inputs) {
+      node.inputs.noise_seed = Math.floor(Math.random() * 2 ** 48);
     }
   }
   if (!h3 && textNode) graph[textNode].inputs.text = patch.prompt;
   if (!h3) {
     throw new Error('图中没有找到 MiniMax-H3 节点（MiniMaxH3ReferenceToVideo / MiniMaxH3ImageToVideo）——请确认导出的是 H3 工作流的 API 格式。');
+  }
+  // Duration: follow the H3 node's `length` connection to its numeric source
+  // (typically a PrimitiveFloat seconds value feeding a frames math node) and
+  // write the desired seconds there. Templates without a chain keep their own.
+  if (patch.durationSeconds != null && lengthNodeRef) {
+    // [nodeId, 'length'] → the length input's connection source is where the
+    // walk STARTS (the H3 node's OTHER connections — width/height — have
+    // non-duration sources). Then walk first-connection hops until a
+    // primitive numeric node: the duration seconds source (templates compute
+    // frames from seconds via a math expression).
+    const lenInput = graph[lengthNodeRef[0]]?.inputs[lengthNodeRef[1]];
+    let srcId: string | null = Array.isArray(lenInput) ? (lenInput[0] as string) : null;
+    for (let hops = 0; hops < 4 && srcId; hops++) {
+      const node = graph[srcId];
+      if (!node) break;
+      const entries = Object.entries(node.inputs);
+      const conn = entries.find(([, v]) => Array.isArray(v) && typeof (v as unknown[])[0] === 'string');
+      if (!conn) {
+        // primitive numeric source — this is the duration in seconds
+        const num = entries.find(([, v]) => typeof v === 'number');
+        if (num) node.inputs[num[0]] = patch.durationSeconds;
+        break;
+      }
+      srcId = (conn[1] as unknown[])[0] as string;
+    }
   }
   return graph;
 };
