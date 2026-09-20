@@ -62,6 +62,8 @@ export const comfyUploadImage = async (cfg: ComfyConfig, blob: Blob, filename: s
 export interface ComfyGraphPatch {
   prompt: string;
   refImageNames?: string[];
+  /** White-model / motion reference videos (R2V ref_videos input). */
+  refVideoNames?: string[];
   firstFrameName?: string;
   /** Empty-shot segments have NO references — when submitting through an
    *  I2V-shaped graph, dropping first_frame degrades it to pure T2V (same
@@ -104,6 +106,7 @@ export const comfyPatchWorkflow = (
       h3 = true;
       node.inputs.prompt = patch.prompt;
       if (patch.refImageNames?.length) node.inputs.ref_images = patch.refImageNames;
+      if (patch.refVideoNames?.length) node.inputs.ref_videos = patch.refVideoNames;
       if (typeof node.inputs.length !== 'number') lengthNodeRef = [id, 'length'];
     } else if (ct === 'MiniMaxH3ImageToVideo') {
       h3 = true;

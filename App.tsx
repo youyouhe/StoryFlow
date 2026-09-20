@@ -587,6 +587,63 @@ function App() {
         images.push({ name: `ref-${images.length + 1}`, blob });
       } catch { /* skip unreadable */ }
     }
+    // Self-hosted ComfyUI (R2V): the white-model recording becomes <Video 1>
+    // (motion/staging/timing reference), the bound sheets ride as <Picture N>.
+    // Replaces the paid API reference-video path entirely on this backend.
+    if (appSettings.videoBackend === 'comfy') {
+      const graphJson = appSettings.comfyWorkflowR2V;
+      if (!appSettings.comfyServerUrl.trim() || !graphJson.trim()) {
+        return { ok: false, error: 'ComfyUI 未配置——请在 Settings → AI 填写服务器地址并导入 R2V 工作流。' };
+      }
+      const comfyCfg = { serverUrl: appSettings.comfyServerUrl };
+      try {
+        const refNames: string[] = [];
+        for (let i = 0; i < images.length; i++) {
+          refNames.push(await comfyUploadImage(comfyCfg, images[i].blob, `sf-ref-${Date.now()}-${i}.png`));
+        }
+        let videoName: string | undefined;
+        if (payload.videoBlob) {
+          videoName = await comfyUploadImage(comfyCfg, payload.videoBlob, `sf-white-${Date.now()}.mp4`);
+        }
+        const tags = [
+          ...images.map((_, i) => `<Picture ${i + 1}> is a design/scene reference — preserve the identity and background shown in it.`),
+          ...(videoName ? ['<Video 1> is the white-model motion reference — follow its staging, camera move and timing exactly.'] : []),
+        ];
+        const comfyPrompt = `${payload.prompt}\n\nReference materials:\n${tags.join('\n')}`;
+        const graph = comfyPatchWorkflow(graphJson, {
+          prompt: comfyPrompt,
+          refImageNames: refNames,
+          refVideoNames: videoName ? [videoName] : undefined,
+        });
+        const promptId = await comfyQueuePrompt(comfyCfg, graph);
+        const localId = generateId();
+        setH3Tasks(prev => [{
+          id: localId,
+          taskId: promptId,
+          blockId: payload.blockId,
+          blockContent: payload.blockContent.slice(0, 60),
+          status: 'queued',
+          prompt: payload.prompt,
+          resolution: payload.resolution,
+          videoSeconds: payload.videoSeconds ?? 0,
+          outputSeconds: payload.outputSeconds,
+          estimatedCost: 0, // self-hosted GPU — no API billing
+          targetSeconds: payload.targetSeconds,
+          segmentIndex: payload.segmentIndex,
+          segmentCount: payload.segmentCount,
+          chainId: payload.chainId,
+          backend: 'comfy',
+          createdAt: Date.now(),
+        }, ...prev]);
+        shipLog('flow', 'info', `COMFY white-model task queued: ${promptId} (refs=${refNames.length}, video=${videoName ? 'yes' : 'no'})`);
+        return { ok: true, taskId: promptId };
+      } catch (e) {
+        const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
+        shipLog('flow', 'error', `COMFY submit FAILED: ${msg}`);
+        return { ok: false, error: msg.slice(0, 250) };
+      }
+    }
+
     const invalid = validateH3Submission({
       prompt: payload.prompt,
       videoBlob: payload.videoBlob,
