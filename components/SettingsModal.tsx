@@ -5,7 +5,7 @@ import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboa
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 import { generateImages } from '../services/minimaxService';
-import { comfySystemStats, comfyValidateWorkflow, type ComfyValidationResult } from '../services/comfyService';
+import { comfySystemStats, comfyValidateWorkflow, comfyFetchObjectInfo, type ComfyValidationResult } from '../services/comfyService';
 import { logAiCall } from '../services/aiLog';
 
 interface SettingsModalProps {
@@ -757,11 +757,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                             ];
                                             void (async () => {
                                                 const out: Record<string, ComfyValidationResult | 'busy'> = {};
+                                                // The registry snapshot is several MB — fetch it ONCE
+                                                // for the whole run, not per graph.
+                                                const objectInfo = await comfyFetchObjectInfo(cfg);
                                                 for (const [json, key, kind] of runs) {
                                                     out[key] = 'busy';
                                                     if (!json.trim()) { out[key] = { ok: false, errors: ['未导入'], warnings: [], nodeTypes: [] }; continue; }
                                                     try {
-                                                        out[key] = await comfyValidateWorkflow(cfg, json, kind);
+                                                        out[key] = await comfyValidateWorkflow(cfg, json, kind, objectInfo);
                                                     } catch (e) {
                                                         out[key] = { ok: false, errors: [String((e as Error)?.message ?? e).slice(0, 160)], warnings: [], nodeTypes: [] };
                                                     }

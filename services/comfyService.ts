@@ -177,10 +177,28 @@ export interface ComfyValidationResult {
  *  EVERY class_type the graph uses actually exists on the target server
  *  (catches missing custom-node packs and renamed nodes before a queue
  *  attempt burns GPU time). */
+/** Fetch the server's installed-node registry once for a validation run.
+ *  Returns null when unreachable/unparseable — the validator then SKIPS the
+ *  node-existence check with a warning instead of flagging every node as
+ *  missing (a multi-MB response that lands empty once produced three bogus
+ *  '服务器缺少节点' errors for nodes the server provably has). */
+export const comfyFetchObjectInfo = async (cfg: ComfyConfig): Promise<Record<string, unknown> | null> => {
+  try {
+    const res = await fetch(`${base(cfg.serverUrl)}/object_info`, { signal: AbortSignal.timeout(45_000) });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (!d || typeof d !== 'object' || Object.keys(d).length === 0) return null;
+    return d as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
 export const comfyValidateWorkflow = async (
   cfg: ComfyConfig,
   graphJson: string,
   kind: ComfyWorkflowKind,
+  objectInfo?: Record<string, unknown> | null,
 ): Promise<ComfyValidationResult> => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -203,6 +221,12 @@ export const comfyValidateWorkflow = async (
     return { ok: false, errors, warnings, nodeTypes };
   }
 
+  // Server node cross-check — only meaningful with a real registry snapshot.
+  if (objectInfo == null) {
+    warnings.push('无法获取服务器节点清单——已跳过节点存在性检查（其余校验仍有效）');
+    return { ok: errors.length === 0, errors, warnings, nodeTypes };
+  }
+
   const expected = EXPECTED_NODE[kind];
   if (!expected.some(n => nodeTypes.includes(n))) {
     const h3ish = nodeTypes.filter(c => /minimax|h3/i.test(c));
@@ -222,20 +246,6 @@ export const comfyValidateWorkflow = async (
     });
   } catch (e) {
     errors.push(`改图干跑失败：${String((e as Error)?.message ?? e).slice(0, 200)}`);
-  }
-
-  // Server-side node existence cross-check
-  try {
-    const res = await fetch(`${base(cfg.serverUrl)}/object_info`, { signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) {
-      warnings.push(`无法获取服务器节点清单 (HTTP ${res.status})——跳过节点存在性检查`);
-    } else {
-      const info = await res.json().catch(() => ({} as Record<string, unknown>));
-      const missing = nodeTypes.filter(ct => !(ct in info));
-      if (missing.length) errors.push(`服务器缺少节点：${missing.join(', ')}（自定义节点包未安装或版本不符）`);
-    }
-  } catch (e) {
-    warnings.push(`无法连接服务器做节点检查：${String((e as Error)?.message ?? e).slice(0, 120)}`);
   }
 
   return { ok: errors.length === 0, errors, warnings, nodeTypes };
