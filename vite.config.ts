@@ -11,20 +11,6 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 // CN platform (the account's home site — international api.minimaxi.com was
 // flaky from the user's network). Proxying removes CORS + client-route from
 // the equation entirely.
-// ComfyUI self-hosted server — same CORS rationale as minimaxProxy: the
-// browser cannot call the pod cross-origin (ComfyUI sends no CORS headers),
-// but the dev machine reaches it fine. Target overridable via .env.local
-// COMFY_TARGET when the pod URL rotates.
-const comfyProxy = {
-  '/comfy-api': {
-    // .env.local COMFY_TARGET (read via loadEnv below) — pod URLs rotate on restart
-    target: env.COMFY_TARGET || 'https://8188-cpod-1vi7p2bgmhbc-s1.pod.compshare.cn',
-    changeOrigin: true,
-    rewrite: (p: string) => p.replace(/^\/comfy-api/, ''),
-    secure: true,
-  },
-};
-
 const minimaxProxy = {
   '/minimax-api': {
     target: 'https://api.minimax.cn',
@@ -59,6 +45,18 @@ const debugLogPlugin = () => ({
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
+    // ComfyUI self-hosted server — same CORS rationale as minimaxProxy: the
+    // browser cannot call the pod cross-origin (ComfyUI sends no CORS
+    // headers), but the dev machine reaches it fine. Target overridable via
+    // .env.local COMFY_TARGET (pod URLs rotate on restart).
+    const comfyProxy = {
+      '/comfy-api': {
+        target: env.COMFY_TARGET || 'https://8188-cpod-1vi7p2bgmhbc-s1.pod.compshare.cn',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/comfy-api/, ''),
+        secure: true,
+      },
+    };
     // HTTPS is OPT-IN (VITE_HTTPS=1 → `npm run dev:https`): self-signed cert
     // makes the LAN origin a secure context so the File System Access API
     // (folder asset library) works from other devices. Default stays HTTP —
