@@ -147,6 +147,87 @@ export const comfyPatchWorkflow = (
   return graph;
 };
 
+export type ComfyWorkflowKind = 'r2v' | 't2v' | 'i2v';
+
+const EXPECTED_NODE: Record<ComfyWorkflowKind, string> = {
+  r2v: 'MiniMaxH3ReferenceToVideo',
+  t2v: 'EmptyMiniMaxH3LatentAV',
+  i2v: 'MiniMaxH3ImageToVideo',
+};
+
+export interface ComfyValidationResult {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  /** every class_type the graph depends on */
+  nodeTypes: string[];
+}
+
+/** Full pre-flight for one imported workflow: API format, expected H3 node,
+ *  patch dry-run (prompt + duration + seed writes), and a cross-check that
+ *  EVERY class_type the graph uses actually exists on the target server
+ *  (catches missing custom-node packs and renamed nodes before a queue
+ *  attempt burns GPU time). */
+export const comfyValidateWorkflow = async (
+  cfg: ComfyConfig,
+  graphJson: string,
+  kind: ComfyWorkflowKind,
+): Promise<ComfyValidationResult> => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  let nodeTypes: string[] = [];
+
+  let graph: Record<string, { class_type: string; inputs: Record<string, unknown> }>;
+  try {
+    graph = JSON.parse(graphJson);
+  } catch (e) {
+    return { ok: false, errors: [`JSON 解析失败：${String((e as Error)?.message ?? e)}`], warnings, nodeTypes };
+  }
+  if (!graph || typeof graph !== 'object' || Array.isArray(graph)) {
+    return { ok: false, errors: ['不是 API 格式（期望 {节点ID: {class_type, inputs}}）'], warnings, nodeTypes };
+  }
+
+  nodeTypes = [...new Set(Object.values(graph).map(n => n?.class_type).filter(Boolean) as string[])];
+  const probe = Object.values(graph)[0] as { class_type?: string } | undefined;
+  if (!probe?.class_type) {
+    errors.push('这是 UI 格式导出（含 nodes/links 数组）——请在 ComfyUI 菜单 Workflow → Export (API) 重新导出');
+    return { ok: false, errors, warnings, nodeTypes };
+  }
+
+  const expected = EXPECTED_NODE[kind];
+  if (!nodeTypes.includes(expected)) {
+    errors.push(`缺少本工作流应有的节点 ${expected}——导出的可能不是${kind.toUpperCase()}工作流`);
+  }
+
+  try {
+    comfyPatchWorkflow(graphJson, {
+      prompt: '【校验干跑】validation dry-run',
+      refImageNames: kind === 'r2v' ? ['dryrun.png'] : undefined,
+      firstFrameName: kind === 'i2v' ? 'dryrun.png' : undefined,
+      durationSeconds: 10,
+      randomizeSeed: true,
+    });
+  } catch (e) {
+    errors.push(`改图干跑失败：${String((e as Error)?.message ?? e).slice(0, 200)}`);
+  }
+
+  // Server-side node existence cross-check
+  try {
+    const res = await fetch(`${base(cfg.serverUrl)}/object_info`, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) {
+      warnings.push(`无法获取服务器节点清单 (HTTP ${res.status})——跳过节点存在性检查`);
+    } else {
+      const info = await res.json().catch(() => ({} as Record<string, unknown>));
+      const missing = nodeTypes.filter(ct => !(ct in info));
+      if (missing.length) errors.push(`服务器缺少节点：${missing.join(', ')}（自定义节点包未安装或版本不符）`);
+    }
+  } catch (e) {
+    warnings.push(`无法连接服务器做节点检查：${String((e as Error)?.message ?? e).slice(0, 120)}`);
+  }
+
+  return { ok: errors.length === 0, errors, warnings, nodeTypes };
+};
+
 export const comfyQueuePrompt = async (
   cfg: ComfyConfig,
   graph: Record<string, unknown>,

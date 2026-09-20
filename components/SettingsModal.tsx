@@ -5,7 +5,7 @@ import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboa
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 import { generateImages } from '../services/minimaxService';
-import { comfySystemStats } from '../services/comfyService';
+import { comfySystemStats, comfyValidateWorkflow, type ComfyValidationResult } from '../services/comfyService';
 import { logAiCall } from '../services/aiLog';
 
 interface SettingsModalProps {
@@ -69,6 +69,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
   const [testResult, setTestResult] = useState<{ url: string; ms: number } | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [comfyTest, setComfyTest] = useState<{ busy: boolean; ok?: string; error?: string }>({ busy: false });
+  const [wfValidation, setWfValidation] = useState<Record<string, ComfyValidationResult | 'busy'> | null>(null);
   /** Fire one generation at the FORM's current backend config (pre-save) —
    *  no reference image = text-to-image; one uploaded = image-to-image. */
   const runImageTest = async () => {
@@ -742,6 +743,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                             </span>
                                         </div>
                                     ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const server = appSettingsForm.comfyServerUrl.trim();
+                                            if (!server) { setWfValidation({ all: { ok: false, errors: ['请先填写服务器地址'], warnings: [], nodeTypes: [] } }); return; }
+                                            const cfg = { serverUrl: server };
+                                            setWfValidation({ r2v: 'busy', t2v: 'busy', i2v: 'busy' });
+                                            const runs: [string, string, 'r2v' | 't2v' | 'i2v'][] = [
+                                                [appSettingsForm.comfyWorkflowR2V, 'r2v', 'r2v'],
+                                                [appSettingsForm.comfyWorkflowT2V, 't2v', 't2v'],
+                                                [appSettingsForm.comfyWorkflowI2V, 'i2v', 'i2v'],
+                                            ];
+                                            void (async () => {
+                                                const out: Record<string, ComfyValidationResult | 'busy'> = {};
+                                                for (const [json, key, kind] of runs) {
+                                                    out[key] = 'busy';
+                                                    if (!json.trim()) { out[key] = { ok: false, errors: ['未导入'], warnings: [], nodeTypes: [] }; continue; }
+                                                    try {
+                                                        out[key] = await comfyValidateWorkflow(cfg, json, kind);
+                                                    } catch (e) {
+                                                        out[key] = { ok: false, errors: [String((e as Error)?.message ?? e).slice(0, 160)], warnings: [], nodeTypes: [] };
+                                                    }
+                                                    setWfValidation({ ...out });
+                                                }
+                                            })();
+                                        }}
+                                        className="w-full py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                    >
+                                        校验全部工作流（格式 / H3 节点 / 改图干跑 / 服务器节点比对）
+                                    </button>
+                                    {wfValidation && (
+                                        <div className="space-y-1">
+                                            {(['r2v', 't2v', 'i2v'] as const).map(k => {
+                                                const r = wfValidation[k];
+                                                if (!r) return null;
+                                                if (r === 'busy') return <div key={k} className="text-[10px] text-indigo-400 animate-pulse">{k.toUpperCase()} 校验中…</div>;
+                                                return (
+                                                    <div key={k} className={'text-[10px] rounded px-2 py-1 ' + (r.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-500')}>
+                                                        <b>{k.toUpperCase()}</b>{r.ok ? ' ✅ 全部通过' : ' ❌ ' + r.errors.join('；')}
+                                                        {r.warnings.map((w, i) => <div key={i} className="text-amber-500">⚠ {w}</div>)}
+                                                        {r.ok && r.nodeTypes.length > 0 && <div className="text-gray-400">节点 {r.nodeTypes.length} 个全部存在</div>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
