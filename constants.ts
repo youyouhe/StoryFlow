@@ -612,6 +612,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // forwards to api.minimaxi.com, bypassing client-side route/CORS flakiness.
   // Tauri/prod builds have no dev server; minimaxService falls back to direct.
   minimaxBaseUrl: '/minimax-api',
+  videoBackend: 'api',
+  comfyServerUrl: '',
+  comfyWorkflowT2V: '',
+  comfyWorkflowI2V: '',
+  comfyWorkflowR2V: '',
   falKey: '',
   falModel: 'openai/gpt-image-2.5/flare',
   falQuality: 'low',

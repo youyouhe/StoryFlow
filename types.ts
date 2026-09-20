@@ -259,6 +259,15 @@ export interface AppSettings {
   minimaxApiKey: string;
   /** MiniMax endpoint: CN 'https://api.minimaxi.com' | intl 'https://api.minimax.io'. */
   minimaxBaseUrl: string;
+  /** Video generation backend: 'api' = MiniMax cloud (pay per 刊例), 'comfy' =
+   *  self-hosted ComfyUI H3 workflows (GPU box, near-zero marginal cost). */
+  videoBackend: 'api' | 'comfy';
+  /** ComfyUI server root (e.g. https://8188-xxx.pod.compshare.cn). */
+  comfyServerUrl: string;
+  /** API-format workflow graphs (Save API Format) for the three H3 modes. */
+  comfyWorkflowT2V: string;
+  comfyWorkflowI2V: string;
+  comfyWorkflowR2V: string;
   /** FAL text-to-image BYOK (queue API). Empty until the user fills it; only
    *  used when imageProvider === 'fal'. Get a key at fal.ai (billing required). */
   falKey: string;
@@ -410,6 +419,8 @@ export interface H3Task {
    *  chain's total (1 when single-segment). Displayed as "2/3" on the task. */
   segmentIndex?: number;
   segmentCount?: number;
+  /** Which video backend owns this task — decides the poll implementation. */
+  backend?: 'api' | 'comfy';
   /** Identifies tasks that belong to one planned generation chain (the shot's
    *  blockId + plan fingerprint). Chains poll independently; when a segment
    *  succeeds its URL is offered for manual concat — H3 does not deliver

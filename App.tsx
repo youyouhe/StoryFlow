@@ -41,6 +41,7 @@ import { TemplateModal } from './components/TemplateModal';
 import { OpeningPicker } from './components/OpeningPicker';
 import { PromptPanel } from './components/PromptPanel';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
+import { comfyUploadImage, comfyPatchWorkflow, comfyQueuePrompt, comfyQueryTask } from './services/comfyService';
 import { getAiLog } from './services/aiLog';
 import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
 import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
@@ -650,6 +651,9 @@ function App() {
    *  prompt = the segment's timed beats, references = bound character sheets,
    *  no white-model video. Sequential — H3 bills per task and the user reads
    *  progress one segment at a time. */
+  const sceneEnvTag = (refs: { sceneEnv?: { name: string; url: string } }): string | null =>
+    refs.sceneEnv ? '<Picture 1> is the scene/background reference — keep the desktop, sofa, lighting and composition exactly as shown.' : null;
+
   const submitPlanToH3 = useCallback(async () => {
     if (!videoPlan || !videoPlan.segments.length) {
       setAIState(prev => ({ ...prev, error: '没有可提交的视频分段计划——请先运行 视频分段。' }));
@@ -667,6 +671,70 @@ function App() {
       const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
       shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.bound.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
+
+      // ---- Self-hosted ComfyUI path (R2V with refs, else T2V) ----
+      // Generation runs on the user's GPU box at near-zero marginal cost;
+      // tasks reuse the H3Task record (backend: 'comfy') and the shared
+      // poller branches on it.
+      if (appSettings.videoBackend === 'comfy' && appSettings.comfyServerUrl.trim()) {
+        const comfyCfg = { serverUrl: appSettings.comfyServerUrl };
+        const hasT2V = !!appSettings.comfyWorkflowT2V.trim();
+        const useR2V = refs.urls.length > 0 && !!appSettings.comfyWorkflowR2V.trim();
+        const graphJson = useR2V ? appSettings.comfyWorkflowR2V : appSettings.comfyWorkflowT2V;
+        if (!graphJson.trim()) {
+          const need = refs.urls.length ? 'R2V（有参考图）' : 'T2V（纯文生图）';
+          setPlanH3Progress(null);
+          setAIState(prev => ({ ...prev, error: `ComfyUI 缺少${need}工作流——请在 Settings → AI 里导入对应 API 格式 JSON。` }));
+          return;
+        }
+        setPlanH3Progress({ current: si + 1, total: plan.segments.length });
+        shipLog('flow', 'info', `COMFY segment ${si + 1}/${plan.segments.length}: ${useR2V ? 'R2V' : 'T2V'} refs=${refs.urls.length} prompt=${prompt.length}ch`);
+        try {
+          // R2V prompts must reference the materials by tag (pack contract):
+          // <Picture 1> = scene env, <Picture N> = each cast sheet in order.
+          const refNames: string[] = [];
+          for (let ri = 0; ri < refs.urls.length; ri++) {
+            const blob = await (await fetch(refs.urls[ri])).blob();
+            refNames.push(await comfyUploadImage(comfyCfg, blob, `sf-seg${si + 1}-${ri}.png`));
+          }
+          const tagLines = [
+            ...(sceneEnvTag(refs) ? [sceneEnvTag(refs)!] : []),
+            ...refs.bound.map((c, i) => `<Picture ${(sceneEnvTag(refs) ? 1 : 0) + i + 2}> is the design sheet of ${c.name} — the character's identity and face must come from it.`),
+          ];
+          const comfyPrompt = tagLines.length
+            ? `${prompt}\n\nReference materials:\n${tagLines.join('\n')}`
+            : prompt;
+          const graph = comfyPatchWorkflow(graphJson, { prompt: comfyPrompt, refImageNames: refNames });
+          const promptId = await comfyQueuePrompt(comfyCfg, graph);
+          shipLog('flow', 'info', `COMFY segment ${si + 1}: queued ${promptId}`);
+          const localId = generateId();
+          setH3Tasks(prev => [{
+            id: localId,
+            taskId: promptId,
+            blockId: seg.blockIds[0],
+            blockContent: (seg.beats[0]?.text ?? seg.sceneHeading).slice(0, 60),
+            status: 'queued',
+            prompt,
+            resolution: planResolution,
+            videoSeconds: 0,
+            outputSeconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
+            estimatedCost: 0, // self-hosted GPU — no API billing
+            segmentIndex: si + 1,
+            segmentCount: plan.segments.length,
+            chainId,
+            backend: 'comfy',
+            createdAt: Date.now(),
+          }, ...prev]);
+          okCount++;
+          continue;
+        } catch (e) {
+          const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
+          if (!firstErr) firstErr = msg;
+          shipLog('flow', 'error', `COMFY segment ${si + 1} FAILED: ${msg}`);
+          continue;
+        }
+      }
+      // ---- MiniMax cloud API path (default) ----
       if (refs.missing.length) {
         shipLog('flow', 'warn', `H3 segment ${si + 1}: characters without sheets: ${refs.missing.join(', ')}`);
       }
@@ -730,7 +798,9 @@ function App() {
             continue;
           }
           try {
-            const s = await queryH3Task(cfg, t.taskId!);
+            const s = t.backend === 'comfy'
+              ? await comfyQueryTask({ serverUrl: appSettings.comfyServerUrl }, t.taskId!)
+              : await queryH3Task(cfg, t.taskId!);
             setH3Tasks(prev => prev.map(x => x.id === t.id
               ? {
                   ...x,
@@ -747,7 +817,7 @@ function App() {
       }
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [h3Tasks, h3Ready, appSettings.minimaxApiKey, appSettings.minimaxBaseUrl]);
+  }, [h3Tasks, h3Ready, appSettings.minimaxApiKey, appSettings.minimaxBaseUrl, appSettings.videoBackend, appSettings.comfyServerUrl]);
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
   const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);

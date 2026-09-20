@@ -5,6 +5,7 @@ import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboa
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 import { generateImages } from '../services/minimaxService';
+import { comfySystemStats } from '../services/comfyService';
 import { logAiCall } from '../services/aiLog';
 
 interface SettingsModalProps {
@@ -67,6 +68,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
   const [testBusy, setTestBusy] = useState(false);
   const [testResult, setTestResult] = useState<{ url: string; ms: number } | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const [comfyTest, setComfyTest] = useState<{ busy: boolean; ok?: string; error?: string }>({ busy: false });
   /** Fire one generation at the FORM's current backend config (pre-save) —
    *  no reference image = text-to-image; one uploaded = image-to-image. */
   const runImageTest = async () => {
@@ -670,6 +672,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                                     <div className="mt-1 text-gray-400">{t.imageTestNote || '以上为表单当前配置（保存前即可测试）'}</div>
                                 </div>
                               </div>
+                        )}
+                    </div>
+
+                    {/* Self-hosted ComfyUI video backend (H3 workflows on the user's GPU box) */}
+                    <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-3">
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            视频生成方式
+                        </label>
+                        <select
+                            value={appSettingsForm.videoBackend}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, videoBackend: e.target.value as AppSettings['videoBackend']})}
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                        >
+                            <option value="api">MiniMax API（按刊例计费）</option>
+                            <option value="comfy">自建 ComfyUI · H3 工作流（自己的 GPU，边际成本≈0）</option>
+                        </select>
+                        {appSettingsForm.videoBackend === 'comfy' && (
+                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">ComfyUI 服务器地址</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={appSettingsForm.comfyServerUrl}
+                                            onChange={e => setAppSettingsForm({...appSettingsForm, comfyServerUrl: e.target.value})}
+                                            placeholder="https://8188-xxx.pod.compshare.cn"
+                                            className="flex-1 px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white text-xs"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (!appSettingsForm.comfyServerUrl.trim()) { setComfyTest({ busy: false, error: '请先填写服务器地址' }); return; }
+                                                setComfyTest({ busy: true });
+                                                comfySystemStats({ serverUrl: appSettingsForm.comfyServerUrl })
+                                                    .then(s => setComfyTest({ busy: false, ok: `✓ 已连接 · ComfyUI ${s.version} · ${s.device}` }))
+                                                    .catch(e => setComfyTest({ busy: false, error: String((e as Error)?.message ?? e).slice(0, 160) }));
+                                            }}
+                                            className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                        >测试连接</button>
+                                    </div>
+                                    {comfyTest.busy && <p className="mt-1 text-[10px] text-indigo-400">连接中…</p>}
+                                    {comfyTest.ok && <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">{comfyTest.ok}</p>}
+                                    {comfyTest.error && <p className="mt-1 text-[10px] text-red-500">{comfyTest.error}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-gray-400 leading-relaxed">
+                                        导入三个 H3 工作流（ComfyUI 网页里加载工作流 → <b>Save (API Format)</b> 导出 JSON → 在此导入）。有参考图的段走 R2V（ref2va），无参考图的空镜段走 T2V（fl2va）。工作流的<b>时长即每段成片时长</b>——导出 10s 的工作流配 10s 段。
+                                    </p>
+                                    {([
+                                        ['comfyWorkflowR2V', 'R2V · 参考生视频（ref2va）'],
+                                        ['comfyWorkflowT2V', 'T2V · 文生视频（fl2va）'],
+                                        ['comfyWorkflowI2V', 'I2V · 图生视频（fl2va）'],
+                                    ] as const).map(([key, label]) => (
+                                        <div key={key} className="flex items-center gap-2">
+                                            <input type="file" accept=".json,application/json" className="hidden" id={`sf-${key}`}
+                                                onChange={e => {
+                                                    const f = e.target.files?.[0];
+                                                    e.target.value = '';
+                                                    if (!f) return;
+                                                    void f.text().then(txt => setAppSettingsForm((prev: AppSettings) => ({ ...prev, [key]: txt })));
+                                                }} />
+                                            <label htmlFor={`sf-${key}`}
+                                                className="shrink-0 px-2.5 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer">
+                                                导入
+                                            </label>
+                                            <span className={'text-[11px] ' + (appSettingsForm[key] ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400')}>
+                                                {label} · {appSettingsForm[key] ? `已导入 (${appSettingsForm[key].length} 字符)` : '未导入'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
                  </div>
