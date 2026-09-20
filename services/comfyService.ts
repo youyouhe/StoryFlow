@@ -63,6 +63,10 @@ export interface ComfyGraphPatch {
   prompt: string;
   refImageNames?: string[];
   firstFrameName?: string;
+  /** Empty-shot segments have NO references — when submitting through an
+   *  I2V-shaped graph, dropping first_frame degrades it to pure T2V (same
+   *  fl2va model), letting one imported graph serve both modes. */
+  stripFirstFrame?: boolean;
   /** Desired output seconds — written into the duration source the graph's
    *  `length` chain resolves to (H3 templates compute frames from seconds
    *  via a math node, e.g. max(5, round(a*24)) adjusted to the %17 rhythm). */
@@ -104,7 +108,8 @@ export const comfyPatchWorkflow = (
     } else if (ct === 'MiniMaxH3ImageToVideo') {
       h3 = true;
       node.inputs.prompt = patch.prompt;
-      if (patch.firstFrameName) node.inputs.first_frame = patch.firstFrameName;
+      if (patch.stripFirstFrame) delete node.inputs.first_frame;
+      else if (patch.firstFrameName) node.inputs.first_frame = patch.firstFrameName;
       if (typeof node.inputs.length !== 'number') lengthNodeRef = [id, 'length'];
     } else if (ct === 'CLIPTextEncode') {
       const t = node.inputs.text;
@@ -149,10 +154,11 @@ export const comfyPatchWorkflow = (
 
 export type ComfyWorkflowKind = 'r2v' | 't2v' | 'i2v';
 
-const EXPECTED_NODE: Record<ComfyWorkflowKind, string> = {
-  r2v: 'MiniMaxH3ReferenceToVideo',
-  t2v: 'EmptyMiniMaxH3LatentAV',
-  i2v: 'MiniMaxH3ImageToVideo',
+const EXPECTED_NODE: Record<ComfyWorkflowKind, string[]> = {
+  r2v: ['MiniMaxH3ReferenceToVideo'],
+  // T2V accepts either the latent node or an I2V node with first_frame stripped
+  t2v: ['EmptyMiniMaxH3LatentAV', 'MiniMaxH3ImageToVideo'],
+  i2v: ['MiniMaxH3ImageToVideo'],
 };
 
 export interface ComfyValidationResult {
@@ -195,10 +201,10 @@ export const comfyValidateWorkflow = async (
   }
 
   const expected = EXPECTED_NODE[kind];
-  if (!nodeTypes.includes(expected)) {
+  if (!expected.some(n => nodeTypes.includes(n))) {
     const h3ish = nodeTypes.filter(c => /minimax|h3/i.test(c));
     errors.push(
-      `缺少本工作流应有的节点 ${expected}。图中实际包含${h3ish.length ? `的 H3 相关节点: ${h3ish.join(', ')}` : '没有任何 H3 相关节点'}；全部节点类型: ${nodeTypes.slice(0, 10).join(', ')}${nodeTypes.length > 10 ? ` 等 ${nodeTypes.length} 种` : ''}`,
+      `缺少本工作流应有的节点 ${expected.join(' 或 ')}。图中实际包含${h3ish.length ? `的 H3 相关节点: ${h3ish.join(', ')}` : '没有任何 H3 相关节点'}；全部节点类型: ${nodeTypes.slice(0, 10).join(', ')}${nodeTypes.length > 10 ? ` 等 ${nodeTypes.length} 种` : ''}`,
     );
   }
 
@@ -207,6 +213,7 @@ export const comfyValidateWorkflow = async (
       prompt: '【校验干跑】validation dry-run',
       refImageNames: kind === 'r2v' ? ['dryrun.png'] : undefined,
       firstFrameName: kind === 'i2v' ? 'dryrun.png' : undefined,
+      stripFirstFrame: kind === 't2v',
       durationSeconds: 10,
       randomizeSeed: true,
     });

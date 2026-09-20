@@ -704,7 +704,7 @@ function App() {
           const comfyPrompt = tagLines.length
             ? `${prompt}\n\nReference materials:\n${tagLines.join('\n')}`
             : prompt;
-          const graph = comfyPatchWorkflow(graphJson, { prompt: comfyPrompt, refImageNames: refNames });
+          const graph = comfyPatchWorkflow(graphJson, { prompt: comfyPrompt, refImageNames: refNames, stripFirstFrame: refs.urls.length === 0 });
           const promptId = await comfyQueuePrompt(comfyCfg, graph);
           shipLog('flow', 'info', `COMFY segment ${si + 1}: queued ${promptId}`);
           const localId = generateId();
