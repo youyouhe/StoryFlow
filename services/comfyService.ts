@@ -196,7 +196,10 @@ export const comfyValidateWorkflow = async (
 
   const expected = EXPECTED_NODE[kind];
   if (!nodeTypes.includes(expected)) {
-    errors.push(`缺少本工作流应有的节点 ${expected}——导出的可能不是${kind.toUpperCase()}工作流`);
+    const h3ish = nodeTypes.filter(c => /minimax|h3/i.test(c));
+    errors.push(
+      `缺少本工作流应有的节点 ${expected}。图中实际包含${h3ish.length ? `的 H3 相关节点: ${h3ish.join(', ')}` : '没有任何 H3 相关节点'}；全部节点类型: ${nodeTypes.slice(0, 10).join(', ')}${nodeTypes.length > 10 ? ` 等 ${nodeTypes.length} 种` : ''}`,
+    );
   }
 
   try {
