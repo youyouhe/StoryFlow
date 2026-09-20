@@ -76,6 +76,13 @@ export const comfyPatchWorkflow = (
   } catch {
     throw new Error('ComfyUI 工作流 JSON 解析失败——请用 ComfyUI 的 Save (API Format) 导出。');
   }
+  // UI-format exports (plain "Save") parse as JSON too but use {nodes:[…],
+  // links:[…]} — no class_type keys. Without this guard the patcher would
+  // silently no-op and run the workflow with its BAKED-IN sample prompt.
+  const probe = Object.values(graph)[0] as { class_type?: string } | undefined;
+  if (!probe?.class_type) {
+    throw new Error('导入的 JSON 是 UI 格式，不是 API 格式——请在 ComfyUI 菜单 Workflow → Export (API) 重新导出。');
+  }
   let h3 = false;
   // T2V positive text: the LONGEST current text (negatives are short/empty).
   let textNode: string | null = null;
@@ -96,6 +103,9 @@ export const comfyPatchWorkflow = (
     }
   }
   if (!h3 && textNode) graph[textNode].inputs.text = patch.prompt;
+  if (!h3) {
+    throw new Error('图中没有找到 MiniMax-H3 节点（MiniMaxH3ReferenceToVideo / MiniMaxH3ImageToVideo）——请确认导出的是 H3 工作流的 API 格式。');
+  }
   return graph;
 };
 
