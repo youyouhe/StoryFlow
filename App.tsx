@@ -48,6 +48,7 @@ import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from
 import { isGalleryApiError } from './services/apiClient';
 import type { ScriptVisibility } from './services/apiClient';
 import { exportMarkdown, exportJSON } from './utils/exportData';
+import { useScriptLibrary, STORAGE_KEYS, type ScriptSummary } from './hooks/useScriptLibrary';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -83,75 +84,19 @@ const toRefImage = (s: {
   sourcePrompt: s.sourcePrompt,
 });
 
-// Storage Constants
-const STORAGE_KEYS = {
-    LEGACY_AUTOSAVE: 'screenplay_autosave',
-    SCRIPT_INDEX: 'script_index',
-    SCRIPT_PREFIX: 'script_',
-    APP_SETTINGS: 'screenplay_app_settings'
-};
-
-interface ScriptSummary {
-    id: string;
-    title: string;
-    lastModified: number;
-}
+// Storage keys moved to hooks/useScriptLibrary.ts (script library domain).
 
 function App() {
-  // Load Script List (Index)
-  const [savedScripts, setSavedScripts] = useState<ScriptSummary[]>(() => {
-      try {
-          const indexJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_INDEX);
-          return indexJson ? JSON.parse(indexJson) : [];
-      } catch (e) {
-          console.warn("Failed to load script index", e); shipLog("script", "error", "Failed to load script index", e);
-          return [];
-      }
-  });
-
-  // Load Initial Screenplay
-  const [screenplay, setScreenplay] = useState<Screenplay>(() => {
-    // 1. Try migration from legacy system first
-    try {
-        const legacySave = localStorage.getItem(STORAGE_KEYS.LEGACY_AUTOSAVE);
-        if (legacySave) {
-            const parsed = JSON.parse(legacySave);
-            if (parsed && Array.isArray(parsed.blocks)) {
-                // Ensure it has an ID
-                if (!parsed.id) parsed.id = generateId();
-                if (!parsed.metadata.scriptLanguage) parsed.metadata.scriptLanguage = 'en';
-                
-                // Return legacy script to be set as current, migration happens in useEffect
-                return parsed;
-            }
-        }
-    } catch (e) {
-        console.warn("Legacy migration check failed", e);
-    }
-
-    // 2. Try loading the most recent script from the index
-    try {
-        const indexJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_INDEX);
-        if (indexJson) {
-            const index: ScriptSummary[] = JSON.parse(indexJson);
-            if (index.length > 0) {
-                // Sort by recency
-                index.sort((a, b) => b.lastModified - a.lastModified);
-                const mostRecentId = index[0].id;
-                const scriptJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_PREFIX + mostRecentId);
-                if (scriptJson) {
-                    return JSON.parse(scriptJson);
-                }
-            }
-        }
-    } catch (e) {
-        console.warn("Failed to load recent script", e); shipLog("script", "error", "Failed to load recent script", e);
-    }
-
-    // 3. Fallback to default
-    const newScript = { ...DEFAULT_SCRIPT, id: generateId() };
-    return newScript;
-  });
+  // ---- Script library domain (index + active screenplay + autosave) --------
+  const {
+    savedScripts, setSavedScripts,
+    screenplay, setScreenplay,
+    selectedBlockId, setSelectedBlockId,
+    saveStatus,
+    refreshSavedScripts,
+    loadScript,
+    createDefaultScript,
+  } = useScriptLibrary();
 
   const [appSettings, setAppSettings] = useState<AppSettings>(() => {
     try {
@@ -189,14 +134,9 @@ function App() {
     return DEFAULT_APP_SETTINGS;
   });
   
-  const [selectedBlockId, setSelectedBlockId] = useState<string>(() => {
-      return screenplay.blocks.length > 0 ? screenplay.blocks[0].id : '';
-  });
-  
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
   // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
   // shared cookie) so the exchange effect below can establish the session.
@@ -893,62 +833,9 @@ function App() {
     }
   }, [theme]);
 
-  // Migration & Autosave Logic
-  useEffect(() => {
-    setSaveStatus('saving');
-    
-    // Migration Logic: If legacy exists, save it to new format and delete legacy key
-    const legacySave = localStorage.getItem(STORAGE_KEYS.LEGACY_AUTOSAVE);
-    if (legacySave) {
-        try {
-             // We are currently working with the migrated object in state 'screenplay'
-             // Just ensure the legacy key is removed so we don't migrate again on refresh
-             localStorage.removeItem(STORAGE_KEYS.LEGACY_AUTOSAVE);
-        } catch(e) { console.error("Migration cleanup failed", e); }
-    }
-
-    const timer = setTimeout(() => {
-      try {
-        // 1. Save Content
-        localStorage.setItem(STORAGE_KEYS.SCRIPT_PREFIX + screenplay.id, JSON.stringify(screenplay));
-
-        // 2. Update Index
-        const newSummary: ScriptSummary = {
-            id: screenplay.id,
-            title: screenplay.metadata.title,
-            lastModified: Date.now()
-        };
-
-        setSavedScripts(prev => {
-            const filtered = prev.filter(s => s.id !== screenplay.id);
-            const newList = [...filtered, newSummary];
-            localStorage.setItem(STORAGE_KEYS.SCRIPT_INDEX, JSON.stringify(newList));
-            return newList;
-        });
-
-        setSaveStatus('saved');
-
-        // Gallery sync: mirror the local save into the engine. Cloud-backed
-        // scripts flip to 'dirty' and flush on the engine's own debounce;
-        // never-synced ('local') scripts are intentionally left alone — the
-        // first push is always the explicit one-click sync.
-        syncEngine.markDirty(screenplay);
-      } catch (e) {
-        console.error("Autosave failed", e); shipLog("autosave", "error", "Autosave failed", e);
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [screenplay]);
+  // Migration & Autosave Logic — moved into hooks/useScriptLibrary.
 
   // Gallery sync engine subscription: keep badge statuses + script index fresh.
-  const refreshSavedScripts = useCallback(() => {
-    try {
-      const idx = JSON.parse(localStorage.getItem(STORAGE_KEYS.SCRIPT_INDEX) || '[]');
-      if (Array.isArray(idx)) setSavedScripts(idx);
-    } catch { /* ignore */ }
-  }, []);
-
   const refreshGalleryView = useCallback(() => {
     refreshSavedScripts();
     setSyncStatusMap(readAllSyncStatuses());
@@ -1227,20 +1114,9 @@ function App() {
   };
 
   const handleLoadScript = (id: string) => {
-      try {
-          const scriptJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_PREFIX + id);
-          if (scriptJson) {
-              const loadedScript = JSON.parse(scriptJson);
-              setScreenplay(loadedScript);
-              if (loadedScript.blocks.length > 0) {
-                  setSelectedBlockId(loadedScript.blocks[0].id);
-              }
-              // Force sidebar open on mobile if loading
-              setSidebarOpen(true);
-          }
-      } catch (e) {
-          console.error("Failed to load script", e); shipLog("script", "error", "Failed to load script", e);
-      }
+      // Load + select first block in the library domain; the sidebar pop is
+      // the App-level UI side effect (only on a successful load, as before).
+      if (loadScript(id)) setSidebarOpen(true);
   };
 
   const handleDeleteScript = (id: string) => {
@@ -1276,8 +1152,7 @@ function App() {
                   handleLoadScript(newIndex[0].id);
               } else {
                   // Reset to default
-                   const newScript = { ...DEFAULT_SCRIPT, id: generateId() };
-                   setScreenplay(newScript);
+                  createDefaultScript();
               }
           }
       } catch (e) {
