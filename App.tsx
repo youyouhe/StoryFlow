@@ -43,12 +43,11 @@ import { PromptPanel } from './components/PromptPanel';
 import { uploadH3Video, createH3Task, queryH3Task, estimateH3Cost, validateH3Submission, H3ReferenceImage, generateImages } from './services/minimaxService';
 import { comfyUploadImage, comfyPatchWorkflow, comfyQueuePrompt, comfyQueryTask } from './services/comfyService';
 import { getAiLog } from './services/aiLog';
-import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from './services/gallery';
-import { initSSO, getSsoToken, clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
-import { isGalleryApiError } from './services/apiClient';
-import type { ScriptVisibility } from './services/apiClient';
+import { galleryClient, syncEngine } from './services/gallery';
+import { clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
 import { exportMarkdown, exportJSON } from './utils/exportData';
 import { useScriptLibrary, STORAGE_KEYS, type ScriptSummary } from './hooks/useScriptLibrary';
+import { useGallerySync } from './hooks/useGallerySync';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -137,15 +136,19 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
-  // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
-  // shared cookie) so the exchange effect below can establish the session.
-  initSSO();
-  const [galleryUser, setGalleryUser] = useState<GalleryUser | null>(galleryClient.user);
-  const [syncStatusMap, setSyncStatusMap] = useState<Record<string, SyncStatus>>(readAllSyncStatuses);
-  const [cloudVisMap, setCloudVisMap] = useState<Record<string, ScriptVisibility>>({});
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  // ---- Gallery sync domain (4A SSO session, badges, cloud visibility) ------
+  const {
+    galleryUser,
+    syncStatusMap, setSyncStatusMap,
+    cloudVisMap,
+    syncError, setSyncError,
+    creditBalance,
+    refreshGalleryView,
+    handleChangeVisibility,
+    handleGalleryLogout,
+    handleSyncScript,
+    handleSyncAll,
+  } = useGallerySync({ savedScripts, refreshSavedScripts });
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -834,28 +837,7 @@ function App() {
   }, [theme]);
 
   // Migration & Autosave Logic — moved into hooks/useScriptLibrary.
-
-  // Gallery sync engine subscription: keep badge statuses + script index fresh.
-  const refreshGalleryView = useCallback(() => {
-    refreshSavedScripts();
-    setSyncStatusMap(readAllSyncStatuses());
-  }, [refreshSavedScripts]);
-
-  useEffect(() => {
-    const off = syncEngine.on(e => {
-      if (e.type === 'status') {
-        setSyncStatusMap(prev => ({ ...prev, [e.scriptId]: e.status }));
-      } else if (e.type === 'synced') {
-        setSyncStatusMap(prev => ({ ...prev, [e.scriptId]: 'synced' }));
-      } else if (e.type === 'error') {
-        setSyncError(e.message);
-      } else {
-        // 'pulled' | 'conflict-forked': a new local screenplay appeared.
-        refreshGalleryView();
-      }
-    });
-    return off;
-  }, [refreshGalleryView]);
+  // Sync engine subscription + refreshGalleryView — moved into hooks/useGallerySync.
 
   // App Settings Autosave
   useEffect(() => {
@@ -1199,125 +1181,8 @@ function App() {
       setShowSettingsModal(false);
   };
 
-  // ---- Gallery account & sync handlers (SettingsModal account tab) ----
-
-  /** Cloud visibility per local script id (cloud-backed only) — powers the
-   *  Sidebar lock/globe chip. */
-  const refreshCloudVis = useCallback(async () => {
-      if (!galleryClient.isAuthenticated) { setCloudVisMap({}); return; }
-      try {
-          const list = await galleryClient.listScripts();
-          const byCloud = new Map(list.map(s => [s.id, s.visibility]));
-          const next: Record<string, ScriptVisibility> = {};
-          for (const localId of syncStore.allScreenplayIds()) {
-              const cloudId = syncStore.getSyncState(localId)?.cloudId;
-              const v = cloudId ? byCloud.get(cloudId) : undefined;
-              if (v) next[localId] = v;
-          }
-          setCloudVisMap(next);
-      } catch { /* keep last-known map */ }
-  }, []);
-
-  /** Cycle a cloud-backed script's visibility from the Sidebar chip. */
-  const handleChangeVisibility = useCallback(async (id: string, v: ScriptVisibility) => {
-      const cloudId = syncStore.getSyncState(id)?.cloudId;
-      if (!cloudId) return;
-      setCloudVisMap(prev => ({ ...prev, [id]: v })); // optimistic
-      try {
-          await galleryClient.setVisibility(cloudId, v);
-      } catch (e) {
-          setSyncError(e instanceof Error ? e.message : String(e));
-          void refreshCloudVis(); // revert to server truth
-      }
-  }, [refreshCloudVis]);
-
-  /** 4A SSO: exchange the browser's sso_token for a gallery session. */
-  const handleSSOExchange = useCallback(async () => {
-      const ssoToken = getSsoToken();
-      if (!ssoToken || galleryClient.isAuthenticated) return;
-      setSyncError(null);
-      try {
-          await galleryClient.ssoExchange(ssoToken);
-          setGalleryUser(galleryClient.user);
-          await syncEngine.onSignedIn();
-          refreshGalleryView();
-          void refreshCloudVis();
-      } catch (e) {
-          // 4A rejected the token (expired / revoked / superseded by another
-          // device): drop it and return to anonymous instead of retrying a
-          // dead token on every reload.
-          if (isGalleryApiError(e) && (e.code === 'INVALID_TOKEN' || e.code === 'AUTH_REQUIRED')) {
-              clearToken();
-          }
-          setSyncError(e instanceof Error ? e.message : String(e));
-      }
-  }, [refreshGalleryView, refreshCloudVis]);
-
-  // SSO token arriving via URL/cookie (login redirect or cross-subdomain):
-  // exchange it into a gallery session once, on mount.
-  useEffect(() => {
-      if (!getSsoToken()) return;
-      void handleSSOExchange();
-  }, [handleSSOExchange]);
-
-  /** App-level logout: drop the 4A token + gallery session. */
-  const handleGalleryLogout = useCallback(async () => {
-      const auth = galleryClient.isAuthenticated;
-      if (auth) await galleryClient.logout();
-      clearToken();
-      setGalleryUser(null);
-      setCloudVisMap({});
-  }, []);
-
-  // Session dropped at runtime (refresh rejected after supersede/revoke):
-  // reflect the anonymous state immediately instead of waiting for a reload.
-  useEffect(() => {
-      galleryClient.onAuthLost = () => {
-          setGalleryUser(null);
-          setCloudVisMap({});
-      };
-      return () => { galleryClient.onAuthLost = null; };
-  }, []);
-
-
-  /** One-click sync for a single script (sidebar badge click). */
-  const handleSyncScript = useCallback(async (id: string) => {
-      if (!galleryClient.isAuthenticated) return;
-      setSyncError(null);
-      try {
-          await syncEngine.syncNow(id);
-      } catch { /* already surfaced via the engine event listener */ }
-      refreshGalleryView();
-      void refreshCloudVis();
-  }, [refreshGalleryView, refreshCloudVis]);
-
-
-
-  /** Push every script in the index (account tab button). */
-  const handleSyncAll = useCallback(async () => {
-      if (!galleryClient.isAuthenticated) return;
-      setSyncError(null);
-      try {
-          for (const s of savedScripts) {
-              await syncEngine.syncNow(s.id);
-          }
-      } catch { /* surfaced via events */ }
-      refreshGalleryView();
-      void refreshCloudVis();
-  }, [savedScripts, refreshGalleryView, refreshCloudVis]);
-  // Returning signed-in user: reconcile with the cloud once on app start.
-  useEffect(() => {
-    if (!galleryClient.isAuthenticated) return;
-    void syncEngine.onSignedIn().then(() => { refreshGalleryView(); void refreshCloudVis(); });
-  }, [refreshGalleryView, refreshCloudVis]);
-
-  // P5: keep the credit balance in sync with the signed-in 4A identity.
-  useEffect(() => {
-    if (!galleryUser) { setCreditBalance(null); return; }
-    galleryClient.getCreditBalance()
-      .then(r => setCreditBalance(r.balance))
-      .catch(() => setCreditBalance(null));
-  }, [galleryUser]);
+  // ---- Gallery account & sync handlers — moved into hooks/useGallerySync ---
+  // (delete-script keeps its cloud bookkeeping here: it spans both domains.)
 
   // Unified export dispatcher. The ExportMenu picks a format + options; this
   // routes to the right backend (print pipeline for PDF, Blob download for
