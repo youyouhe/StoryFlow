@@ -44,6 +44,7 @@ import { useTemplateFlow } from './hooks/useTemplateFlow';
 import { useImportExport } from './hooks/useImportExport';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useBlockEditing } from './hooks/useBlockEditing';
+import { useScriptManagement } from './hooks/useScriptManagement';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
 import { AppModals } from './components/AppModals';
@@ -207,6 +208,15 @@ function App() {
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
   const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);
 
+  // ---- Script management orchestration (load/delete/rename) ----------------
+  const { handleLoadScript, handleDeleteScript, handleRenameScript } = useScriptManagement({
+    screenplay, setScreenplay,
+    savedScripts, setSavedScripts,
+    loadScript, createDefaultScript,
+    setSyncError, setSyncStatusMap,
+    setSidebarOpen, t,
+  });
+
   // ---- Template flow domain (gallery modal + opening picker + creators) ----
   const {
     showTemplateModal, setShowTemplateModal,
@@ -279,82 +289,6 @@ function App() {
     setAIMode, setShowAIModal,
   });
 
-
-  const handleLoadScript = (id: string) => {
-      // Load + select first block in the library domain; the sidebar pop is
-      // the App-level UI side effect (only on a successful load, as before).
-      if (loadScript(id)) setSidebarOpen(true);
-  };
-
-  const handleDeleteScript = (id: string) => {
-      if (!window.confirm(t.confirmDelete)) return;
-
-      try {
-          // Remove Content
-          localStorage.removeItem(STORAGE_KEYS.SCRIPT_PREFIX + id);
-
-          // Cloud bookkeeping: drop local sync state; soft-delete the cloud
-          // copy too so pullAll won't resurrect it on the next sign-in.
-          const cloudId = syncEngine.cloudIdOf(id);
-          syncEngine.forgetScript(id);
-          if (cloudId && galleryClient.isAuthenticated) {
-              galleryClient.deleteScript(cloudId).catch(e => {
-                  setSyncError(`删除云端副本失败: ${e instanceof Error ? e.message : String(e)}`);
-              });
-          }
-          setSyncStatusMap(prev => {
-              const next = { ...prev };
-              delete next[id];
-              return next;
-          });
-
-          // Update Index
-          const newIndex = savedScripts.filter(s => s.id !== id);
-          localStorage.setItem(STORAGE_KEYS.SCRIPT_INDEX, JSON.stringify(newIndex));
-          setSavedScripts(newIndex);
-
-          // If deleted current script, load another or create default
-          if (id === screenplay.id) {
-              if (newIndex.length > 0) {
-                  handleLoadScript(newIndex[0].id);
-              } else {
-                  // Reset to default
-                  createDefaultScript();
-              }
-          }
-      } catch (e) {
-          console.error("Failed to delete script", e); shipLog("script", "error", "Failed to delete script", e);
-      }
-  };
-
-  const handleRenameScript = (id: string, newTitle: string) => {
-      // 1. Update Index
-      const updatedScripts = savedScripts.map(s => 
-          s.id === id ? { ...s, title: newTitle, lastModified: Date.now() } : s
-      );
-      setSavedScripts(updatedScripts);
-      localStorage.setItem(STORAGE_KEYS.SCRIPT_INDEX, JSON.stringify(updatedScripts));
-
-      // 2. Update Active State if matched
-      if (id === screenplay.id) {
-          setScreenplay(prev => ({
-              ...prev,
-              metadata: { ...prev.metadata, title: newTitle },
-              lastModified: Date.now()
-          }));
-      } else {
-          // 3. Update Storage for inactive script
-          try {
-              const scriptJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_PREFIX + id);
-              if (scriptJson) {
-                  const s = JSON.parse(scriptJson);
-                  s.metadata.title = newTitle;
-                  s.lastModified = Date.now();
-                  localStorage.setItem(STORAGE_KEYS.SCRIPT_PREFIX + id, JSON.stringify(s));
-              }
-          } catch(e) { console.error(e); }
-      }
-  };
 
 
   const scrollToBlock = (id: string) => {
