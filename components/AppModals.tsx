@@ -10,6 +10,7 @@ import { TemplateModal } from './TemplateModal';
 import { OpeningPicker } from './OpeningPicker';
 import { MINIMAX_VIDEO_MODELS } from '../constants';
 import { ExpressWorkbench } from './ExpressWorkbench';
+import { ProAudioPanel } from './ProAudioPanel';
 import { isDirStoreAvailable } from '../services/assetDirStore';
 
 /**
@@ -56,6 +57,7 @@ interface AppModalsProps {
   setPromptSource: React.Dispatch<React.SetStateAction<string>>;
   onSsoLogin: () => void;
   onSsoLogoutEverywhere: () => void;
+  onToast?: (msg: string) => void;
   // project-level pipeline mode (lives on Screenplay)
   onProductionModeChange: (mode: 'simple' | 'cinematic') => void;
   // Express gacha workbench (Mode A)
@@ -87,6 +89,7 @@ export function AppModals(props: AppModalsProps) {
     transitionHeadingDraft, setTransitionHeadingDraft,
     promptSource, setPromptSource,
     onSsoLogin, onSsoLogoutEverywhere,
+    onToast,
     onProductionModeChange,
     showExpressWorkbench, setShowExpressWorkbench,
   } = props;
@@ -101,7 +104,7 @@ export function AppModals(props: AppModalsProps) {
   const {
     planH3Progress, planPreflight, planTasks, planCostTotal,
     videoPlanModel, videoPlanDuration, setVideoPlanDuration,
-    planResolution, setPlanResolution, submitPlanToH3,
+    planResolution, setPlanResolution, submitPlanToH3, videoPlan,
   } = h3;
 
   // Keep both knobs legal on model switch: H3-Max has no 4s window, and
@@ -158,6 +161,17 @@ export function AppModals(props: AppModalsProps) {
                 planPreflight={planPreflight}
                 videoPlanModelId={videoPlanModel.id}
                 onVideoPlanModelChange={onVideoPlanModelChange}
+                proAudioSlot={screenplay.productionMode === 'cinematic' && videoPlan ? (
+                  <ProAudioPanel
+                    videoPlan={videoPlan}
+                    screenplay={screenplay}
+                    setScreenplay={setScreenplay}
+                    appSettings={appSettings}
+                    t={t}
+                    lang={lang}
+                    onToast={onToast}
+                  />
+                ) : undefined}
                 videoPlanDuration={videoPlanDuration}
                 onVideoPlanDurationChange={setVideoPlanDuration}
                 planResolution={planResolution}

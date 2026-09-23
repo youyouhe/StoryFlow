@@ -43,6 +43,8 @@ interface AIModalProps {
     planCostTotal?: number;
     videoPlanModelId?: string;
     onVideoPlanModelChange?: (id: string) => void;
+    /** Pro mode: audio workbench (TTS/BGM/SFX) rendered under the plan. */
+    proAudioSlot?: React.ReactNode;
 }
 
 export const AIModal: React.FC<AIModalProps> = ({
@@ -70,6 +72,7 @@ export const AIModal: React.FC<AIModalProps> = ({
     onPlanResolutionChange,
     planTasks,
     planNextHint,
+    proAudioSlot,
     planCostTotal,
 }) => {
     const H3_STATUS_ZH: Record<string, string> = {
@@ -275,6 +278,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                     {aiMode === 'VIDEO_PLAN' && aiState.suggestion && (
                         <div className="space-y-3">
                             <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{planNextHint ?? t.videoPlanNext}</p>
+            {proAudioSlot}
                             <button
                                 onClick={() => {
                                     const blob = new Blob([aiState.suggestion || ''], { type: 'text/markdown' });
