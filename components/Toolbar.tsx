@@ -1,7 +1,7 @@
 import React from 'react';
 import { BlockType } from '../types';
 import { clsx } from 'clsx';
-import { Wand2, Type, Eye, Edit3, Palette } from 'lucide-react';
+import { Wand2, Type, Eye, Edit3, Palette, Clapperboard } from 'lucide-react';
 import { TRANSLATIONS } from '../constants';
 
 interface ToolbarProps {
@@ -15,11 +15,14 @@ interface ToolbarProps {
   /** Current style head display name (undefined = none picked yet). */
   styleHeadName?: string;
   onOpenStyleHead: () => void;
+  /** Project-level pipeline mode: the gacha workbench entry shows in Express. */
+  productionMode?: 'simple' | 'cinematic';
+  onOpenExpressWorkbench?: () => void;
 }
 
 const TYPES: BlockType[] = ['SCENE_HEADING', 'ACTION', 'CHARACTER', 'DIALOGUE', 'PARENTHETICAL', 'TRANSITION'];
 
-export const Toolbar: React.FC<ToolbarProps> = ({ currentType, onSetType, onAIAction, isAILoading, t, isReadOnly, onToggleReadOnly, styleHeadName, onOpenStyleHead }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ currentType, onSetType, onAIAction, isAILoading, t, isReadOnly, onToggleReadOnly, styleHeadName, onOpenStyleHead, productionMode = 'cinematic', onOpenExpressWorkbench }) => {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex justify-center pb-8">
       <div className="pointer-events-auto bg-white/90 dark:bg-[#18181b]/90 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-700/50 shadow-2xl shadow-gray-200/50 dark:shadow-black/50 rounded-2xl px-2 py-2 flex items-center gap-1 sm:gap-1.5 mx-4 overflow-x-auto max-w-full no-scrollbar ring-1 ring-black/5 dark:ring-white/10">
@@ -53,6 +56,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({ currentType, onSetType, onAIAc
           <Palette className="w-3.5 h-3.5" />
           <span className="hidden sm:inline truncate max-w-[140px]">{styleHeadName || t.styleHeadTitle}</span>
         </button>
+
+        {/* Express gacha workbench entry — Mode A only */}
+        {productionMode === 'simple' && onOpenExpressWorkbench && (
+            <button
+            onClick={onOpenExpressWorkbench}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 mr-1 border bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-900/30 dark:border-violet-800 dark:text-violet-300"
+            title={t.expressTitle}
+            >
+            <Clapperboard className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t.expressTitle}</span>
+            </button>
+        )}
 
         {/* Formatting Tools (Hidden in Read Only) */}
         {!isReadOnly && (

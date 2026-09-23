@@ -122,6 +122,24 @@ export interface GrayboxData {
   error?: string;
 }
 
+/** One Express-pipeline shot (docs/pipeline-two-mode.md §1): the first frame
+ *  generated from the block's imagePrompt, then an I2V clip generated from
+ *  that frame. `locked` freezes the shot against rerolls and pins it for
+ *  export. */
+export interface ExpressShot {
+  /** First-frame asset in the reference library (durable, survives reloads). */
+  imageAssetId?: string;
+  /** Display URL for the first frame (asset object URL or provider URL). */
+  imageUrl?: string;
+  /** I2V clip URL (ComfyUI /view) + the prompt id that produced it. */
+  videoUrl?: string;
+  videoPromptId?: string;
+  status: 'idle' | 'imaging' | 'image-ready' | 'generating' | 'video-ready' | 'failed';
+  error?: string;
+  locked?: boolean;
+  updatedAt?: number;
+}
+
 export type ScriptLanguage = 'en' | 'zh' | 'dual';
 
 /** The fixed visual DNA of a screenplay, picked (from LLM-generated
@@ -178,6 +196,11 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
+  /** Express gacha workbench state, per generatable block (has imagePrompt).
+   *  Durable outcomes only — transient busy flags live in component state.
+   *  videoUrl points at the ComfyUI /view endpoint (session-scoped server
+   *  history; survives app reloads but not ComfyUI restarts). */
+  expressShots?: Record<string, ExpressShot>;
   /** Pipeline complexity level — the project-level MODE SWITCH.
    *  'simple' = **Express**: no graybox/white-model/TTS/BGM required —
    *  imagePrompt → first frame → I2V → per-shot gacha workbench → ffmpeg

@@ -66,6 +66,7 @@ function App() {
   }, [toast]);
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [showExpressWorkbench, setShowExpressWorkbench] = useState(false);
   // ---- Composition root: every domain hook wired in dependency order -------
   const {
     lib, settings, sync, assets, h3, ed, ai, kb, mgmt, tpl, io,
@@ -223,6 +224,8 @@ function App() {
         />
 
         <Toolbar
+            productionMode={lib.screenplay.productionMode ?? 'simple'}
+            onOpenExpressWorkbench={() => setShowExpressWorkbench(true)}
             currentType={lib.screenplay.blocks.find(b => b.id === lib.selectedBlockId)?.type || 'ACTION'}
             onSetType={(t) => handleTypeChange(lib.selectedBlockId, t)}
             onAIAction={ai.handleAIAction}
@@ -270,6 +273,8 @@ function App() {
           onSsoLogin={() => requireLogin()}
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
           onProductionModeChange={(mode) => lib.setScreenplay(prev => ({ ...prev, productionMode: mode, lastModified: Date.now() }))}
+          showExpressWorkbench={showExpressWorkbench}
+          setShowExpressWorkbench={setShowExpressWorkbench}
         />
 
       {askDialog}

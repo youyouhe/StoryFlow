@@ -9,6 +9,7 @@ import { AIModal } from './AIModal';
 import { TemplateModal } from './TemplateModal';
 import { OpeningPicker } from './OpeningPicker';
 import { MINIMAX_VIDEO_MODELS } from '../constants';
+import { ExpressWorkbench } from './ExpressWorkbench';
 import { isDirStoreAvailable } from '../services/assetDirStore';
 
 /**
@@ -57,6 +58,9 @@ interface AppModalsProps {
   onSsoLogoutEverywhere: () => void;
   // project-level pipeline mode (lives on Screenplay)
   onProductionModeChange: (mode: 'simple' | 'cinematic') => void;
+  // Express gacha workbench (Mode A)
+  showExpressWorkbench: boolean;
+  setShowExpressWorkbench: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function AppModals(props: AppModalsProps) {
@@ -84,6 +88,7 @@ export function AppModals(props: AppModalsProps) {
     promptSource, setPromptSource,
     onSsoLogin, onSsoLogoutEverywhere,
     onProductionModeChange,
+    showExpressWorkbench, setShowExpressWorkbench,
   } = props;
   const {
     showTemplateModal, setShowTemplateModal,
@@ -264,6 +269,23 @@ export function AppModals(props: AppModalsProps) {
             onReroll={() => openOpeningPicker(openingPicker)}
             onConfirm={handleCreateFromTemplate}
             onBlank={() => handleCreateBlankScript(openingPicker.id)}
+          />
+        )}
+
+        {/* Express gacha workbench (Mode A pipeline) */}
+        {showExpressWorkbench && (
+          <ExpressWorkbench
+            screenplay={screenplay}
+            setScreenplay={setScreenplay}
+            appSettings={appSettings}
+            t={t}
+            lang={lang}
+            onClose={() => setShowExpressWorkbench(false)}
+            onUploadFrame={(blob, subject) => assets.handleUploadRefImage(
+              new File([blob], `express-${Date.now()}.png`, { type: blob.type || 'image/png' }),
+              subject, undefined, 'ai-generate', { kind: 'action' },
+            )}
+            refImages={refImages}
           />
         )}
     </>
