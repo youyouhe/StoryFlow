@@ -27,9 +27,11 @@ interface AppTopBarProps {
 export function AppTopBar({ screenplay, onRename, saveStatus, theme, setTheme, lang, setLang, t, hasProData, onModeBadgeClick }: AppTopBarProps) {
   const mode = screenplay.productionMode ?? 'simple';
   const modeLocked = mode === 'cinematic' || hasProData;
-  const modeTitle = mode === 'cinematic'
-    ? t.modeSwitchProReason
-    : hasProData ? t.modeSwitchDataReason : t.modeUpgradeBody;
+  // Rule-3 reason wins: a project carrying Pro data reports the data-lock,
+  // matching the click toast from App's handleProductionModeChange.
+  const modeTitle = hasProData
+    ? t.modeSwitchDataReason
+    : mode === 'cinematic' ? t.modeSwitchProReason : t.modeUpgradeBody;
   const modeLabel = mode === 'simple' ? '简易' : '专业';
   const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
   const [headerTitleVal, setHeaderTitleVal] = useState('');
