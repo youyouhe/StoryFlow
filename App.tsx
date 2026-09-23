@@ -269,6 +269,7 @@ function App() {
           setPromptSource={setPromptSource}
           onSsoLogin={() => requireLogin()}
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
+          onProductionModeChange={(mode) => lib.setScreenplay(prev => ({ ...prev, productionMode: mode, lastModified: Date.now() }))}
         />
 
       {askDialog}

@@ -178,12 +178,14 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
-  /** Pipeline complexity level. 'simple' = fixed-camera / single-scene scripts
-   *  where graybox (spatial blocking + camera choreography) adds no value —
-   *  the pipeline is: character sheets + variant images + segment video prompts.
-   *  'cinematic' = the full pipeline with graybox, white-model, camera paths.
+  /** Pipeline complexity level — the project-level MODE SWITCH.
+   *  'simple' = **Express**: no graybox/white-model/TTS/BGM required —
+   *  imagePrompt → first frame → I2V → per-shot gacha workbench → ffmpeg
+   *  concat export (see docs/pipeline-two-mode.md).
+   *  'cinematic' = **Pro**: the full director pipeline (five-type ref
+   *  registry + SHOT_LIST + consistency preflight) plus TTS/BGM/SFX audio.
    *  Auto-set by FROM_PROMPT (fixed-camera keywords → simple); user can
-   *  override in Settings. */
+   *  override via the top-bar badge or Settings → Script. */
   productionMode?: 'simple' | 'cinematic';
 }
 

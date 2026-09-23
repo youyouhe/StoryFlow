@@ -32,6 +32,9 @@ interface SettingsModalProps {
   cloudBusy?: boolean;
   onExportCloudScripts?: () => Promise<void> | void;
   onDeleteCloudData?: () => Promise<void> | void;
+  // Project-level pipeline mode switch (lives on Screenplay, not metadata)
+  productionMode?: 'simple' | 'cinematic';
+  onProductionModeChange?: (mode: 'simple' | 'cinematic') => void;
 }
 /** Copy-to-clipboard button for API key fields: keys don't sync across
  *  origins/devices (BYOK), so migrating means re-pasting — this makes that a
@@ -61,7 +64,7 @@ const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
     );
 };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, syncConsent = 'unset', onEnableCloudSync, onDisableCloudSync, pullPolicy = 'ask', onSetPullPolicy, cloudBusy, onExportCloudScripts, onDeleteCloudData }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, syncConsent = 'unset', onEnableCloudSync, onDisableCloudSync, pullPolicy = 'ask', onSetPullPolicy, cloudBusy, onExportCloudScripts, onDeleteCloudData, productionMode = 'simple', onProductionModeChange }) => {
   const [showSyncConsentPanel, setShowSyncConsentPanel] = useState(false);
   const handleToggleCloudSync = () => {
     if (syncConsent === 'granted') {
@@ -1014,6 +1017,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
               </div>
             )}
             
+            {/* Project-level pipeline mode (Express / Pro) */}
+            <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t.productionModeLabel}</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(['simple', 'cinematic'] as const).map(mode => {
+                        const active = productionMode === mode;
+                        const label = mode === 'simple' ? t.productionModeExpress : t.productionModePro;
+                        const desc = mode === 'simple' ? t.productionModeExpressDesc : t.productionModeProDesc;
+                        return (
+                            <button
+                                key={mode}
+                                type="button"
+                                onClick={() => onProductionModeChange?.(mode)}
+                                className={`text-left p-3 rounded-xl border transition-all ${active
+                                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-1 ring-indigo-500'
+                                    : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'}`}
+                            >
+                                <div className={`text-sm font-bold ${active ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>{label}</div>
+                                <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">{desc}</div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
             <div className="pt-6 flex justify-end gap-2 border-t border-gray-100 dark:border-zinc-800 mt-4 shrink-0">
                 <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg">
                     {t.cancel}

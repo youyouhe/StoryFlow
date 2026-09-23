@@ -55,6 +55,8 @@ interface AppModalsProps {
   setPromptSource: React.Dispatch<React.SetStateAction<string>>;
   onSsoLogin: () => void;
   onSsoLogoutEverywhere: () => void;
+  // project-level pipeline mode (lives on Screenplay)
+  onProductionModeChange: (mode: 'simple' | 'cinematic') => void;
 }
 
 export function AppModals(props: AppModalsProps) {
@@ -81,6 +83,7 @@ export function AppModals(props: AppModalsProps) {
     transitionHeadingDraft, setTransitionHeadingDraft,
     promptSource, setPromptSource,
     onSsoLogin, onSsoLogoutEverywhere,
+    onProductionModeChange,
   } = props;
   const {
     showTemplateModal, setShowTemplateModal,
@@ -189,6 +192,8 @@ export function AppModals(props: AppModalsProps) {
                 creditBalance={creditBalance}
                 onSsoLogin={onSsoLogin}
                 onSsoLogoutEverywhere={onSsoLogoutEverywhere}
+                productionMode={screenplay.productionMode ?? 'simple'}
+                onProductionModeChange={onProductionModeChange}
                 onGalleryLogout={handleGalleryLogout}
                 onSyncAll={handleSyncAll}
                 syncConsent={syncConsent}
