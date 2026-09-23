@@ -77,6 +77,14 @@ export const resolveCharacterSheet = (
     const m = stem.match(/^[^()（）]*?[（(]([^()（）]+)[)）]/);
     return m ? m[1].trim() || undefined : undefined;
   };
+  // Declared BEFORE variantOf: variantOf's fallback chain calls stemOf, and the
+  // strict-variant stale-link check below invokes it while `boundId` is still
+  // being resolved — a later declaration would be a TDZ ReferenceError.
+  const stemOf = (r: RefImage): string => (r.name ?? '').replace(/\.[^.]+$/, '');
+  const baseOfStem = (stem: string): string => {
+    const m = stem.match(/^([^()（）]*?)[（(]/);
+    return (m ? m[1] : stem).trim();
+  };
   const variantOf = (r: RefImage): string | undefined =>
     r.variant ?? normIdentity(r.subject).variant ?? variantTagOf(stemOf(r));
 
@@ -100,11 +108,6 @@ export const resolveCharacterSheet = (
   // (charName + variant, written at generation time from the CHARACTER cue)
   // are authoritative; subject text and filename tags are fallbacks for
   // assets without them (manual uploads, renamed files, legacy records).
-  const stemOf = (r: RefImage): string => (r.name ?? '').replace(/\.[^.]+$/, '');
-  const baseOfStem = (stem: string): string => {
-    const m = stem.match(/^([^()（）]*?)[（(]/);
-    return (m ? m[1] : stem).trim();
-  };
   const owned = refImages.filter(r => {
     if (r.charName) return r.charName === wantBase;
     const bySubject = normIdentity(r.subject).base === wantBase;
