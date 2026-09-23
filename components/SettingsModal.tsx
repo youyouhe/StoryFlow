@@ -23,6 +23,15 @@ interface SettingsModalProps {
   onSyncAll?: () => Promise<void>;
   /** P5: milli-credit balance for the signed-in 4A identity. */
   creditBalance?: number | null;
+  // Privacy remediation (2026-09): consent-gated cloud sync surface
+  syncConsent?: 'unset' | 'granted' | 'denied';
+  onEnableCloudSync?: () => void;
+  onDisableCloudSync?: () => void;
+  pullPolicy?: 'ask' | 'auto' | 'never';
+  onSetPullPolicy?: (v: 'ask' | 'auto' | 'never') => void;
+  cloudBusy?: boolean;
+  onExportCloudScripts?: () => Promise<void> | void;
+  onDeleteCloudData?: () => Promise<void> | void;
 }
 /** Copy-to-clipboard button for API key fields: keys don't sync across
  *  origins/devices (BYOK), so migrating means re-pasting — this makes that a
@@ -52,7 +61,15 @@ const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
     );
 };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, syncConsent = 'unset', onEnableCloudSync, onDisableCloudSync, pullPolicy = 'ask', onSetPullPolicy, cloudBusy, onExportCloudScripts, onDeleteCloudData }) => {
+  const [showSyncConsentPanel, setShowSyncConsentPanel] = useState(false);
+  const handleToggleCloudSync = () => {
+    if (syncConsent === 'granted') {
+      if (window.confirm(t.cloudSyncDisableConfirm)) onDisableCloudSync?.();
+    } else {
+      setShowSyncConsentPanel(true);
+    }
+  };
 
   const [metaDataForm, setMetaDataForm] = useState<ScriptMetadata>(metadata);
   const [appSettingsForm, setAppSettingsForm] = useState<AppSettings>(appSettings);
@@ -351,6 +368,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
             {/* AI Settings Tab */}
             {activeTab === 'ai' && (
               <div className="space-y-4">
+                 {/* AI egress disclosure (P1-5): what leaves the device, in plain words */}
+                 <div className="text-[11px] leading-relaxed px-3 py-2.5 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                    {t.aiEgressNote}
+                 </div>
                  <div>
                     <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg cursor-pointer hover:border-gray-300 dark:hover:border-zinc-600 transition-all">
                         <input
@@ -856,6 +877,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                     </div>
                 )}
 
+                {/* Cloud sync switch — everything stays OFF until consent (P0-1) */}
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
+                    <div>
+                        <div className="text-xs font-bold text-gray-800 dark:text-gray-100">{t.cloudSyncToggle}</div>
+                        <div className="text-[10px] text-gray-400">
+                            {syncConsent === 'granted' ? t.cloudSyncStateOn : t.cloudSyncStateOff}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={syncConsent === 'granted'}
+                        onClick={handleToggleCloudSync}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${syncConsent === 'granted' ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-zinc-700'}`}
+                    >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${syncConsent === 'granted' ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                </div>
+
+                {showSyncConsentPanel && syncConsent !== 'granted' && (
+                    <div className="px-3 py-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-xs space-y-2">
+                        <div className="font-bold text-gray-800 dark:text-gray-100">{t.cloudSyncEnableTitle}</div>
+                        <pre className="whitespace-pre-wrap font-sans text-gray-600 dark:text-gray-300 leading-relaxed">{t.cloudSyncConsentLines}</pre>
+                        <div className="flex gap-2 justify-end pt-1">
+                            <button type="button" onClick={() => setShowSyncConsentPanel(false)} className="px-3 py-1.5 text-[11px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 rounded-lg">
+                                {t.cancel}
+                            </button>
+                            <button type="button" onClick={() => { onEnableCloudSync?.(); setShowSyncConsentPanel(false); }} className="px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">
+                                {t.cloudSyncEnable}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {syncConsent === 'granted' && (
+                    <div className="px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
+                        <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">{t.cloudPullPolicyLabel}</div>
+                        <div className="flex gap-1">
+                            {([['ask', t.cloudPullAskLabel], ['auto', t.cloudPullAutoLabel], ['never', t.cloudPullNeverLabel]] as const).map(([v, label]) => (
+                                <button
+                                    key={v}
+                                    type="button"
+                                    onClick={() => onSetPullPolicy?.(v)}
+                                    className={`flex-1 px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${pullPolicy === v
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-white dark:bg-zinc-800 text-gray-500 border border-gray-200 dark:border-zinc-700'}`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {galleryUser ? (
                   <div className="space-y-3">
                     <div className="px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-sm">
@@ -894,6 +969,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                             {t.gallery4aLogoutEverywhere}
                         </button>
                     </div>
+                    {syncConsent === 'granted' && (
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => { void onExportCloudScripts?.(); }}
+                                disabled={cloudBusy}
+                                className="flex-1 px-3 py-1.5 text-[11px] font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-60 rounded-lg"
+                            >
+                                {t.cloudExportAll}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { void onDeleteCloudData?.(); }}
+                                disabled={cloudBusy}
+                                className="flex-1 px-3 py-1.5 text-[11px] font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 rounded-lg"
+                            >
+                                {cloudBusy ? t.gallerySyncing : t.cloudDeleteAll}
+                            </button>
+                        </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">

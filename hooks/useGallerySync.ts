@@ -35,6 +35,7 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
   // PRIVACY: cloud flows run only with the user's explicit consent.
   const [syncConsent, setSyncConsentState] = useState<CloudSyncConsent>(readCloudSyncConsent);
   const [pullPolicy, setPullPolicyState] = useState<CloudPullPolicy>(readCloudPullPolicy);
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   const enableCloudSync = useCallback(() => {
     writeCloudSyncConsent('granted');
@@ -252,6 +253,64 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
       .catch(() => setCreditBalance(null));
   }, [galleryUser]);
 
+  /** Export EVERY cloud script (full docs) as one JSON file — uses only the
+   *  existing list/get endpoints, no backend work needed. */
+  const exportCloudScripts = useCallback(async () => {
+      if (readCloudSyncConsent() !== 'granted' || !galleryClient.isAuthenticated) return;
+      setCloudBusy(true);
+      setSyncError(null);
+      try {
+          const list = await galleryClient.listScripts();
+          if (!list.length) { window.alert(t.cloudExportNone); return; }
+          const scripts: Array<Record<string, unknown>> = [];
+          for (const cs of list) {
+              const full = await galleryClient.getScript(cs.id);
+              scripts.push({ cloudId: cs.id, title: cs.title, revision: full.revision, updatedAt: full.script.updatedAt, doc: full.doc });
+          }
+          const pack = { storyflowCloudExport: 1 as const, exportedAt: new Date().toISOString(), count: scripts.length, scripts };
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' }));
+          a.download = `storyflow-cloud-${new Date().toISOString().slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          onToast?.(t.cloudExportDone.replace('{n}', String(scripts.length)));
+      } catch (e) {
+          setSyncError(e instanceof Error ? e.message : String(e));
+      } finally { setCloudBusy(false); }
+  }, [t, onToast]);
+
+  /** Delete every cloud script + cloud asset. Server-side this is the same
+   *  soft-delete as per-script deletion; local sync states + the outbox are
+   *  dropped so badges reset and nothing re-pushes. */
+  const deleteCloudData = useCallback(async () => {
+      if (readCloudSyncConsent() !== 'granted' || !galleryClient.isAuthenticated) return;
+      setCloudBusy(true);
+      setSyncError(null);
+      try {
+          const scripts = await galleryClient.listScripts();
+          let assets: Awaited<ReturnType<typeof galleryClient.listAssets>> = [];
+          try { assets = await galleryClient.listAssets(); } catch { /* assets optional */ }
+          if (!scripts.length && !assets.length) { window.alert(t.cloudExportNone); return; }
+          if (!window.confirm(t.cloudDeleteAllConfirm
+              .replace('{n}', String(scripts.length))
+              .replace('{m}', String(assets.length)))) { setCloudBusy(false); return; }
+          for (const cs of scripts) await galleryClient.deleteScript(cs.id);
+          const deleted = new Set(scripts.map(s => s.id));
+          for (const localId of syncStore.allScreenplayIds()) {
+              const st = syncStore.getSyncState(localId);
+              if (st && deleted.has(st.cloudId)) syncEngine.forgetScript(localId);
+          }
+          for (const a of assets) {
+              try { await galleryClient.deleteAsset(a.id); } catch { /* keep going */ }
+          }
+          syncEngine.clearOutbox();
+          refreshGalleryView();
+          onToast?.(t.cloudDeleteDone.replace('{n}', String(scripts.length)).replace('{m}', String(assets.length)));
+      } catch (e) {
+          setSyncError(e instanceof Error ? e.message : String(e));
+      } finally { setCloudBusy(false); }
+  }, [t, onToast, refreshGalleryView]);
+
   return {
     galleryUser, setGalleryUser,
     syncStatusMap, setSyncStatusMap,
@@ -260,6 +319,7 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
     creditBalance,
     syncConsent, enableCloudSync, disableCloudSync,
     pullPolicy, setCloudPullPolicy,
+    cloudBusy, exportCloudScripts, deleteCloudData,
     refreshCloudVis,
     refreshGalleryView,
     handleChangeVisibility,

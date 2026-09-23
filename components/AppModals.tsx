@@ -62,7 +62,10 @@ export function AppModals(props: AppModalsProps) {
   const { appSettings, handleUpdateSettings } = settings;
   const { screenplay, setScreenplay } = lib;
   const { galleryUser, syncError, creditBalance, refreshGalleryView,
-          handleGalleryLogout, handleSyncAll } = sync;
+          handleGalleryLogout, handleSyncAll,
+          syncConsent, enableCloudSync, disableCloudSync,
+          pullPolicy, setCloudPullPolicy,
+          cloudBusy, exportCloudScripts, deleteCloudData } = sync;
   const { refImages, handleUpdateRefImageMeta, handleRemoveRefImage,
           assetDir, handleOpenAssetDir, handleSwitchAssetDir, reloadAssets } = assets;
   const { executeAI, runContinuation, acceptAISuggestion } = ai;
@@ -188,6 +191,14 @@ export function AppModals(props: AppModalsProps) {
                 onSsoLogoutEverywhere={onSsoLogoutEverywhere}
                 onGalleryLogout={handleGalleryLogout}
                 onSyncAll={handleSyncAll}
+                syncConsent={syncConsent}
+                onEnableCloudSync={enableCloudSync}
+                onDisableCloudSync={disableCloudSync}
+                pullPolicy={pullPolicy}
+                onSetPullPolicy={setCloudPullPolicy}
+                cloudBusy={cloudBusy}
+                onExportCloudScripts={exportCloudScripts}
+                onDeleteCloudData={deleteCloudData}
             />
         )}
 
