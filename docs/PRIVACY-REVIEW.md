@@ -117,3 +117,26 @@
 ---
 
 *Review:Claude Code agent · 2026-09-23 · 只读,未改功能代码;commit 仅本文档。*
+
+---
+
+## 整改记录(2026-09-23,同日实施)
+
+全部在 `refactor/split-app` 分支,每步 tsc + vitest(103)+ build 全绿,小步 commit 未 push:
+
+| 发现 | 修复 commit | 方式 | 遗留 |
+|---|---|---|---|
+| F1 SSO 静默登录 | 7332637 + 75c51fd | initSSO 不再自动采纳家族 cookie;检测到会话时 confirm 说明拉取/上传/4A 三件事,同意才 `adoptSsoToken` 并授予同意;拒绝则置登出抑制 | 无(同意文案内含三披露) |
+| F2 全量静默拉取+推送 | a278a75 + 75c51fd | `flush()`/`pullAll()` 引擎级同意门(未同意一律不动数据,即使已认证);拉取改询问式:「云端有 N 个本机没有的剧本」,选择记住(ask/auto/never,设置→账号可改) | 无 |
+| F3 会话跨启动静默重连 | 75c51fd | 换发 effect 以 consent 为前置条件;设置开关关闭即 `logout()+clearToken()`,off = off | 「每次启动重问」未做(会话跟随开关) |
+| F4 登出不清 outbox | 75c51fd | `handleGalleryLogout` 与 `disableCloudSync` 均调 `syncEngine.clearOutbox()` | onAuthLost(被动掉线)不清队列——重新静默登录已被同意门拦截,风险已消 |
+| F5 shipLog 无条件外发 | c1a67a5 | 生产构建默认直接 return;需生产日志时构建期 `VITE_ENABLE_SHIPLOG=1` 显式开启;dev 行为不变 | 无 |
+| F6 AI 出站无说明 | dfb694b + 6754007 | 设置→AI 固定披露框(列明全部服务商含 fal→OpenAI 二跳);AI 执行按钮 title;生图按钮 tooltip 按供应商点名目的地;H3 提交按钮 tooltip(中英双语) | 无 |
+| F7 冲突分叉静默 | 75c51fd | 引擎 `first-pushed` 新事件 + `conflict-forked` toast:分叉/首次推送均有提示(App 新增极简 toast,4.5s 自动消失) | 无 |
+| F8 mock 接受 SSO 换发 | 未修(接受该风险) | — | mock 仅存本浏览器,dev 专用;低危搁置 |
+| F9 登出审计请求 | 未修 | — | 极低危,同源 404,保持 |
+| F10 无云端数据收回入口 | dfb694b | 设置→账号:「导出云端全部剧本」(list/get 现有端点打包 JSON 下载)+「删除云端全部数据」(脚本 soft-delete + 云资产删除,双确认,本地同步状态与 outbox 同步清理)。**后端零改动**;若未来要批量效率接口,服务端 TODO:`GET /scripts/export`(打包下载)与 `POST /scripts/delete-all`(原子批量) | 云端为 soft-delete,服务器侧保留策略由私有仓库后端决定 |
+
+**新增同意面**:设置→账号的云同步开关(默认关);开启即弹三披露确认面板。**引擎层防御**:即使未来有代码路径遗漏 UI 门,`flush/pullAll` 在未同意时也拒绝移动数据。
+
+*整改实施:Claude Code agent · 2026-09-23*
