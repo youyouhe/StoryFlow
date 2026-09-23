@@ -83,14 +83,29 @@ export function initSSO(): string | null {
     /* ignore */
   }
 
-  // Cross-subdomain cookie fallback: signed in on another smartbid product.
-  const cookieToken = getCookie('sso_token');
-  if (cookieToken) {
-    localStorage.setItem(TOKEN_KEY, cookieToken);
-    return cookieToken;
-  }
-
+  // PRIVACY (P1 fix, 2026-09): the cross-subdomain cookie fallback is NO
+  // LONGER silent. initSSO never adopts the family cookie on its own —
+  // useGallerySync offers a confirm dialog (getSsoCookieToken) and adopts
+  // via adoptSsoToken only after the user agrees.
   return null;
+}
+
+/** The family SSO cookie, if present — NOT adopted automatically; the app
+ *  must ask before using it. */
+export function getSsoCookieToken(): string | null {
+  if (SSO_DISABLED) return null;
+  return getCookie('sso_token');
+}
+
+/** Explicitly adopt an SSO token (user confirmed the login prompt). Clears
+ *  the logged-out suppression, like an explicit URL login would. */
+export function adoptSsoToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+  try {
+    sessionStorage.removeItem(LOGOUT_FLAG_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getSsoToken(): string | null {
