@@ -23,6 +23,7 @@
  * back in resumes it (call onSignedIn).
  */
 import { CloudScript, GalleryApiError, GalleryClient, isGalleryApiError } from './apiClient';
+import { readCloudSyncConsent } from './cloudConsent';
 import { GalleryUser, Screenplay, ScriptSyncState, SyncStatus } from '../types';
 
 /** Storage-port the engine needs from the app. App.tsx already owns every
@@ -40,6 +41,7 @@ export type SyncEvent =
   | { type: 'synced'; scriptId: string; revision: number }
   | { type: 'conflict-forked'; scriptId: string; forkScriptId: string; forkTitle: string }
   | { type: 'pulled'; scriptId: string; cloudId: string; title: string }
+  | { type: 'first-pushed'; scriptId: string; title: string }
   | { type: 'error'; scriptId?: string; message: string };
 
 export type SyncListener = (e: SyncEvent) => void;
@@ -125,6 +127,8 @@ export class SyncEngine {
    *  as REVISION_CONFLICT on the next push. */
   async pullAll(): Promise<void> {
     if (!this.client.user) return;
+    // PRIVACY gate: no consent, no downloads — even for an authenticated session.
+    if (readCloudSyncConsent() !== 'granted') return;
     let cloud: CloudScript[];
     try {
       cloud = await this.client.listScripts();
@@ -155,6 +159,22 @@ export class SyncEngine {
     }
   }
 
+  /** Cloud scripts (metadata only) that have no local copy — the probe the
+   *  ask-style first pull shows before downloading anything. */
+  async listNewCloudScripts(): Promise<CloudScript[]> {
+    if (!this.client.user) return [];
+    if (readCloudSyncConsent() !== 'granted') return [];
+    const cloud = await this.client.listScripts();
+    return cloud.filter(cs => !this.findByCloudId(cs.id));
+  }
+
+  /** Drop every queued push (logout / sync switch off). Queued work is
+   *  user content waiting to leave the device — it must not survive a
+   *  sign-out and silently depart on the next sign-in. */
+  clearOutbox(): void {
+    try { localStorage.removeItem(OUTBOX_KEY); } catch { /* ignore */ }
+  }
+
   /** Call after a successful sign-in: reconcile from the cloud, then push
    *  whatever got queued while signed out. */
   async onSignedIn(): Promise<void> {
@@ -162,11 +182,14 @@ export class SyncEngine {
     await this.flush();
   }
 
+
   /** Process the persisted outbox sequentially. Safe to call concurrently —
      a running flush is joined, not duplicated; entries enqueued mid-flush are
      merged back. */
   async flush(): Promise<void> {
     if (this.flushing || !this.client.user) return;
+    // PRIVACY gate: no consent, no uploads — even for an authenticated session.
+    if (readCloudSyncConsent() !== 'granted') return;
     this.flushing = true;
     let newWhileFlushing = false;
     try {
@@ -258,6 +281,7 @@ export class SyncEngine {
       if (!st) {
         const res = await this.client.createScript(sp, entry.createKey, entry.groupId ? { groupId: entry.groupId } : undefined);
         next = { cloudId: res.id, baseRevision: res.revision, status: 'synced', syncedAt: Date.now() };
+        this.emit({ type: 'first-pushed', scriptId: entry.scriptId, title: sp.metadata.title });
       } else {
         next = await this.pushOrResolve(entry.scriptId, st, sp);
       }
