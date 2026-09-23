@@ -42,6 +42,8 @@ import { useAIExecutor } from './hooks/useAIExecutor';
 import { useEditorKeyboard } from './hooks/useEditorKeyboard';
 import { useTemplateFlow } from './hooks/useTemplateFlow';
 import { useImportExport } from './hooks/useImportExport';
+import { useAppSettings } from './hooks/useAppSettings';
+import { useBlockEditing } from './hooks/useBlockEditing';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -60,42 +62,9 @@ function App() {
     createDefaultScript,
   } = useScriptLibrary();
 
-  const [appSettings, setAppSettings] = useState<AppSettings>(() => {
-    try {
-        const saved = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            return {
-                ...DEFAULT_APP_SETTINGS,
-                ...parsed,
-                colorSettings: { ...DEFAULT_APP_SETTINGS.colorSettings, ...(parsed.colorSettings || {}) },
-                shortcuts: { ...DEFAULT_APP_SETTINGS.shortcuts, ...(parsed.shortcuts || {}) },
-                // Ensure autoAcceptAI has a value (for backward compatibility)
-                autoAcceptAI: parsed.autoAcceptAI ?? DEFAULT_APP_SETTINGS.autoAcceptAI,
-                // Migrate deprecated Gemini model names to the current default (3.7 Flash)
-                geminiModel: ['gemini-2.0-flash', 'gemini-2.5-flash'].includes(parsed.geminiModel)
-                    ? DEFAULT_APP_SETTINGS.geminiModel
-                    : (parsed.geminiModel || DEFAULT_APP_SETTINGS.geminiModel),
-                // Ensure geminiThinkingLevel has a value (added when thinking controls shipped)
-                geminiThinkingLevel: parsed.geminiThinkingLevel || DEFAULT_APP_SETTINGS.geminiThinkingLevel,
-                // Migrate deprecated DeepSeek model names to the current default (V4 Flash)
-                deepseekModel: ['deepseek-chat', 'deepseek-reasoner'].includes(parsed.deepseekModel)
-                    ? DEFAULT_APP_SETTINGS.deepseekModel
-                    : (parsed.deepseekModel || DEFAULT_APP_SETTINGS.deepseekModel),
-                // Migrate the old direct MiniMax URL to the dev proxy: settings saved
-                // before the proxy shipped carry the old default verbatim and would
-                // otherwise override it forever.
-                minimaxBaseUrl: parsed.minimaxBaseUrl === 'https://api.minimaxi.com'
-                    ? DEFAULT_APP_SETTINGS.minimaxBaseUrl
-                    : (parsed.minimaxBaseUrl || DEFAULT_APP_SETTINGS.minimaxBaseUrl)
-            };
-        }
-    } catch (e) {
-        console.warn("Failed to load app settings", e);
-    }
-    return DEFAULT_APP_SETTINGS;
-  });
-  
+  // ---- App settings domain (persisted settings + migrations + save) --------
+  const { appSettings, setAppSettings, handleUpdateSettings } = useAppSettings({ setScreenplay });
+
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -286,74 +255,13 @@ function App() {
 
   // Migration & Autosave Logic — moved into hooks/useScriptLibrary.
   // Sync engine subscription + refreshGalleryView — moved into hooks/useGallerySync.
+  // App Settings Autosave — moved into hooks/useAppSettings.
 
-  // App Settings Autosave
-  useEffect(() => {
-      localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(appSettings));
-  }, [appSettings]);
 
-  const handleBlockChange = useCallback((id: string, content: string) => {
-    if (isReadOnly) return;
-    setScreenplay(prev => ({
-      ...prev,
-      blocks: prev.blocks.map(b => b.id === id ? { ...b, content } : b),
-      lastModified: Date.now()
-    }));
-  }, [isReadOnly]);
 
-  const handleTypeChange = useCallback((id: string, type: BlockType) => {
-    if (isReadOnly) return;
-    setScreenplay(prev => ({
-      ...prev,
-      blocks: prev.blocks.map(b => b.id === id ? { ...b, type } : b)
-    }));
-  }, [isReadOnly]);
-
-  // Delete a block's storyboard image prompt. For CHARACTER blocks, the same
-  // character may appear in multiple blocks sharing one prompt — deleting on
-  // one occurrence clears the prompt from ALL same-name CHARACTER blocks, so
-  // "one prompt per character" stays consistent (mirrors the save propagation).
-  const handleDeleteImagePrompt = useCallback((id: string) => {
-    if (isReadOnly) return;
-    setScreenplay(prev => {
-      const target = prev.blocks.find(b => b.id === id);
-      const isCharacter = target?.type === 'CHARACTER';
-      const charName = isCharacter ? target!.content.trim() : '';
-      return {
-        ...prev,
-        blocks: prev.blocks.map(b => {
-          if (b.id === id) {
-            const { imagePrompt, ...rest } = b;
-            return imagePrompt ? rest : b;
-          }
-          if (isCharacter && b.type === 'CHARACTER' && b.content.trim() === charName && b.imagePrompt) {
-            const { imagePrompt, ...rest } = b;
-            return rest;
-          }
-          return b;
-        }),
-        lastModified: Date.now()
-      };
-    });
-  }, [isReadOnly]);
-
-  // Delete the graybox payload from a single block. Unlike image prompts there
-  // is no same-name CHARACTER propagation — graybox is per-block (a scene
-  // heading owns the layout; each action/dialogue owns its own camera).
-  const handleDeleteGraybox = useCallback((id: string) => {
-    if (isReadOnly) return;
-    setScreenplay(prev => ({
-      ...prev,
-      blocks: prev.blocks.map(b => {
-        if (b.id === id) {
-          const { graybox, ...rest } = b;
-          return graybox ? rest : b;
-        }
-        return b;
-      }),
-      lastModified: Date.now()
-    }));
-  }, [isReadOnly]);
+  // ---- Block editing domain (content/type mutations, payload deletes) ------
+  const { handleBlockChange, handleTypeChange, handleDeleteImagePrompt, handleDeleteGraybox } =
+    useBlockEditing({ setScreenplay, isReadOnly });
 
   // ---- AI orchestration domain (executeAI + accept/replan effects) ---------
   const {
@@ -454,15 +362,6 @@ function App() {
       }
   };
 
-  const handleUpdateSettings = (newMetadata: ScriptMetadata, newAppSettings: AppSettings) => {
-      setScreenplay(prev => ({
-          ...prev,
-          metadata: newMetadata,
-          lastModified: Date.now()
-      }));
-      setAppSettings(newAppSettings);
-      setShowSettingsModal(false);
-  };
 
   const scrollToBlock = (id: string) => {
     setSelectedBlockId(id);
@@ -813,7 +712,10 @@ function App() {
             <SettingsModal
                 metadata={screenplay.metadata}
                 appSettings={appSettings}
-                onSave={handleUpdateSettings}
+                onSave={(newMetadata, newAppSettings) => {
+                    handleUpdateSettings(newMetadata, newAppSettings);
+                    setShowSettingsModal(false);
+                }}
                 onClose={() => setShowSettingsModal(false)}
                 t={t}
                 galleryUser={galleryUser}
