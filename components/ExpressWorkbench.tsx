@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { X, Image as ImageIcon, Film, RefreshCw, Lock, Unlock, AlertCircle, Loader2, Clapperboard } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Screenplay, AppSettings, RefImage, ExpressShot } from '../types';
@@ -66,9 +66,26 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
     return list;
   }, [screenplay.blocks, screenplay.expressShots]);
 
+  // Dead-clip detection: ComfyUI /view URLs die with the server session.
+  // HEAD each clip once; dead ones are flagged and excluded from export
+  // (fetching them would fail there anyway) — reroll regenerates them.
+  const [deadClips, setDeadClips] = useState<Set<string>>(new Set());
+  const clipKey = shots.map(s => s.shot?.videoUrl).join('|');
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      for (const url of clipKey.split('|').filter(Boolean)) {
+        const ok = await fetch(url, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+        if (cancelled) return;
+        if (!ok) setDeadClips(prev => new Set(prev).add(url));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [clipKey]);
+
   const exportableUrls = useMemo(
-    () => shots.map(s => s.shot?.videoUrl).filter((u): u is string => !!u),
-    [shots],
+    () => shots.map(s => s.shot?.videoUrl).filter((u): u is string => !!u && !deadClips.has(u)),
+    [shots, deadClips],
   );
 
   const runExport = async () => {
@@ -215,6 +232,9 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
                     <div className="mt-1 flex items-center gap-1.5">
                       {statusBadge(shot, isBusy)}
                       {locked && <Lock className="w-3 h-3 text-amber-500" />}
+                      {shot?.videoUrl && deadClips.has(shot.videoUrl) && (
+                        <span className="text-[10px] font-bold text-red-500" title={isZh ? '视频 URL 已失效(ComfyUI 会话结束)——重新生成即可恢复' : 'Clip URL expired (ComfyUI session ended) — reroll to restore'}>URL 失效</span>
+                      )}
                       {shot?.error && <span className="text-[10px] text-red-500 truncate max-w-[280px]" title={shot.error}>{shot.error}</span>}
                     </div>
                   </div>

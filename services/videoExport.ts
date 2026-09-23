@@ -163,3 +163,114 @@ export async function downloadConcatFallback(clipUrls: string[]): Promise<number
   URL.revokeObjectURL(a.href);
   return clipUrls.length;
 }
+
+
+// ---- Pro mode: per-segment audio mux + concat (docs §4) --------------------
+
+import { concatWavs } from './glmTtsService';
+import { getAudio } from './proAudioStore';
+
+const getStoredAudio = (key: string): Blob | undefined => getAudio(key);
+
+export interface ProSegmentCut {
+  videoUrl: string;
+  segKey: string;
+  /** session keys for the segment's dialogue line blobs (in order) */
+  ttsKeys?: string[];
+  bgmUrl?: string;
+  sfx?: { blob: Blob; atMs?: number }[];
+}
+
+/** Mux one segment: video + (dialogue wav | looped BGM | delayed SFX) → mp4.
+ *  Falls back to a straight copy when the segment has no audio at all. */
+async function muxSegment(
+  ffmpeg: FfmpegLike,
+  index: number,
+  videoUrl: string,
+  cut: { ttsKeys?: string[]; bgmUrl?: string; sfx?: { blob: Blob; atMs?: number }[] },
+  onProgress?: (p: ExportProgress) => void,
+): Promise<string> {
+  const out = `norm_${String(index + 1).padStart(3, '0')}.mp4`;
+  const hasDialogue = !!cut.ttsKeys?.length;
+  const hasBgm = !!cut.bgmUrl;
+  const sfx = cut.sfx ?? [];
+  if (!hasDialogue && !hasBgm && !sfx.length) {
+    const res = await fetch(videoUrl);
+    if (!res.ok) throw new Error(`段 ${index + 1} 视频拉取失败 (HTTP ${res.status})`);
+    await ffmpeg.writeFile(out, new Uint8Array(await res.arrayBuffer()));
+    return out;
+  }
+  const args: string[] = ['-i', videoUrl];
+  if (hasDialogue) {
+    const blobs = (cut.ttsKeys ?? [])
+      .map(k => getStoredAudio(k))
+      .filter((b): b is Blob => !!b);
+    const dialogue = blobs.length > 1 ? await concatWavs(blobs) : blobs[0];
+    await ffmpeg.writeFile(`d_${index + 1}.wav`, new Uint8Array(await dialogue.arrayBuffer()));
+    args.push('-i', `d_${index + 1}.wav`);
+  }
+  if (hasBgm) {
+    const res = await fetch(cut.bgmUrl!);
+    if (!res.ok) throw new Error(`段 ${index + 1} BGM 拉取失败 (HTTP ${res.status})`);
+    await ffmpeg.writeFile(`b_${index + 1}.src`, new Uint8Array(await res.arrayBuffer()));
+    args.push('-stream_loop', '-1', '-i', `b_${index + 1}.src`);
+  }
+  for (let s = 0; s < sfx.length; s++) {
+    await ffmpeg.writeFile(`s_${index + 1}_${s}.wav`, new Uint8Array(await sfx[s].blob.arrayBuffer()));
+    args.push('-i', `s_${index + 1}_${s}.wav`);
+  }
+  const stemCount = (hasDialogue ? 1 : 0) + (hasBgm ? 1 : 0);
+  const sfxStart = 1 + stemCount - (hasBgm ? 0 : 0) + (hasDialogue ? 0 : 0) - (hasDialogue ? 0 : 0);
+  // input indices: 0 video, then stems (dialogue, bgm) then sfx
+  const dialogueIdx = hasDialogue ? 1 : -1;
+  const bgmIdx = hasBgm ? (hasDialogue ? 2 : 1) : -1;
+  const sfxBase = 1 + stemCount;
+  const parts: string[] = [];
+  const labels: string[] = [];
+  if (hasDialogue) { parts.push(`[${dialogueIdx}:a]volume=1.0[ad]`); labels.push('[ad]'); }
+  if (hasBgm) { parts.push(`[${bgmIdx}:a]volume=0.25[ab]`); labels.push('[ab]'); }
+  for (let s = 0; s < sfx.length; s++) {
+    const at = Math.max(0, Math.round(sfx[s].atMs ?? 0));
+    parts.push(`[${sfxBase + s}:a]adelay=${at}:all=1,volume=0.8[as${s}]`);
+    labels.push(`[as${s}]`);
+  }
+  parts.push(`${labels.join('')}amix=inputs=${labels.length}:duration=longest:normalize=0[aout]`);
+  args.push('-filter_complex', parts.join(';'), '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-shortest', out);
+  onProgress?.({ phase: 'concat', done: index, total: index + 1, line: `混音段 ${index + 1}…` });
+  await ffmpeg.exec(args);
+  void sfxStart;
+  return out;
+}
+
+/** Pro cut: mux every segment's audio under its video, then concat-copy. */
+export async function exportProCut(
+  segments: ProSegmentCut[],
+  opts: {
+    getAudio: (key: string) => Blob | undefined;
+    onProgress?: (p: ExportProgress & { segDone?: number; segTotal?: number }) => void;
+  },
+): Promise<Blob> {
+  const usable = segments.filter(s => s.videoUrl);
+  if (!usable.length) throw new Error('没有可导出的成片段——先提交生成并等待完成。');
+  const ffmpeg = await loadFFmpeg(line => opts.onProgress?.({ phase: 'loading', done: 0, total: usable.length, line }));
+  const normalized: string[] = [];
+  for (let i = 0; i < usable.length; i++) {
+    const seg = usable[i];
+    const cut = {
+      ttsKeys: seg.ttsKeys,
+      bgmUrl: seg.bgmUrl,
+      sfx: (seg.sfx ?? []).map(s => ({ blob: s.blob, atMs: s.atMs })),
+    };
+    const name = await muxSegment(ffmpeg, i, seg.videoUrl, cut, mLine =>
+      opts.onProgress?.({ phase: 'concat', done: i, total: usable.length, line: mLine.line }));
+    normalized.push(name);
+    opts.onProgress?.({ phase: 'concat', done: i + 1, total: usable.length, segDone: i + 1, segTotal: usable.length });
+  }
+  await ffmpeg.writeFile('plist.txt', new TextEncoder().encode(normalized.map(n => `file '${n}'`).join('\n')));
+  opts.onProgress?.({ phase: 'concat', done: normalized.length, total: normalized.length, line: '拼接成片…' });
+  await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'plist.txt', '-c', 'copy', 'pro_out.mp4']);
+  const data = await ffmpeg.readFile('pro_out.mp4');
+  if (typeof data === 'string') throw new Error('ffmpeg 输出异常(文本)');
+  opts.onProgress?.({ phase: 'done', done: 1, total: 1 });
+  return new Blob([data as unknown as BlobPart], { type: 'video/mp4' });
+}

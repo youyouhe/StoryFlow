@@ -170,6 +170,7 @@ export function AppModals(props: AppModalsProps) {
                     t={t}
                     lang={lang}
                     onToast={onToast}
+                    planTasks={planTasks}
                   />
                 ) : undefined}
                 videoPlanDuration={videoPlanDuration}

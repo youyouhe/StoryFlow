@@ -11,6 +11,7 @@ import { suggestSfx } from '../services/sfxService';
 import { putAudio, getAudio, audioKeys } from '../services/proAudioStore';
 import { audioLowerBoundSeconds, fitSegmentSeconds } from '../utils/proAudio';
 import { baseCharName } from '../utils/beatCast';
+import { exportProCut } from '../services/videoExport';
 
 /**
  * ProAudioPanel — Pro mode's audio workbench inside the VIDEO_PLAN modal
@@ -27,10 +28,12 @@ interface ProAudioPanelProps {
   t: typeof TRANSLATIONS['en'];
   lang: 'en' | 'zh';
   onToast?: (msg: string) => void;
+  /** Newest finished task per plan segment (index → result url). */
+  planTasks?: { segmentIndex?: number; status: string; resultUrl?: string }[];
 }
 
 export const ProAudioPanel: React.FC<ProAudioPanelProps> = ({
-  videoPlan, screenplay, setScreenplay, appSettings, t, lang, onToast,
+  videoPlan, screenplay, setScreenplay, appSettings, t, lang, onToast, planTasks,
 }) => {
   const isZh = lang === 'zh';
   const [busy, setBusy] = useState<string | null>(null);
@@ -128,6 +131,49 @@ export const ProAudioPanel: React.FC<ProAudioPanelProps> = ({
       patchAudio(segKey, { sfx: list });
     } finally {
       setBusy(null);
+    }
+  };
+
+  const [exporting, setExporting] = useState(false);
+
+  /** Export the cut: newest finished video per segment, muxed with this
+   *  panel's TTS/BGM/SFX session audio, then concat. */
+  const exportCut = async () => {
+    if (!planTasks) return;
+    const byIdx = new Map<number, string>();
+    for (const task of planTasks) {
+      if (task.resultUrl && task.segmentIndex != null) byIdx.set(task.segmentIndex, task.resultUrl);
+    }
+    const segments = videoPlan.segments.map(seg => {
+      const segKey = seg.blockIds[0];
+      const audio = screenplay.proAudio?.[segKey];
+      return {
+        videoUrl: byIdx.get(seg.index) ?? '',
+        segKey,
+        ttsKeys: (audio?.tts ?? []).map((_, i) => audioKeys.tts(segKey, i)).filter(k => getAudio(k)),
+        bgmUrl: audio?.bgm?.url,
+        sfx: (audio?.sfx ?? [])
+          .filter(s => !s.missing)
+          .map(s => ({ blob: getAudio(audioKeys.sfx(segKey, s.name)), atMs: (s.at ?? 0) * 1000 }))
+          .filter((s): s is { blob: Blob; atMs: number } => !!s.blob),
+      };
+    });
+    setExporting(true);
+    try {
+      const blob = await exportProCut(segments, {
+        getAudio,
+        onProgress: p => { if (p.line) onToast?.(p.line); },
+      });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `storyflow-pro-${new Date().toISOString().slice(0, 10)}.mp4`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      onToast?.(isZh ? 'Pro 成片导出完成 ✓' : 'Pro cut exported ✓');
+    } catch (e) {
+      onToast?.(String((e as Error)?.message ?? e).slice(0, 160));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -236,8 +282,19 @@ export const ProAudioPanel: React.FC<ProAudioPanelProps> = ({
           );
         })}
       </div>
-      <div className="text-[10px] text-gray-400">{t.proAudioFootnote}</div>
-      <Download className="hidden" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={exporting}
+          onClick={() => void exportCut()}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+          title={t.proExportTitle}
+        >
+          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          {t.proExportCut}
+        </button>
+        <div className="text-[10px] text-gray-400 flex-1">{t.proAudioFootnote}</div>
+      </div>
     </div>
   );
 };

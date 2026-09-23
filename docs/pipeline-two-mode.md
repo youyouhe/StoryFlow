@@ -181,8 +181,14 @@ GET  …/{request_id}                                      → result_url(audio)
 - **BGM**:`sonilo/v1.1/text-to-music` + `FAL_TOKEN`:提交 IN_QUEUE → 轮询 `/requests/{id}` → COMPLETED(推理 23.6s)→ 结果键为 **`audio`/`audios`**(非 result_url)→ 下载 3.38MB m4a 合法容器。
 - 两处偏差均已回写适配器实现并更新本文档。
 
+### 实施追加(2026-09-24 第二批)
+
+- **Pro 音轨面板 UI** ✅:ProAudioPanel 挂在 VIDEO_PLAN modal(proAudioSlot);voiceCast 编辑、逐段 TTS 合成、BGM 请求、SFX 建议(SFX_MISSING 标记)、每段 TTS 下限拟合显示。
+- **Pro 混音 mux + 导出** ✅:`exportProCut`——每段 video + 对白(会话拼接 wav)/ BGM(`-stream_loop -1`,0.25 增益)/ SFX(`adelay` 偏移,0.8 增益)amix → 顺序 concat;无音轨段直通。导出按钮在音轨面板(取每段最新完成视频)。
+- **失效镜头检测** ✅(轻量 v2):工作台挂载时 HEAD 探测每个 clip;失效标记「URL 失效」并从导出集中排除,重roll 恢复。完整转存资产库仍为 v2+。
+
 ### 遗留(下一步)
 
-1. **Pro 混音 mux**:`mixPlan` → ffmpeg `amix`(TTS 顺序 + BGM 0.25 增益循环 + SFX 偏移),接在 videoExport 的 ffmpeg 实例上。
-2. **Pro 音轨面板 UI**(Plan modal 内 TTS/BGM/SFX 状态分区 + voiceCast 编辑):适配器与拟合已就绪,待接 UI。
-3. expressShots 的 videoUrl 为 ComfyUI 会话级 URL——导出跨会话需转存资产库(v2)。
+1. Pro 成片混音参数(增益/偏移)目前内置默认,不做 UI;SFX 精确时间轴([SFX:x@3s])待解析。
+2. expressShots 视频转存资产库(v2)。
+3. Express 导出的 concat_list.txt 回退包对 webm/mp4 混合需用户本机重编码(README 已说明)。
