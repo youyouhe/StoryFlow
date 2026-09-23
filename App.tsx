@@ -28,6 +28,7 @@ import { useBlockEditing } from './hooks/useBlockEditing';
 import { useScriptManagement } from './hooks/useScriptManagement';
 import { useAskDialog } from './hooks/useAskDialog';
 import { useStoryFlowApp } from './hooks/useStoryFlowApp';
+import { checkModeSwitch, hasProFeatureData } from './utils/modeSwitch';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
 import { AppModals } from './components/AppModals';
@@ -77,6 +78,32 @@ function App() {
     setSidebarOpen, setShowStyleHeadModal,
   });
   const { appSettings, setAppSettings, handleUpdateSettings } = settings;
+  // ---- Mode-switch rules (one-way valve; see utils/modeSwitch.ts) ----------
+  const hasProData = hasProFeatureData(lib.screenplay);
+  const applyMode = useCallback((mode: 'simple' | 'cinematic') => {
+    lib.setScreenplay(prev => ({ ...prev, productionMode: mode, lastModified: Date.now() }));
+  }, [lib]);
+  const handleProductionModeChange = useCallback((target: 'simple' | 'cinematic') => {
+    const current = lib.screenplay.productionMode ?? 'simple';
+    const check = checkModeSwitch(target, current, hasProData);
+    if (!check.allowed) {
+      showToast(t[check.reasonCode === 'pro-data' ? 'modeSwitchDataReason' : 'modeSwitchProReason']);
+      return;
+    }
+    if (!check.needsConfirm) { applyMode(target); return; }
+    void ask({
+      title: t.modeUpgradeTitle,
+      body: t.modeUpgradeBody,
+      buttons: [
+        { label: t.modeUpgradeOk, value: 'ok', kind: 'primary' },
+        { label: t.cancel, value: 'no' },
+      ],
+    }).then(v => { if (v === 'ok') applyMode('cinematic'); });
+  }, [lib.screenplay.productionMode, hasProData, ask, applyMode, showToast, t]);
+  const handleModeBadgeClick = useCallback(() => {
+    const current = lib.screenplay.productionMode ?? 'simple';
+    handleProductionModeChange(current === 'simple' ? 'cinematic' : 'simple');
+  }, [lib.screenplay.productionMode, handleProductionModeChange]);
   const { handleKeyDown } = kb;
   // Image-generation backend — FAL wins only when its key is configured; an
   // empty FAL key never bricks image generation (falls back to MiniMax).
@@ -185,8 +212,9 @@ function App() {
 
         <AppTopBar
           screenplay={lib.screenplay}
-          setScreenplay={lib.setScreenplay}
           onRename={mgmt.handleRenameScript}
+          hasProData={hasProData}
+          onModeBadgeClick={handleModeBadgeClick}
           saveStatus={lib.saveStatus}
           theme={theme}
           setTheme={setTheme}

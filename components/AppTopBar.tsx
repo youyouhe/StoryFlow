@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Loader2, Languages, Moon, Sun } from 'lucide-react';
+import { Check, Loader2, Languages, Lock, Moon, Sun } from 'lucide-react';
 import { Screenplay } from '../types';
 
 /**
@@ -12,8 +12,10 @@ import { Screenplay } from '../types';
  */
 interface AppTopBarProps {
   screenplay: Screenplay;
-  setScreenplay: React.Dispatch<React.SetStateAction<Screenplay>>;
   onRename: (id: string, newTitle: string) => void;
+  /** Mode-switch rules live in App; the badge reports the attempt. */
+  hasProData?: boolean;
+  onModeBadgeClick?: () => void;
   saveStatus: 'saved' | 'saving';
   theme: 'light' | 'dark';
   setTheme: React.Dispatch<React.SetStateAction<'light' | 'dark'>>;
@@ -22,7 +24,13 @@ interface AppTopBarProps {
   t: typeof import('../constants').TRANSLATIONS['en'];
 }
 
-export function AppTopBar({ screenplay, setScreenplay, onRename, saveStatus, theme, setTheme, lang, setLang, t }: AppTopBarProps) {
+export function AppTopBar({ screenplay, onRename, saveStatus, theme, setTheme, lang, setLang, t, hasProData, onModeBadgeClick }: AppTopBarProps) {
+  const mode = screenplay.productionMode ?? 'simple';
+  const modeLocked = mode === 'cinematic' || hasProData;
+  const modeTitle = mode === 'cinematic'
+    ? t.modeSwitchProReason
+    : hasProData ? t.modeSwitchDataReason : t.modeUpgradeBody;
+  const modeLabel = mode === 'simple' ? '简易' : '专业';
   const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
   const [headerTitleVal, setHeaderTitleVal] = useState('');
 
@@ -80,23 +88,22 @@ export function AppTopBar({ screenplay, setScreenplay, onRename, saveStatus, the
                   </>
                 )}
              </div>
-             {/* Production mode badge: shows the pipeline level, click to toggle */}
+             {/* Pipeline mode badge: Express upgrades on click (with the
+                 one-way confirm); Pro is locked — click explains why. */}
              <button
-               onClick={() => setScreenplay(prev => ({
-                   ...prev,
-                   productionMode: prev.productionMode === 'simple' ? 'cinematic' : 'simple',
-                   lastModified: Date.now(),
-               }))}
-               title={screenplay.productionMode === 'simple'
-                   ? '简易模式——无灰盒/白模，适合固定机位内容'
-                   : '专业模式——含灰盒+白模完整管线'}
-               className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
-                   screenplay.productionMode === 'simple'
+               type="button"
+               aria-disabled={modeLocked}
+               onClick={onModeBadgeClick}
+               title={modeTitle}
+               className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors flex items-center gap-1 ${
+                   mode === 'simple'
                        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
                        : 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-800'
                }`}
              >
-                 {screenplay.productionMode === 'simple' ? '简易' : '专业'}
+                 {modeLocked && <Lock className="w-2.5 h-2.5" />}
+                 {modeLabel}
+                 {hasProData && <span className="normal-case">·</span>}
              </button>
            </div>
           <div className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts, GeminiThinkingLevel, GalleryUser } from '../types';
 import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
-import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check } from 'lucide-react';
+import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check, Lock } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 import { generateImages } from '../services/minimaxService';
@@ -34,6 +34,7 @@ interface SettingsModalProps {
   onDeleteCloudData?: () => Promise<void> | void;
   // Project-level pipeline mode switch (lives on Screenplay, not metadata)
   productionMode?: 'simple' | 'cinematic';
+  hasProData?: boolean;
   onProductionModeChange?: (mode: 'simple' | 'cinematic') => void;
 }
 /** Copy-to-clipboard button for API key fields: keys don't sync across
@@ -64,7 +65,7 @@ const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
     );
 };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, syncConsent = 'unset', onEnableCloudSync, onDisableCloudSync, pullPolicy = 'ask', onSetPullPolicy, cloudBusy, onExportCloudScripts, onDeleteCloudData, productionMode = 'simple', onProductionModeChange }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, syncConsent = 'unset', onEnableCloudSync, onDisableCloudSync, pullPolicy = 'ask', onSetPullPolicy, cloudBusy, onExportCloudScripts, onDeleteCloudData, productionMode = 'simple', hasProData, onProductionModeChange }) => {
   const [showSyncConsentPanel, setShowSyncConsentPanel] = useState(false);
   const handleToggleCloudSync = () => {
     if (syncConsent === 'granted') {
@@ -1025,16 +1026,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                         const active = productionMode === mode;
                         const label = mode === 'simple' ? t.productionModeExpress : t.productionModePro;
                         const desc = mode === 'simple' ? t.productionModeExpressDesc : t.productionModeProDesc;
+                        // Rule 1/3: the Express card is locked while in Pro or
+                        // when the project carries Pro data (click still reports).
+                        const locked = mode === 'simple' && (productionMode === 'cinematic' || hasProData);
+                        const lockTitle = hasProData ? t.modeSwitchDataReason : t.modeSwitchProReason;
                         return (
                             <button
                                 key={mode}
                                 type="button"
                                 onClick={() => onProductionModeChange?.(mode)}
+                                title={locked ? lockTitle : undefined}
+                                aria-disabled={locked}
                                 className={`text-left p-3 rounded-xl border transition-all ${active
                                     ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-1 ring-indigo-500'
-                                    : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'}`}
+                                    : locked
+                                        ? 'border-gray-200 dark:border-zinc-700 opacity-60 cursor-not-allowed'
+                                        : 'border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600'}`}
                             >
-                                <div className={`text-sm font-bold ${active ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>{label}</div>
+                                <div className={`flex items-center gap-1.5 text-sm font-bold ${active ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                                    {label}
+                                    {locked && <Lock className="w-3 h-3 text-gray-400" />}
+                                    {mode === 'simple' && hasProData && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">{t.modeSwitchProDataChip}</span>
+                                    )}
+                                </div>
                                 <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">{desc}</div>
                             </button>
                         );

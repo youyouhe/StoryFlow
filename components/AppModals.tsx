@@ -11,6 +11,7 @@ import { OpeningPicker } from './OpeningPicker';
 import { MINIMAX_VIDEO_MODELS } from '../constants';
 import { ExpressWorkbench } from './ExpressWorkbench';
 import { ProAudioPanel } from './ProAudioPanel';
+import { hasProFeatureData } from '../utils/modeSwitch';
 import { isDirStoreAvailable } from '../services/assetDirStore';
 
 /**
@@ -213,6 +214,7 @@ export function AppModals(props: AppModalsProps) {
                 onSsoLogin={onSsoLogin}
                 onSsoLogoutEverywhere={onSsoLogoutEverywhere}
                 productionMode={screenplay.productionMode ?? 'simple'}
+                hasProData={hasProFeatureData(screenplay)}
                 onProductionModeChange={onProductionModeChange}
                 onGalleryLogout={handleGalleryLogout}
                 onSyncAll={handleSyncAll}
