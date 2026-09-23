@@ -51,6 +51,16 @@ function App() {
   const [transitionHeadingDraft, setTransitionHeadingDraft] = useState('');
   // FROM_PROMPT: the pasted production prompt the user wants transcribed.
   const [promptSource, setPromptSource] = useState('');
+  // Privacy-remediation toasts: conflict forks + first pushes surface here.
+  const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast({ msg, key: Date.now() });
+  }, []);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   // ---- Composition root: every domain hook wired in dependency order -------
@@ -58,7 +68,7 @@ function App() {
     lib, settings, sync, assets, h3, ed, ai, kb, mgmt, tpl, io,
     refBindings, handleRefBindingsChange, t, activeSceneId, scrollToBlock,
   } = useStoryFlowApp({
-    lang, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
+    lang, onToast: showToast, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
     setIsReadOnly, isReadOnly, promptSource, setTransitionHeadingDraft,
     setSidebarOpen, setShowStyleHeadModal,
   });
@@ -258,6 +268,15 @@ function App() {
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
         />
 
+      {toast && (
+        <div
+          key={toast.key}
+          role="status"
+          className="fixed bottom-6 right-6 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg bg-zinc-900/95 text-gray-100 text-sm border border-zinc-700 animate-[fadeIn_.2s_ease-out]"
+        >
+          {toast.msg}
+        </div>
+      )}
       </div>
     </div>
   );

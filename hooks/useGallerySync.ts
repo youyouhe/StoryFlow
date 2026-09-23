@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GalleryUser, SyncStatus } from '../types';
+import { TRANSLATIONS } from '../constants';
 import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from '../services/gallery';
-import { initSSO, getSsoToken, clearToken } from '../services/auth4a';
+import { initSSO, getSsoToken, getSsoCookieToken, adoptSsoToken, clearToken } from '../services/auth4a';
+import { readCloudSyncConsent, writeCloudSyncConsent, readCloudPullPolicy, writeCloudPullPolicy, type CloudSyncConsent, type CloudPullPolicy } from '../services/cloudConsent';
 import { isGalleryApiError } from '../services/apiClient';
 import type { ScriptVisibility } from '../services/apiClient';
 import type { ScriptSummary } from './useScriptLibrary';
@@ -16,9 +18,11 @@ import type { ScriptSummary } from './useScriptLibrary';
  * signed-in reconcile → credit balance), same dependency arrays. Script
  * deletion (which also drops the cloud copy) stays in App.tsx.
  */
-export function useGallerySync({ savedScripts, refreshSavedScripts }: {
+export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }: {
   savedScripts: ScriptSummary[];
   refreshSavedScripts: () => void;
+  t: typeof TRANSLATIONS['en'];
+  onToast?: (msg: string) => void;
 }) {
   // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
   // shared cookie) so the exchange effect below can establish the session.
@@ -28,6 +32,33 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
   const [cloudVisMap, setCloudVisMap] = useState<Record<string, ScriptVisibility>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  // PRIVACY: cloud flows run only with the user's explicit consent.
+  const [syncConsent, setSyncConsentState] = useState<CloudSyncConsent>(readCloudSyncConsent);
+  const [pullPolicy, setPullPolicyState] = useState<CloudPullPolicy>(readCloudPullPolicy);
+
+  const enableCloudSync = useCallback(() => {
+    writeCloudSyncConsent('granted');
+    setSyncConsentState('granted');
+  }, []);
+
+  const disableCloudSync = useCallback(() => {
+    writeCloudSyncConsent('denied');
+    setSyncConsentState('denied');
+    // Off means OFF: drop the session and any queued outbound content.
+    void (async () => {
+      if (galleryClient.isAuthenticated) await galleryClient.logout();
+      clearToken();
+      syncEngine.clearOutbox();
+      setGalleryUser(null);
+      setCloudVisMap({});
+      setSyncStatusMap(readAllSyncStatuses());
+    })();
+  }, []);
+
+  const setCloudPullPolicy = useCallback((v: CloudPullPolicy) => {
+    writeCloudPullPolicy(v);
+    setPullPolicyState(v);
+  }, []);
 
   /** Re-read the script index + badge statuses (engine pulls/forks land here). */
   const refreshGalleryView = useCallback(() => {
@@ -44,13 +75,20 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
         setSyncStatusMap(prev => ({ ...prev, [e.scriptId]: 'synced' }));
       } else if (e.type === 'error') {
         setSyncError(e.message);
+      } else if (e.type === 'conflict-forked') {
+        // No longer silent: tell the user a fork appeared and why.
+        onToast?.(t.cloudToastFork.replace('{title}', e.forkTitle));
+        refreshGalleryView();
+      } else if (e.type === 'first-pushed') {
+        // First upload of a script — surface it once instead of a silent create.
+        onToast?.(t.cloudToastFirstPush.replace('{title}', e.title));
       } else {
-        // 'pulled' | 'conflict-forked': a new local screenplay appeared.
+        // 'pulled': a new local screenplay appeared.
         refreshGalleryView();
       }
     });
     return off;
-  }, [refreshGalleryView]);
+  }, [refreshGalleryView, t, onToast]);
 
   /** Cloud visibility per local script id (cloud-backed only) — powers the
    *  Sidebar lock/globe chip. */
@@ -104,18 +142,39 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
       }
   }, [refreshGalleryView, refreshCloudVis]);
 
-  // SSO token arriving via URL/cookie (login redirect or cross-subdomain):
-  // exchange it into a gallery session once, on mount.
+  // Connect flow — runs on mount and whenever consent changes.
+  //  1) consent unset + family cookie present → ASK before adopting the
+  //     session (declining suppresses until an explicit login).
+  //  2) consent granted + token present → exchange into a gallery session.
   useEffect(() => {
-      if (!getSsoToken()) return;
+    if (syncConsent === 'unset' && !getSsoToken()) {
+      const cookieToken = getSsoCookieToken();
+      if (cookieToken) {
+        const ok = window.confirm(t.cloudCookieLoginAsk);
+        if (ok) {
+          adoptSsoToken(cookieToken);
+          writeCloudSyncConsent('granted');
+          setSyncConsentState('granted');
+        } else {
+          // Suppress until an explicit login — same mechanism as logout.
+          try { sessionStorage.setItem('sso_logged_out', '1'); } catch { /* ignore */ }
+        }
+      }
+      return;
+    }
+    if (syncConsent === 'granted' && getSsoToken() && !galleryClient.isAuthenticated) {
       void handleSSOExchange();
-  }, [handleSSOExchange]);
+    }
+  }, [syncConsent, handleSSOExchange, t]);
 
   /** App-level logout: drop the 4A token + gallery session. */
   const handleGalleryLogout = useCallback(async () => {
       const auth = galleryClient.isAuthenticated;
       if (auth) await galleryClient.logout();
       clearToken();
+      // PRIVACY: queued pushes are user content waiting to leave the device —
+      // they must not silently depart on the next (possibly silent) sign-in.
+      syncEngine.clearOutbox();
       setGalleryUser(null);
       setCloudVisMap({});
   }, []);
@@ -132,6 +191,7 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
 
   /** One-click sync for a single script (sidebar badge click). */
   const handleSyncScript = useCallback(async (id: string) => {
+      if (readCloudSyncConsent() !== 'granted') { setSyncError(t.cloudSyncDisabledHint); return; }
       if (!galleryClient.isAuthenticated) return;
       setSyncError(null);
       try {
@@ -143,6 +203,7 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
 
   /** Push every script in the index (account tab button). */
   const handleSyncAll = useCallback(async () => {
+      if (readCloudSyncConsent() !== 'granted') { setSyncError(t.cloudSyncDisabledHint); return; }
       if (!galleryClient.isAuthenticated) return;
       setSyncError(null);
       try {
@@ -152,13 +213,36 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
       } catch { /* surfaced via events */ }
       refreshGalleryView();
       void refreshCloudVis();
-  }, [savedScripts, refreshGalleryView, refreshCloudVis]);
+  }, [savedScripts, refreshGalleryView, refreshCloudVis, t]);
 
-  // Returning signed-in user: reconcile with the cloud once on app start.
+  // Returning signed-in user (consent granted only): reconcile with the
+  // cloud. Pulls ASK first unless the user set a standing policy — the old
+  // behavior downloaded every cloud script silently on launch.
   useEffect(() => {
-    if (!galleryClient.isAuthenticated) return;
-    void syncEngine.onSignedIn().then(() => { refreshGalleryView(); void refreshCloudVis(); });
-  }, [refreshGalleryView, refreshCloudVis]);
+    if (syncConsent !== 'granted' || !galleryClient.isAuthenticated) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const policy = readCloudPullPolicy();
+        if (policy !== 'never') {
+          const fresh = await syncEngine.listNewCloudScripts().catch(() => []);
+          if (cancelled) return;
+          if (fresh.length > 0 && policy === 'ask') {
+            const ok = window.confirm(t.cloudPullAskConfirm.replace('{n}', String(fresh.length)));
+            writeCloudPullPolicy(ok ? 'auto' : 'never');
+            if (ok && !cancelled) await syncEngine.pullAll();
+          } else {
+            await syncEngine.pullAll();
+          }
+        }
+        if (cancelled) return;
+        await syncEngine.flush();
+        refreshGalleryView();
+        void refreshCloudVis();
+      } catch { /* surfaced via engine events */ }
+    })();
+    return () => { cancelled = true; };
+  }, [syncConsent, refreshGalleryView, refreshCloudVis, t]);
 
   // P5: keep the credit balance in sync with the signed-in 4A identity.
   useEffect(() => {
@@ -174,6 +258,8 @@ export function useGallerySync({ savedScripts, refreshSavedScripts }: {
     cloudVisMap, setCloudVisMap,
     syncError, setSyncError,
     creditBalance,
+    syncConsent, enableCloudSync, disableCloudSync,
+    pullPolicy, setCloudPullPolicy,
     refreshCloudVis,
     refreshGalleryView,
     handleChangeVisibility,

@@ -25,6 +25,7 @@ import { useScriptManagement } from './useScriptManagement';
  */
 export function useStoryFlowApp(ui: {
   lang: Language;
+  onToast?: (msg: string) => void;
   aiMode: AIMode;
   setAIMode: React.Dispatch<React.SetStateAction<AIMode>>;
   aiState: AIState;
@@ -38,10 +39,12 @@ export function useStoryFlowApp(ui: {
   setShowStyleHeadModal: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const {
-    lang, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
+    lang, onToast, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
     setIsReadOnly, isReadOnly, promptSource, setTransitionHeadingDraft,
     setSidebarOpen, setShowStyleHeadModal,
   } = ui;
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
 
   // ---- Script library domain (index + active screenplay + autosave) --------
   const lib = useScriptLibrary();
@@ -51,7 +54,7 @@ export function useStoryFlowApp(ui: {
   const { appSettings } = settings;
 
   // ---- Gallery sync domain (4A SSO session, badges, cloud visibility) ------
-  const sync = useGallerySync({ savedScripts: lib.savedScripts, refreshSavedScripts: lib.refreshSavedScripts });
+  const sync = useGallerySync({ savedScripts: lib.savedScripts, refreshSavedScripts: lib.refreshSavedScripts, t, onToast });
 
   // Bindings live INSIDE the screenplay; the writer + derived view sit here.
   const refBindings: RefBindings = lib.screenplay.referenceBindings ?? { characters: {} };
@@ -77,8 +80,6 @@ export function useStoryFlowApp(ui: {
 
   // ---- Block editing domain (content/type mutations, payload deletes) ------
   const ed = useBlockEditing({ setScreenplay: lib.setScreenplay, isReadOnly });
-
-  const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
 
   // ---- AI orchestration domain (executeAI + accept/replan effects) ---------
   const ai = useAIExecutor({
