@@ -46,6 +46,7 @@ import { useAppSettings } from './hooks/useAppSettings';
 import { useBlockEditing } from './hooks/useBlockEditing';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
+import { AppModals } from './components/AppModals';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -141,10 +142,19 @@ function App() {
     setAIState,
   });
 
+  // Keep both knobs legal on model switch: H3-Max has no 4s window, and
+  // resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
+  const handleVideoPlanModelChange = (id: string) => {
+    setVideoPlanModelId(id);
+    const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
+    if (m && videoPlanDuration < m.min) setVideoPlanDuration(m.min);
+    if (m && !m.resolutions.some(r => r.id === planResolution)) {
+      setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
+    }
+  };
+
   
-  // States for title editing
-  const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
-  const [headerTitleVal, setHeaderTitleVal] = useState('');
+  // Title-editing draft state moved into components/AppTopBar.tsx.
 
   // ---- WebMCP (Web Model Context Protocol) ---------------------------------
   // Exposes StoryFlow operations as standardized in-browser tools for AI
@@ -465,159 +475,87 @@ function App() {
             onOpenStyleHead={() => setShowStyleHeadModal(true)}
         />
 
-        {showStyleHeadModal && (
-            <StyleHeadModal
-                current={screenplay.metadata.styleHead}
-                blocks={screenplay.blocks}
-                templateId={screenplay.metadata.templateId}
-                scriptLanguage={screenplay.metadata.scriptLanguage}
-                appSettings={appSettings}
-                t={t}
-                onClose={() => setShowStyleHeadModal(false)}
-                onApply={(head) => {
-                    setScreenplay(prev => ({
-                        ...prev,
-                        metadata: { ...prev.metadata, styleHead: head },
-                        lastModified: Date.now()
-                    }));
-                    setShowStyleHeadModal(false);
-                }}
-            />
-        )}
-
-        {/* AI Modal */}
-        {showAIModal && (
-            <AIModal
-                aiMode={aiMode}
-                setAIMode={setAIMode}
-                aiState={aiState}
-                setAIState={setAIState}
-                t={t}
-                onClose={() => setShowAIModal(false)}
-                onExecute={() => { void executeAI(); }}
-                onAccept={acceptAISuggestion}
-                transitionHeadingDraft={transitionHeadingDraft}
-                setTransitionHeadingDraft={setTransitionHeadingDraft}
-                promptSource={promptSource}
-                onPromptSourceChange={setPromptSource}
-                runContinuation={runContinuation}
-                onSubmitPlanToH3={() => { void submitPlanToH3(); }}
-                planH3Progress={planH3Progress}
-                planPreflight={planPreflight}
-                videoPlanModelId={videoPlanModel.id}
-                onVideoPlanModelChange={(id) => {
-                    setVideoPlanModelId(id);
-                    // Keep both knobs legal on switch: H3-Max has no 4s window,
-                    // and resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
-                    const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
-                    if (m && videoPlanDuration < m.min) setVideoPlanDuration(m.min);
-                    if (m && !m.resolutions.some(r => r.id === planResolution)) {
-                        setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
-                    }
-                }}
-                videoPlanDuration={videoPlanDuration}
-                onVideoPlanDurationChange={setVideoPlanDuration}
-                planResolution={planResolution}
-                onPlanResolutionChange={setPlanResolution}
-                planTasks={planTasks}
-                planCostTotal={planCostTotal}
-                planNextHint={screenplay.productionMode === 'simple'
-                    ? '提交后任务状态实时显示在下方，生成完成可直接下载'
-                    : t.videoPlanNext}
-            />
-        )}
-
-        {/* Gallery browse (P2) */}
-        {showGallery && (
-            <GalleryModal
-                isOpen={showGallery}
-                onClose={() => setShowGallery(false)}
-                signedIn={!!galleryUser}
-                onLocalChange={refreshGalleryView}
-                t={t}
-            />
-        )}
-
-        {/* Settings Modal */}
-        {showSettingsModal && (
-            <SettingsModal
-                metadata={screenplay.metadata}
-                appSettings={appSettings}
-                onSave={(newMetadata, newAppSettings) => {
-                    handleUpdateSettings(newMetadata, newAppSettings);
-                    setShowSettingsModal(false);
-                }}
-                onClose={() => setShowSettingsModal(false)}
-                t={t}
-                galleryUser={galleryUser}
-                syncError={syncError}
-                creditBalance={creditBalance}
-                onSsoLogin={() => requireLogin()}
-                onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
-                onGalleryLogout={handleGalleryLogout}
-                onSyncAll={handleSyncAll}
-            />
-        )}
-
-        {/* Reference Asset Library (white-model digital assets) */}
-        {showAssetLibrary && (
-            <RefAssetLibraryModal
-                images={refImages}
-                onUpdateMeta={handleUpdateRefImageMeta}
-                onDelete={handleRemoveRefImage}
-                onClose={() => setShowAssetLibrary(false)}
-                labels={REF_LIBRARY_LABELS[lang]}
-                scriptId={screenplay.id}
-                scripts={savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
-                backend={assetDir ? 'dir' : 'idb'}
-                backendName={assetDir?.name}
-                dirAvailable={isDirStoreAvailable()}
-                onOpenDir={handleOpenAssetDir}
-                onSwitchDir={handleSwitchAssetDir}
-                onRescan={reloadAssets}
-            />
-        )}
-
-        {/* Export Menu (format + payload options) */}
-        <ExportMenu
-            open={showExportMenu}
-            onClose={() => setShowExportMenu(false)}
-            onExport={handleExport}
-            onImportJson={(f) => { void handleImportScript(f); }}
-            onExportAssetPack={() => { void handleExportAssetPack(); }}
-            onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
-            t={t}
+        <AppModals
+          screenplay={screenplay}
+          setScreenplay={setScreenplay}
+          appSettings={appSettings}
+          t={t}
+          lang={lang}
+          theme={theme}
+          showStyleHeadModal={showStyleHeadModal}
+          setShowStyleHeadModal={setShowStyleHeadModal}
+          showAIModal={showAIModal}
+          setShowAIModal={setShowAIModal}
+          showGallery={showGallery}
+          setShowGallery={setShowGallery}
+          showSettingsModal={showSettingsModal}
+          setShowSettingsModal={setShowSettingsModal}
+          showAssetLibrary={showAssetLibrary}
+          setShowAssetLibrary={setShowAssetLibrary}
+          showExportMenu={showExportMenu}
+          setShowExportMenu={setShowExportMenu}
+          aiMode={aiMode}
+          setAIMode={setAIMode}
+          aiState={aiState}
+          setAIState={setAIState}
+          transitionHeadingDraft={transitionHeadingDraft}
+          setTransitionHeadingDraft={setTransitionHeadingDraft}
+          promptSource={promptSource}
+          setPromptSource={setPromptSource}
+          executeAI={executeAI}
+          runContinuation={runContinuation}
+          acceptAISuggestion={acceptAISuggestion}
+          submitPlanToH3={submitPlanToH3}
+          planH3Progress={planH3Progress}
+          planPreflight={planPreflight}
+          planTasks={planTasks}
+          planCostTotal={planCostTotal}
+          videoPlanModelId={videoPlanModelId}
+          videoPlanModel={videoPlanModel}
+          onVideoPlanModelChange={handleVideoPlanModelChange}
+          videoPlanDuration={videoPlanDuration}
+          setVideoPlanDuration={setVideoPlanDuration}
+          planResolution={planResolution}
+          setPlanResolution={setPlanResolution}
+          onUpdateSettings={handleUpdateSettings}
+          galleryUser={galleryUser}
+          syncError={syncError}
+          creditBalance={creditBalance}
+          onSsoLogin={() => requireLogin()}
+          onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
+          onGalleryLogout={handleGalleryLogout}
+          onSyncAll={handleSyncAll}
+          onRefreshGalleryView={refreshGalleryView}
+          refImages={refImages}
+          onUpdateRefImageMeta={handleUpdateRefImageMeta}
+          onRemoveRefImage={handleRemoveRefImage}
+          assetDirName={assetDir?.name}
+          dirBackend={assetDir ? 'dir' : 'idb'}
+          dirAvailable={isDirStoreAvailable()}
+          onOpenDir={handleOpenAssetDir}
+          onSwitchDir={handleSwitchAssetDir}
+          onRescan={reloadAssets}
+          savedScriptOptions={savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
+          onExport={handleExport}
+          onImportScript={handleImportScript}
+          onExportAssetPack={handleExportAssetPack}
+          onImportAssetPack={handleImportAssetPack}
+          showTemplateModal={showTemplateModal}
+          setShowTemplateModal={setShowTemplateModal}
+          viewingTemplate={viewingTemplate}
+          setViewingTemplate={setViewingTemplate}
+          openOpeningPicker={openOpeningPicker}
+          handleCreateBlankScript={handleCreateBlankScript}
+          openingPicker={openingPicker}
+          setOpeningPicker={setOpeningPicker}
+          openingOptions={openingOptions}
+          openingsLoading={openingsLoading}
+          openingsError={openingsError}
+          chosenOpening={chosenOpening}
+          setChosenOpening={setChosenOpening}
+          handleCreateFromTemplate={handleCreateFromTemplate}
         />
 
-        {/* Templates Modal */}
-        {showTemplateModal && (
-          <TemplateModal
-            t={t}
-            viewingTemplate={viewingTemplate}
-            setViewingTemplate={setViewingTemplate}
-            setShowTemplateModal={setShowTemplateModal}
-            openOpeningPicker={openOpeningPicker}
-            onBlank={() => handleCreateBlankScript('standard')}
-          />
-        )}
-
-        {/* Opening Picker (P5-openings) — template default vs AI-invented cold opens */}
-        {openingPicker && (
-          <OpeningPicker
-            openingPicker={openingPicker}
-            openingOptions={openingOptions}
-            openingsLoading={openingsLoading}
-            openingsError={openingsError}
-            chosenOpening={chosenOpening}
-            setChosenOpening={setChosenOpening}
-            screenplay={screenplay}
-            t={t}
-            onClose={() => setOpeningPicker(null)}
-            onReroll={() => openOpeningPicker(openingPicker)}
-            onConfirm={handleCreateFromTemplate}
-            onBlank={() => handleCreateBlankScript(openingPicker.id)}
-          />
-        )}
       </div>
     </div>
   );
