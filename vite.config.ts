@@ -77,7 +77,11 @@ export default defineConfig(({ mode }) => {
       },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        // GLM-TTS (Pro dialogue) + fal BGM — shell env names per 站长
+        // (BIGMODEL_TOKEN in ~/.bashrc, FAL_TOKEN likewise); never committed
+        'process.env.BIGMODEL_TOKEN': JSON.stringify(env.BIGMODEL_TOKEN ?? process.env.BIGMODEL_TOKEN),
+        'process.env.FAL_TOKEN': JSON.stringify(env.FAL_TOKEN ?? process.env.FAL_TOKEN)
       },
       resolve: {
         alias: {

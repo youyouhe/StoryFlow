@@ -140,6 +140,16 @@ export interface ExpressShot {
   updatedAt?: number;
 }
 
+/** Pro mode audio tracks for one generation segment. */
+export interface ProSegmentAudio {
+  /** Dialogue lines, synthesized per character voice; durations probed. */
+  tts?: { line: string; charName?: string; voice: string; url: string; seconds: number }[];
+  /** One music bed per scene (fal sonilo), cached by prompt. */
+  bgm?: { prompt: string; url: string };
+  /** Marked effects; unmatched names surface as missing (SFX_MISSING). */
+  sfx?: { name: string; url?: string; missing?: boolean; at?: number }[];
+}
+
 export type ScriptLanguage = 'en' | 'zh' | 'dual';
 
 /** The fixed visual DNA of a screenplay, picked (from LLM-generated
@@ -196,6 +206,12 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
+  /** Pro mode voice cast: character (base name) → GLM-TTS system voice.
+   *  Lines without a mapping use the default voice. */
+  voiceCast?: Record<string, string>;
+  /** Pro mode per-segment audio tracks (keyed by the segment's first block
+   *  id, matching segmentGrayboxes). BGM is one per scene, cached. */
+  proAudio?: Record<string, ProSegmentAudio>;
   /** Express gacha workbench state, per generatable block (has imagePrompt).
    *  Durable outcomes only — transient busy flags live in component state.
    *  videoUrl points at the ComfyUI /view endpoint (session-scoped server

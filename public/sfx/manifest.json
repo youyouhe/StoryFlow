@@ -1,0 +1,44 @@
+{
+  "effects": [
+    {
+      "name": "whoosh",
+      "file": "whoosh.wav",
+      "match": [
+        "挥",
+        "斩",
+        "掠",
+        "风",
+        "swing",
+        "slash",
+        "whoosh"
+      ]
+    },
+    {
+      "name": "ding",
+      "file": "ding.wav",
+      "match": [
+        "叮",
+        "亮",
+        "觉醒",
+        "突破",
+        "提示",
+        "ding",
+        "level",
+        "awaken"
+      ]
+    },
+    {
+      "name": "impact",
+      "file": "impact.wav",
+      "match": [
+        "砸",
+        "撞",
+        "爆",
+        "轰",
+        "impact",
+        "crash",
+        "boom"
+      ]
+    }
+  ]
+}
