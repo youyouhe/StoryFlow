@@ -195,6 +195,7 @@ export const AIModal: React.FC<AIModalProps> = ({
                             <button
                                 onClick={onExecute}
                                 disabled={aiState.isLoading}
+                                title={t.aiEgressNote}
                                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {aiState.isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w-4 h-4" />}

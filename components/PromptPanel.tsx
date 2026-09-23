@@ -610,8 +610,8 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     : panelBlock.type === 'ACTION' && panelActionRef?.kind === 'no-character'
                       ? t.imageGenEmptyShot
                       : (effectiveImageProvider === 'fal'
-                          ? (lang === 'zh' ? '用 FAL 直接生图入库（消耗该账号配额，按图计费）' : 'Generate via FAL straight into the library (billed per image)')
-                          : (lang === 'zh' ? '用 MiniMax image-01 直接生图入库（消耗该账号配额，按图计费）' : 'Generate via MiniMax image-01 straight into the library (billed per image)'))
+                          ? (lang === 'zh' ? '用 FAL 直接生图入库（消耗该账号配额，按图计费）。提示词将上传至 fal.ai 及其下游模型' : 'Generate via FAL straight into the library (billed per image). The prompt is uploaded to fal.ai and its downstream models')
+                          : (lang === 'zh' ? '用 MiniMax image-01 直接生图入库（消耗该账号配额，按图计费）。提示词将上传至 MiniMax 云' : 'Generate via MiniMax image-01 straight into the library (billed per image). The prompt is uploaded to the MiniMax cloud'))
               }
               className="flex-1 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-1.5"
             >

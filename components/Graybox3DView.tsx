@@ -825,6 +825,7 @@ const UI_LABELS = {
     healthExportBlocked: 'Export blocked — fix the failing checks (❌) first.',
     style: 'Style',
     h3Submit: 'Submit to H3', h3NeedKey: 'No MiniMax API key — add it in Settings → Video Generation.',
+    h3EgressNote: 'Submitting uploads the prompt + white-model video + reference images to the MiniMax cloud (or your ComfyUI server).',
     h3Tasks: 'Generation tasks', h3Download: 'Download video', h3Res: 'Resolution',
     h3Confirm: (cost: number, inS: number, outS: number, imgs: number, plan: GrayboxPlan) =>
       `Submit to MiniMax H3?\nEstimated cost ≈ ¥${cost.toFixed(2)} (input ${inS.toFixed(1)}s + output ${outS}s, ${imgs} ref image(s) — input video is billed too).\nStory target ${plan.targetSeconds.toFixed(1)}s → ${plan.segments.length === 1 ? `1× ${plan.segments[0].outputSeconds}s` : `${plan.segments.length}× ${plan.segments.map((s) => s.outputSeconds).join('+')}s`} ${plan.strategy !== 'single' ? `(${plan.segments.length === 1 ? 'near-miss, trim/speed in post' : 'chained generations — stitch outputs manually'})` : ''}\nThe white model will be recorded first (~${inS.toFixed(0)}s).`,
@@ -845,6 +846,7 @@ const UI_LABELS = {
     healthExportBlocked: '导出已拦截——请先修复 ❌ 未通过项。',
     style: '风格',
     h3Submit: '提交 H3 生成', h3NeedKey: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。',
+    h3EgressNote: '提交后将把提示词 + 白模视频 + 参考图上传至 MiniMax 云（或你的 ComfyUI 服务器）。',
     h3Tasks: '生成任务', h3Download: '下载成片', h3Res: '分辨率',
     h3Confirm: (cost: number, inS: number, outS: number, imgs: number, plan: GrayboxPlan) =>
       `提交到 MiniMax H3？\n预估费用 ≈ ¥${cost.toFixed(2)}（输入 ${inS.toFixed(1)}s + 输出 ${outS}s，参考图 ${imgs} 张——输入视频同样计费）。\n故事目标 ${plan.targetSeconds.toFixed(1)}s → ${plan.segments.length === 1 ? `1× ${plan.segments[0].outputSeconds}s` : `${plan.segments.length}× ${plan.segments.map((s) => s.outputSeconds).join('+')}s`}${plan.strategy !== 'single' ? (plan.segments.length === 1 ? '（非整秒，需后期变速/裁切）' : '（拆分多段独立生成，输出需手动拼接）') : ''}。\n将先录制白模视频（约 ${inS.toFixed(0)} 秒）。`,
@@ -1398,7 +1400,8 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
                       type="button"
                       onClick={startH3Submit}
                       disabled={exporting || !h3Ready}
-                      title={!h3Ready ? L.h3NeedKey : undefined}
+                      title={!h3Ready ? L.h3NeedKey
+                        : (L.h3EgressNote ?? '提交后将把提示词 + 白模视频 + 参考图上传至 MiniMax 云（或你的 ComfyUI）')}
                       className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
                     >
                       {exporting ? L.recording : L.h3Submit}
