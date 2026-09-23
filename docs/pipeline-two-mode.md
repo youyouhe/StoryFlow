@@ -162,3 +162,27 @@ GET  …/{request_id}                                      → result_url(audio)
 
 ---
 *设计:Claude Code agent · 2026-09-24*
+
+---
+
+## 实施状态(2026-09-24)
+
+| 步骤 | 状态 | commit |
+|---|---|---|
+| ① 本文档 | ✅ | 9c2fa4c |
+| ② 模式开关(项目级) | ✅ Settings 剧本 tab 双卡片选择器 + 顶栏徽章 | 319b1ef |
+| ③ Express 抽卡工作台 | ✅ 首帧(生图适配器)→ ComfyUI I2V(首帧+新种子)→ 预览/重roll/锁定;状态存 `expressShots` | e648b79 |
+| ④ TTS/BGM 适配器 + 时长拟合 | ✅ 适配器 + SFX 小库 + fitSegmentSeconds(12 个新测试);**真实烟测通过**(见下) | 8c58b39 + ea0fd29 |
+| ⑤ ffmpeg 合成导出 | ✅ Express 顺序拼接(同参 -c copy / 混参归一化;wasm 加载失败回退 concat_list.txt);Pro 混音 mux 待做(混音计划 §4 已定,接入点在 videoExport.ts) | 本次 |
+
+### 真实烟测(2026-09-24,产物在 /tmp,未入库)
+
+- **TTS**:`/api/paas/v4/audio/speech`(注意必须带 `/api` 前缀,缺失时 nginx 裸 405)+ `BIGMODEL_TOKEN`:`你迟到了四百年。`/tongtong/wav → **200,RIFF PCM 16bit mono 24000Hz,3.63s**,python wave 解码正常。
+- **BGM**:`sonilo/v1.1/text-to-music` + `FAL_TOKEN`:提交 IN_QUEUE → 轮询 `/requests/{id}` → COMPLETED(推理 23.6s)→ 结果键为 **`audio`/`audios`**(非 result_url)→ 下载 3.38MB m4a 合法容器。
+- 两处偏差均已回写适配器实现并更新本文档。
+
+### 遗留(下一步)
+
+1. **Pro 混音 mux**:`mixPlan` → ffmpeg `amix`(TTS 顺序 + BGM 0.25 增益循环 + SFX 偏移),接在 videoExport 的 ffmpeg 实例上。
+2. **Pro 音轨面板 UI**(Plan modal 内 TTS/BGM/SFX 状态分区 + voiceCast 编辑):适配器与拟合已就绪,待接 UI。
+3. expressShots 的 videoUrl 为 ComfyUI 会话级 URL——导出跨会话需转存资产库(v2)。

@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { Screenplay, AppSettings, RefImage, ExpressShot } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { generateFirstFrame, generateI2V } from '../services/expressService';
+import { concatClipsToMp4, downloadConcatFallback, ExportProgress } from '../services/videoExport';
 
 /**
  * ExpressWorkbench — the Mode-A gacha workbench (docs/pipeline-two-mode.md §1).
@@ -34,6 +35,7 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [duration, setDuration] = useState(5);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [exportState, setExportState] = useState<{ busy: boolean; line: string } | null>(null);
 
   const isZh = zh(lang);
   const comfyReady = !!appSettings.comfyServerUrl.trim() && !!appSettings.comfyWorkflowI2V.trim();
@@ -63,6 +65,37 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
     }
     return list;
   }, [screenplay.blocks, screenplay.expressShots]);
+
+  const exportableUrls = useMemo(
+    () => shots.map(s => s.shot?.videoUrl).filter((u): u is string => !!u),
+    [shots],
+  );
+
+  const runExport = async () => {
+    if (!exportableUrls.length) return;
+    setExportState({ busy: true, line: '准备中…' });
+    try {
+      let blob: Blob;
+      try {
+        blob = await concatClipsToMp4(exportableUrls, (p: ExportProgress) => {
+          if (p.line) setExportState({ busy: true, line: p.phase === 'fetching' ? `拉取镜头 ${p.done}/${p.total}…` : p.line });
+        });
+      } catch (loadErr) {
+        // ffmpeg.wasm unavailable → hand over clips + concat_list.txt
+        const n = await downloadConcatFallback(exportableUrls);
+        setExportState({ busy: false, line: isZh ? `已下载 ${n} 个镜头 + concat_list.txt(ffmpeg 不可用,已附本地拼接说明)` : `Downloaded ${n} clips + concat_list.txt (ffmpeg unavailable, local instructions included)` });
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `storyflow-express-${new Date().toISOString().slice(0, 10)}.mp4`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setExportState({ busy: false, line: isZh ? '导出完成 ✓' : 'Export complete ✓' });
+    } catch (e) {
+      setExportState({ busy: false, line: String((e as Error)?.message ?? e).slice(0, 160) });
+    }
+  };
 
   const patchShot = (blockId: string, patch: Partial<ExpressShot>) => {
     setScreenplay(prev => {
@@ -248,7 +281,21 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
         {/* footer */}
         <div className="px-5 py-3 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-2 shrink-0">
           <AlertCircle className="w-3.5 h-3.5 text-gray-400" />
-          <div className="text-[10px] text-gray-400 flex-1">{t.expressFootnote}</div>
+          <div className="text-[10px] text-gray-400 flex-1">
+            {exportState?.busy
+              ? <span className="text-indigo-500 font-semibold">{exportState.line}</span>
+              : <span>{exportState?.line || t.expressFootnote}</span>}
+          </div>
+          <button
+            type="button"
+            disabled={!exportableUrls.length || !!exportState?.busy}
+            onClick={() => void runExport()}
+            title={t.expressExport}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg"
+          >
+            {exportState?.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Film className="w-3.5 h-3.5" />}
+            {t.expressExport}
+          </button>
           <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 rounded-lg">
             {t.close}
           </button>
