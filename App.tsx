@@ -55,36 +55,17 @@ import { clsx } from 'clsx';
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
 function App() {
-  // ---- Script library domain (index + active screenplay + autosave) --------
-  const {
-    savedScripts, setSavedScripts,
-    screenplay, setScreenplay,
-    selectedBlockId, setSelectedBlockId,
-    saveStatus,
-    refreshSavedScripts,
-    loadScript,
-    createDefaultScript,
-  } = useScriptLibrary();
+  // ---- Script library domain (index + active lib.screenplay + autosave) --------
+  const lib = useScriptLibrary();
 
   // ---- App settings domain (persisted settings + migrations + save) --------
-  const { appSettings, setAppSettings, handleUpdateSettings } = useAppSettings({ setScreenplay });
+  const { appSettings, setAppSettings, handleUpdateSettings } = useAppSettings({ setScreenplay: lib.setScreenplay });
 
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // ---- Gallery sync domain (4A SSO session, badges, cloud visibility) ------
-  const {
-    galleryUser,
-    syncStatusMap, setSyncStatusMap,
-    cloudVisMap,
-    syncError, setSyncError,
-    creditBalance,
-    refreshGalleryView,
-    handleChangeVisibility,
-    handleGalleryLogout,
-    handleSyncScript,
-    handleSyncAll,
-  } = useGallerySync({ savedScripts, refreshSavedScripts });
+  const sync = useGallerySync({ savedScripts: lib.savedScripts, refreshSavedScripts: lib.refreshSavedScripts });
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -100,57 +81,37 @@ function App() {
   // Side-panel open state + inline image-gen feedback moved into
   // components/EditorCanvas.tsx (their only consumers are the blocks and the
   // PromptPanel drawer).
-  // Bindings now live INSIDE the screenplay (travel with export/import);
+  // Bindings now live INSIDE the lib.screenplay (travel with export/import);
   // localStorage `ref_bindings_*` is migrated once below.
-  const refBindings: RefBindings = screenplay.referenceBindings ?? { characters: {} };
+  const refBindings: RefBindings = lib.screenplay.referenceBindings ?? { characters: {} };
   const handleRefBindingsChange = useCallback((next: RefBindings) => {
-    setScreenplay(prev => ({ ...prev, referenceBindings: next, lastModified: Date.now() }));
+    lib.setScreenplay(prev => ({ ...prev, referenceBindings: next, lastModified: Date.now() }));
   }, []);
   // ---- Reference-asset library domain (images + folder backend) ------------
-  const {
-    refImages, setRefImages,
-    assetDir,
-    handleUploadRefImage,
-    handleUpdateRefImageMeta,
-    handleOpenAssetDir,
-    handleSwitchAssetDir,
-    reloadAssets,
-    handleRemoveRefImage,
-  } = useRefAssetLibrary({
-    scriptId: screenplay.id,
-    referenceBindings: screenplay.referenceBindings,
+  const assets = useRefAssetLibrary({
+    scriptId: lib.screenplay.id,
+    referenceBindings: lib.screenplay.referenceBindings,
     onBindingsChange: handleRefBindingsChange,
   });
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   // ---- H3 video-plan domain (tasks, VIDEO_PLAN knobs, submission, polling) -
-  const {
-    h3Tasks, setH3Tasks,
-    planH3Progress,
-    videoPlanModelId, setVideoPlanModelId, videoPlanModel,
-    videoPlanDuration, setVideoPlanDuration,
-    planResolution, setPlanResolution,
-    videoPlan, setVideoPlan,
-    planTasks, planPreflight, planCostTotal,
-    h3Ready,
-    handleSubmitH3,
-    submitPlanToH3,
-  } = useH3VideoPlan({
+  const h3 = useH3VideoPlan({
     appSettings,
-    screenplayBlocks: screenplay.blocks,
+    screenplayBlocks: lib.screenplay.blocks,
     refBindings,
-    refImages,
+    refImages: assets.refImages,
     setAIState,
   });
 
   // Keep both knobs legal on model switch: H3-Max has no 4s window, and
   // resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
   const handleVideoPlanModelChange = (id: string) => {
-    setVideoPlanModelId(id);
+    h3.setVideoPlanModelId(id);
     const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
-    if (m && videoPlanDuration < m.min) setVideoPlanDuration(m.min);
-    if (m && !m.resolutions.some(r => r.id === planResolution)) {
-      setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
+    if (m && h3.videoPlanDuration < m.min) h3.setVideoPlanDuration(m.min);
+    if (m && !m.resolutions.some(r => r.id === h3.planResolution)) {
+      h3.setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
     }
   };
 
@@ -166,20 +127,20 @@ function App() {
   const webmcpAccessorRef = useRef<StoryflowWebMcpAccessor | null>(null);
   useEffect(() => registerStoryflowWebMcpTools(webmcpAccessorRef as { current: StoryflowWebMcpAccessor }), []);
 
-  // One-time migration: old per-script localStorage bindings → screenplay.
+  // One-time migration: old per-script localStorage bindings → lib.screenplay.
   useEffect(() => {
-    const key = `ref_bindings_${screenplay.id}`;
+    const key = `ref_bindings_${lib.screenplay.id}`;
     try {
       const raw = localStorage.getItem(key);
-      if (raw && !screenplay.referenceBindings) {
+      if (raw && !lib.screenplay.referenceBindings) {
         const parsed = JSON.parse(raw) as RefBindings;
-        setScreenplay(prev => prev.id === screenplay.id
+        lib.setScreenplay(prev => prev.id === lib.screenplay.id
           ? { ...prev, referenceBindings: { characters: {}, ...parsed }, lastModified: Date.now() }
           : prev);
         localStorage.removeItem(key);
       }
     } catch { /* malformed legacy entry — drop */ }
-  }, [screenplay.id, screenplay.referenceBindings]);
+  }, [lib.screenplay.id, lib.screenplay.referenceBindings]);
 
 
   // ---- Image generation backend — FAL preferred, fall back to MiniMax ----
@@ -200,47 +161,39 @@ function App() {
   // state without re-registering. MUST stay in the render body, not an effect —
   // the useEffect above only hands the ref to the registry after it is filled.
   webmcpAccessorRef.current = createWebMcpAccessor({
-    screenplay, setScreenplay, savedScripts, appSettings, lang, refImages,
-    handleUploadRefImage, effectiveImageProvider, imageReady, setSelectedBlockId,
+    screenplay: lib.screenplay, setScreenplay: lib.setScreenplay, savedScripts: lib.savedScripts, appSettings, lang, refImages: assets.refImages,
+    handleUploadRefImage: assets.handleUploadRefImage, effectiveImageProvider, imageReady, setSelectedBlockId: lib.setSelectedBlockId,
   });
 
 
   const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
-  const pages = useMemo(() => paginateBlocks(screenplay.blocks), [screenplay.blocks]);
+  const pages = useMemo(() => paginateBlocks(lib.screenplay.blocks), [lib.screenplay.blocks]);
 
   // ---- Script management orchestration (load/delete/rename) ----------------
-  const { handleLoadScript, handleDeleteScript, handleRenameScript } = useScriptManagement({
-    screenplay, setScreenplay,
-    savedScripts, setSavedScripts,
-    loadScript, createDefaultScript,
-    setSyncError, setSyncStatusMap,
+  const mgmt = useScriptManagement({
+    screenplay: lib.screenplay, setScreenplay: lib.setScreenplay,
+    savedScripts: lib.savedScripts, setSavedScripts: lib.setSavedScripts,
+    loadScript: lib.loadScript, createDefaultScript: lib.createDefaultScript,
+    setSyncError: sync.setSyncError, setSyncStatusMap: sync.setSyncStatusMap,
     setSidebarOpen, t,
   });
 
   // ---- Template flow domain (gallery modal + opening picker + creators) ----
-  const {
-    showTemplateModal, setShowTemplateModal,
-    openingPicker, setOpeningPicker,
-    openingOptions, openingsLoading, openingsError, chosenOpening, setChosenOpening,
-    viewingTemplate, setViewingTemplate,
-    handleCreateBlankScript,
-    openOpeningPicker,
-    handleCreateFromTemplate,
-  } = useTemplateFlow({
-    screenplay, setScreenplay, setSelectedBlockId,
+  const tpl = useTemplateFlow({
+    screenplay: lib.screenplay, setScreenplay: lib.setScreenplay, setSelectedBlockId: lib.setSelectedBlockId,
     lang, t, appSettings,
     setSidebarOpen, setShowStyleHeadModal, setIsReadOnly,
   });
 
   // ---- Import/export domain (JSON import, PDF/MD/JSON export, asset pack) --
-  const {
-    handleImportScript,
-    handleExport,
-    handleExportAssetPack,
-    handleImportAssetPack,
-  } = useImportExport({
-    screenplay, setScreenplay, setSelectedBlockId, setIsReadOnly,
-    appSettings, t, refImages, handleUploadRefImage,
+  const io = useImportExport({
+    screenplay: lib.screenplay,
+    setScreenplay: lib.setScreenplay,
+    setSelectedBlockId: lib.setSelectedBlockId,
+    setIsReadOnly,
+    appSettings, t,
+    refImages: assets.refImages,
+    handleUploadRefImage: assets.handleUploadRefImage,
   });
 
   useEffect(() => {
@@ -258,41 +211,46 @@ function App() {
   }, [theme]);
 
   // Migration & Autosave Logic — moved into hooks/useScriptLibrary.
-  // Sync engine subscription + refreshGalleryView — moved into hooks/useGallerySync.
+  // Sync engine subscription + sync.refreshGalleryView — moved into hooks/useGallerySync.
   // App Settings Autosave — moved into hooks/useAppSettings.
 
 
 
   // ---- Block editing domain (content/type mutations, payload deletes) ------
   const { handleBlockChange, handleTypeChange, handleDeleteImagePrompt, handleDeleteGraybox } =
-    useBlockEditing({ setScreenplay, isReadOnly });
+    useBlockEditing({ setScreenplay: lib.setScreenplay, isReadOnly });
 
-  // ---- AI orchestration domain (executeAI + accept/replan effects) ---------
-  const {
-    executeAI,
-    handleAIAction,
-    runContinuation,
-    acceptAISuggestion,
-  } = useAIExecutor({
-    appSettings, screenplay, setScreenplay,
-    selectedBlockId, setSelectedBlockId,
+  // ---- AI orchestration domain (ai.executeAI + accept/replan effects) ---------
+  const ai = useAIExecutor({
+    appSettings,
+    screenplay: lib.screenplay,
+    setScreenplay: lib.setScreenplay,
+    selectedBlockId: lib.selectedBlockId,
+    setSelectedBlockId: lib.setSelectedBlockId,
     aiMode, aiState, setAIState,
     setShowAIModal, setTransitionHeadingDraft,
-    setVideoPlan, videoPlanDuration,
+    setVideoPlan: h3.setVideoPlan,
+    videoPlanDuration: h3.videoPlanDuration,
     promptSource, t, isReadOnly, handleBlockChange,
   });
 
   // ---- Editor keyboard domain (shortcuts + editing keys) -------------------
   const { handleKeyDown } = useEditorKeyboard({
-    appSettings, screenplay, setScreenplay, setSelectedBlockId,
-    handleTypeChange, isReadOnly, t, executeAI, handleSyncScript, setSyncError,
+    appSettings,
+    screenplay: lib.screenplay,
+    setScreenplay: lib.setScreenplay,
+    setSelectedBlockId: lib.setSelectedBlockId,
+    handleTypeChange, isReadOnly, t,
+    executeAI: ai.executeAI,
+    handleSyncScript: sync.handleSyncScript,
+    setSyncError: sync.setSyncError,
     setAIMode, setShowAIModal,
   });
 
 
 
   const scrollToBlock = (id: string) => {
-    setSelectedBlockId(id);
+    lib.setSelectedBlockId(id);
     const element = document.getElementById(`block-${id}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -302,16 +260,16 @@ function App() {
   // Derive the scene (nearest preceding SCENE_HEADING) that owns the currently
   // selected block, so the sidebar outline can highlight + auto-scroll to the
   // scene the user is actually editing. Scan-back is the same pattern already
-  // inlined in executeAI (3 sites) — kept local here for clarity; extracting a
+  // inlined in ai.executeAI (3 sites) — kept local here for clarity; extracting a
   // shared helper would touch those sites too, out of scope for this fix.
   const activeSceneId = useMemo(() => {
-    const idx = screenplay.blocks.findIndex(b => b.id === selectedBlockId);
+    const idx = lib.screenplay.blocks.findIndex(b => b.id === lib.selectedBlockId);
     if (idx < 0) return null;
     for (let i = idx; i >= 0; i--) {
-      if (screenplay.blocks[i].type === 'SCENE_HEADING') return screenplay.blocks[i].id;
+      if (lib.screenplay.blocks[i].type === 'SCENE_HEADING') return lib.screenplay.blocks[i].id;
     }
     return null; // blocks before the first scene heading — nothing to highlight
-  }, [screenplay.blocks, selectedBlockId]);
+  }, [lib.screenplay.blocks, lib.selectedBlockId]);
 
 
   return (
@@ -329,28 +287,28 @@ function App() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <Sidebar
-            blocks={screenplay.blocks}
+            blocks={lib.screenplay.blocks}
             onScrollToBlock={scrollToBlock}
             activeSceneId={activeSceneId}
-            metadata={screenplay.metadata}
+            metadata={lib.screenplay.metadata}
             isOpen={true} 
             onToggle={() => setSidebarOpen(!sidebarOpen)}
-            onNewScript={() => setShowTemplateModal(true)}
+            onNewScript={() => tpl.setShowTemplateModal(true)}
             onScriptSettings={() => setShowSettingsModal(true)}
             t={t}
-            savedScripts={savedScripts}
-            onLoadScript={handleLoadScript}
-            onDeleteScript={handleDeleteScript}
-            onRenameScript={handleRenameScript}
-            currentScriptId={screenplay.id}
+            savedScripts={lib.savedScripts}
+            onLoadScript={mgmt.handleLoadScript}
+            onDeleteScript={mgmt.handleDeleteScript}
+            onRenameScript={mgmt.handleRenameScript}
+            currentScriptId={lib.screenplay.id}
             onExport={() => setShowExportMenu(true)}
             onOpenAssetLibrary={() => setShowAssetLibrary(true)}
             assetLibraryLabel={t.assetLibraryLabel}
-            syncStatus={syncStatusMap}
-            gallerySignedIn={!!galleryUser}
-            onSyncScript={handleSyncScript}
-            cloudVisibility={cloudVisMap}
-            onChangeVisibility={handleChangeVisibility}
+            syncStatus={sync.syncStatusMap}
+            gallerySignedIn={!!sync.galleryUser}
+            onSyncScript={sync.handleSyncScript}
+            cloudVisibility={sync.cloudVisMap}
+            onChangeVisibility={sync.handleChangeVisibility}
             onOpenGallery={() => setShowGallery(true)}
         />
       </div>
@@ -358,10 +316,10 @@ function App() {
       <div className="flex-1 flex flex-col h-full relative overflow-hidden transition-all duration-300">
 
         <AppTopBar
-          screenplay={screenplay}
-          setScreenplay={setScreenplay}
-          onRename={handleRenameScript}
-          saveStatus={saveStatus}
+          screenplay={lib.screenplay}
+          setScreenplay={lib.setScreenplay}
+          onRename={mgmt.handleRenameScript}
+          saveStatus={lib.saveStatus}
           theme={theme}
           setTheme={setTheme}
           lang={lang}
@@ -370,10 +328,10 @@ function App() {
         />
 
         <EditorCanvas
-          screenplay={screenplay}
-          setScreenplay={setScreenplay}
-          selectedBlockId={selectedBlockId}
-          setSelectedBlockId={setSelectedBlockId}
+          screenplay={lib.screenplay}
+          setScreenplay={lib.setScreenplay}
+          selectedBlockId={lib.selectedBlockId}
+          setSelectedBlockId={lib.setSelectedBlockId}
           handleKeyDown={handleKeyDown}
           handleBlockChange={handleBlockChange}
           handleTypeChange={handleTypeChange}
@@ -384,34 +342,34 @@ function App() {
           lang={lang}
           appSettings={appSettings}
           isReadOnly={isReadOnly}
-          refImages={refImages}
+          refImages={assets.refImages}
           refBindings={refBindings}
           onRefBindingsChange={handleRefBindingsChange}
-          onUploadRefImage={handleUploadRefImage}
-          onRemoveRefImage={handleRemoveRefImage}
+          onUploadRefImage={assets.handleUploadRefImage}
+          onRemoveRefImage={assets.handleRemoveRefImage}
           setShowAssetLibrary={setShowAssetLibrary}
-          onSubmitH3={handleSubmitH3}
-          h3Tasks={h3Tasks}
-          h3Ready={h3Ready}
+          onSubmitH3={h3.handleSubmitH3}
+          h3Tasks={h3.h3Tasks}
+          h3Ready={h3.h3Ready}
           imageReady={imageReady}
           effectiveImageProvider={effectiveImageProvider}
         />
 
         <Toolbar
-            currentType={screenplay.blocks.find(b => b.id === selectedBlockId)?.type || 'ACTION'}
-            onSetType={(t) => handleTypeChange(selectedBlockId, t)}
-            onAIAction={handleAIAction}
+            currentType={lib.screenplay.blocks.find(b => b.id === lib.selectedBlockId)?.type || 'ACTION'}
+            onSetType={(t) => handleTypeChange(lib.selectedBlockId, t)}
+            onAIAction={ai.handleAIAction}
             isAILoading={aiState.isLoading}
             t={t}
             isReadOnly={isReadOnly}
             onToggleReadOnly={() => setIsReadOnly(!isReadOnly)}
-            styleHeadName={screenplay.metadata.styleHead?.name}
+            styleHeadName={lib.screenplay.metadata.styleHead?.name}
             onOpenStyleHead={() => setShowStyleHeadModal(true)}
         />
 
         <AppModals
-          screenplay={screenplay}
-          setScreenplay={setScreenplay}
+          screenplay={lib.screenplay}
+          setScreenplay={lib.setScreenplay}
           appSettings={appSettings}
           t={t}
           lang={lang}
@@ -436,58 +394,58 @@ function App() {
           setTransitionHeadingDraft={setTransitionHeadingDraft}
           promptSource={promptSource}
           setPromptSource={setPromptSource}
-          executeAI={executeAI}
-          runContinuation={runContinuation}
-          acceptAISuggestion={acceptAISuggestion}
-          submitPlanToH3={submitPlanToH3}
-          planH3Progress={planH3Progress}
-          planPreflight={planPreflight}
-          planTasks={planTasks}
-          planCostTotal={planCostTotal}
-          videoPlanModelId={videoPlanModelId}
-          videoPlanModel={videoPlanModel}
+          executeAI={ai.executeAI}
+          runContinuation={ai.runContinuation}
+          acceptAISuggestion={ai.acceptAISuggestion}
+          submitPlanToH3={h3.submitPlanToH3}
+          planH3Progress={h3.planH3Progress}
+          planPreflight={h3.planPreflight}
+          planTasks={h3.planTasks}
+          planCostTotal={h3.planCostTotal}
+          videoPlanModelId={h3.videoPlanModelId}
+          videoPlanModel={h3.videoPlanModel}
           onVideoPlanModelChange={handleVideoPlanModelChange}
-          videoPlanDuration={videoPlanDuration}
-          setVideoPlanDuration={setVideoPlanDuration}
-          planResolution={planResolution}
-          setPlanResolution={setPlanResolution}
+          videoPlanDuration={h3.videoPlanDuration}
+          setVideoPlanDuration={h3.setVideoPlanDuration}
+          planResolution={h3.planResolution}
+          setPlanResolution={h3.setPlanResolution}
           onUpdateSettings={handleUpdateSettings}
-          galleryUser={galleryUser}
-          syncError={syncError}
-          creditBalance={creditBalance}
+          galleryUser={sync.galleryUser}
+          syncError={sync.syncError}
+          creditBalance={sync.creditBalance}
           onSsoLogin={() => requireLogin()}
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
-          onGalleryLogout={handleGalleryLogout}
-          onSyncAll={handleSyncAll}
-          onRefreshGalleryView={refreshGalleryView}
-          refImages={refImages}
-          onUpdateRefImageMeta={handleUpdateRefImageMeta}
-          onRemoveRefImage={handleRemoveRefImage}
-          assetDirName={assetDir?.name}
-          dirBackend={assetDir ? 'dir' : 'idb'}
+          onGalleryLogout={sync.handleGalleryLogout}
+          onSyncAll={sync.handleSyncAll}
+          onRefreshGalleryView={sync.refreshGalleryView}
+          refImages={assets.refImages}
+          onUpdateRefImageMeta={assets.handleUpdateRefImageMeta}
+          onRemoveRefImage={assets.handleRemoveRefImage}
+          assetDirName={assets.assetDir?.name}
+          dirBackend={assets.assetDir ? 'dir' : 'idb'}
           dirAvailable={isDirStoreAvailable()}
-          onOpenDir={handleOpenAssetDir}
-          onSwitchDir={handleSwitchAssetDir}
-          onRescan={reloadAssets}
-          savedScriptOptions={savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
-          onExport={handleExport}
-          onImportScript={handleImportScript}
-          onExportAssetPack={handleExportAssetPack}
-          onImportAssetPack={handleImportAssetPack}
-          showTemplateModal={showTemplateModal}
-          setShowTemplateModal={setShowTemplateModal}
-          viewingTemplate={viewingTemplate}
-          setViewingTemplate={setViewingTemplate}
-          openOpeningPicker={openOpeningPicker}
-          handleCreateBlankScript={handleCreateBlankScript}
-          openingPicker={openingPicker}
-          setOpeningPicker={setOpeningPicker}
-          openingOptions={openingOptions}
-          openingsLoading={openingsLoading}
-          openingsError={openingsError}
-          chosenOpening={chosenOpening}
-          setChosenOpening={setChosenOpening}
-          handleCreateFromTemplate={handleCreateFromTemplate}
+          onOpenDir={assets.handleOpenAssetDir}
+          onSwitchDir={assets.handleSwitchAssetDir}
+          onRescan={assets.reloadAssets}
+          savedScriptOptions={lib.savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
+          onExport={io.handleExport}
+          onImportScript={io.handleImportScript}
+          onExportAssetPack={io.handleExportAssetPack}
+          onImportAssetPack={io.handleImportAssetPack}
+          showTemplateModal={tpl.showTemplateModal}
+          setShowTemplateModal={tpl.setShowTemplateModal}
+          viewingTemplate={tpl.viewingTemplate}
+          setViewingTemplate={tpl.setViewingTemplate}
+          openOpeningPicker={tpl.openOpeningPicker}
+          handleCreateBlankScript={tpl.handleCreateBlankScript}
+          openingPicker={tpl.openingPicker}
+          setOpeningPicker={tpl.setOpeningPicker}
+          openingOptions={tpl.openingOptions}
+          openingsLoading={tpl.openingsLoading}
+          openingsError={tpl.openingsError}
+          chosenOpening={tpl.chosenOpening}
+          setChosenOpening={tpl.setChosenOpening}
+          handleCreateFromTemplate={tpl.handleCreateFromTemplate}
         />
 
       </div>
