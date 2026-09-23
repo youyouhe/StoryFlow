@@ -45,6 +45,7 @@ import { useImportExport } from './hooks/useImportExport';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useBlockEditing } from './hooks/useBlockEditing';
 import { AppTopBar } from './components/AppTopBar';
+import { EditorCanvas } from './components/EditorCanvas';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -94,14 +95,9 @@ function App() {
   const [transitionHeadingDraft, setTransitionHeadingDraft] = useState('');
   // FROM_PROMPT: the pasted production prompt the user wants transcribed.
   const [promptSource, setPromptSource] = useState('');
-  // Storyboard prompt side-panel: when a block's prompt chip is clicked, its
-  // full content is shown in a right-side drawer instead of expanding inline
-  // (which ate editor space). Holds the block id whose prompt is open, or null.
-  const [promptPanelBlockId, setPromptPanelBlockId] = useState<string | null>(null);
-  // Which payload the side panel shows when a block holds both an imagePrompt
-  // and a graybox. The opener handlers set this so the panel opens on the
-  // payload whose chip was clicked.
-  const [panelTab, setPanelTab] = useState<'prompt' | 'graybox' | 'graybox3d'>('prompt');
+  // Side-panel open state + inline image-gen feedback moved into
+  // components/EditorCanvas.tsx (their only consumers are the blocks and the
+  // PromptPanel drawer).
   // Bindings now live INSIDE the screenplay (travel with export/import);
   // localStorage `ref_bindings_*` is migrated once below.
   const refBindings: RefBindings = screenplay.referenceBindings ?? { characters: {} };
@@ -125,12 +121,6 @@ function App() {
   });
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
-  // MiniMax H3 generation tasks (white-model submission pipeline)
-  const [imageGenerating, setImageGenerating] = useState(false);
-  const [imageGenError, setImageGenError] = useState<string | null>(null);
-  // Inline success preview at the click site (the image is already in the
-  // library; this just shows it where the user generated it).
-  const [imageGenPreview, setImageGenPreview] = useState<{ blockId: string; url: string; subject: string } | null>(null);
   // ---- H3 video-plan domain (tasks, VIDEO_PLAN knobs, submission, polling) -
   const {
     h3Tasks, setH3Tasks,
@@ -150,17 +140,11 @@ function App() {
     refImages,
     setAIState,
   });
-  const openImagePromptPanel = useCallback((id: string) => {
-    setPanelTab('prompt');
-    setPromptPanelBlockId(id);
-  }, []);
-  const openGrayboxPanel = useCallback((id: string) => {
-    setPanelTab('graybox3d');
-    setPromptPanelBlockId(id);
-  }, []);
+
   
   // States for title editing
-  // Title-editing draft state moved into components/AppTopBar.tsx.
+  const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
+  const [headerTitleVal, setHeaderTitleVal] = useState('');
 
   // ---- WebMCP (Web Model Context Protocol) ---------------------------------
   // Exposes StoryFlow operations as standardized in-browser tools for AI
@@ -441,108 +425,35 @@ function App() {
           t={t}
         />
 
-        {/* Editor Canvas (Pagination Implemented) */}
-        <div 
-          className="flex-1 overflow-y-auto overflow-x-hidden bg-desk dark:bg-desk-dark flex flex-col items-center py-8 px-4 sm:px-8 pb-32 scroll-smooth space-y-8"
-          onClick={(e) => {
-              // Click on background logic to focus end
-              if (e.target === e.currentTarget && screenplay.blocks.length === 0 && !isReadOnly) {
-                 // handle empty script case if needed
-              }
-          }}
-        >
-          {pages.map((pageBlocks, pageIndex) => (
-             <div
-                key={pageIndex}
-                className="w-full max-w-3xl min-h-[1056px] bg-paper dark:bg-paper-dark shadow-2xl shadow-gray-300/50 dark:shadow-black/60 rounded-sm p-8 sm:p-16 transition-all duration-300 relative border border-transparent dark:border-zinc-800"
-             >
-                 <div className="absolute top-4 right-6 text-[10px] text-gray-300 dark:text-zinc-700 font-mono select-none">
-                     p. {pageIndex + 1}
-                 </div>
-                 <div className="space-y-1">
-                    {pageBlocks.map(block => (
-                        <div id={`block-${block.id}`} key={block.id}>
-                            <EditorBlock
-                                block={block}
-                                isSelected={selectedBlockId === block.id}
-                                onChange={handleBlockChange}
-                                onKeyDown={handleKeyDown}
-                                onFocus={setSelectedBlockId}
-                                onChangeType={handleTypeChange}
-                                placeholders={t.placeholders}
-                                readOnly={isReadOnly}
-                                customColor={appSettings.colorSettings[block.type]}
-                                theme={theme}
-                                imagePromptLabel={t.storyboardPromptLabel}
-                                imagePromptOpenLabel={t.imagePromptOpen}
-                                onOpenImagePrompt={openImagePromptPanel}
-                                isImagePromptPanelOpen={promptPanelBlockId === block.id}
-                                imageThumbUrl={
-                                  block.imageResult
-                                    ? refImages.find(r => r.id === block.imageResult?.assetId)?.url
-                                    : undefined
-                                }
-                                grayboxLabel={t.grayboxLabel}
-                                grayboxOpenLabel={t.grayboxOpen}
-                                onOpenGraybox={openGrayboxPanel}
-                                isGrayboxPanelOpen={promptPanelBlockId === block.id}
-                            />
-                        </div>
-                    ))}
-                 </div>
-                 {pageIndex === pages.length - 1 && <div className="h-48" />}
-             </div>
-          ))}
+        <EditorCanvas
+          screenplay={screenplay}
+          setScreenplay={setScreenplay}
+          selectedBlockId={selectedBlockId}
+          setSelectedBlockId={setSelectedBlockId}
+          handleKeyDown={handleKeyDown}
+          handleBlockChange={handleBlockChange}
+          handleTypeChange={handleTypeChange}
+          handleDeleteGraybox={handleDeleteGraybox}
+          handleDeleteImagePrompt={handleDeleteImagePrompt}
+          t={t}
+          theme={theme}
+          lang={lang}
+          appSettings={appSettings}
+          isReadOnly={isReadOnly}
+          refImages={refImages}
+          refBindings={refBindings}
+          onRefBindingsChange={handleRefBindingsChange}
+          onUploadRefImage={handleUploadRefImage}
+          onRemoveRefImage={handleRemoveRefImage}
+          setShowAssetLibrary={setShowAssetLibrary}
+          onSubmitH3={handleSubmitH3}
+          h3Tasks={h3Tasks}
+          h3Ready={h3Ready}
+          imageReady={imageReady}
+          effectiveImageProvider={effectiveImageProvider}
+        />
 
-          {/* Storyboard prompt / Graybox side-panel.
-              Instead of expanding the prompt inline (which consumed editor
-              vertical space), clicking a block's prompt/graybox chip opens
-              this right-side drawer. A block may hold BOTH an imagePrompt and a
-              graybox (e.g. an ACTION with a storyboard + a camera shot) — in
-              that case a tiny segmented toggle switches the payload shown. */}
-          {(() => {
-            const panelBlock = promptPanelBlockId
-              ? screenplay.blocks.find(b => b.id === promptPanelBlockId)
-              : null;
-            if (!panelBlock) return null;
-            return (
-              <PromptPanel
-                panelBlock={panelBlock}
-                panelTab={panelTab}
-                setPanelTab={setPanelTab}
-                setPromptPanelBlockId={setPromptPanelBlockId}
-                screenplay={screenplay}
-                theme={theme}
-                lang={lang}
-                t={t}
-                refImages={refImages}
-                refBindings={refBindings}
-                onRefBindingsChange={handleRefBindingsChange}
-                onUploadRefImage={handleUploadRefImage}
-                onRemoveRefImage={handleRemoveRefImage}
-                setShowAssetLibrary={setShowAssetLibrary}
-                setScreenplay={setScreenplay}
-                onSubmitH3={handleSubmitH3}
-                h3Tasks={h3Tasks}
-                h3Ready={h3Ready}
-                imageReady={imageReady}
-                effectiveImageProvider={effectiveImageProvider}
-                appSettings={appSettings}
-                imageGenerating={imageGenerating}
-                setImageGenerating={setImageGenerating}
-                imageGenError={imageGenError}
-                setImageGenError={setImageGenError}
-                imageGenPreview={imageGenPreview}
-                setImageGenPreview={setImageGenPreview}
-                isReadOnly={isReadOnly}
-                onDeleteGraybox={handleDeleteGraybox}
-                onDeleteImagePrompt={handleDeleteImagePrompt}
-              />
-            );
-          })()}
-        </div>
-
-        <Toolbar 
+        <Toolbar
             currentType={screenplay.blocks.find(b => b.id === selectedBlockId)?.type || 'ACTION'}
             onSetType={(t) => handleTypeChange(selectedBlockId, t)}
             onAIAction={handleAIAction}
