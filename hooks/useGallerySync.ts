@@ -5,6 +5,7 @@ import { galleryClient, syncEngine, readAllSyncStatuses, syncStore } from '../se
 import { initSSO, getSsoToken, getSsoCookieToken, adoptSsoToken, clearToken } from '../services/auth4a';
 import { readCloudSyncConsent, writeCloudSyncConsent, readCloudPullPolicy, writeCloudPullPolicy, type CloudSyncConsent, type CloudPullPolicy } from '../services/cloudConsent';
 import { isGalleryApiError } from '../services/apiClient';
+import type { AskFn } from './useAskDialog';
 import type { ScriptVisibility } from '../services/apiClient';
 import type { ScriptSummary } from './useScriptLibrary';
 
@@ -18,11 +19,13 @@ import type { ScriptSummary } from './useScriptLibrary';
  * signed-in reconcile → credit balance), same dependency arrays. Script
  * deletion (which also drops the cloud copy) stays in App.tsx.
  */
-export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }: {
+export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast, ask }: {
   savedScripts: ScriptSummary[];
   refreshSavedScripts: () => void;
   t: typeof TRANSLATIONS['en'];
   onToast?: (msg: string) => void;
+  /** In-app choice dialog (falls back to window.confirm when absent). */
+  ask?: AskFn;
 }) {
   // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
   // shared cookie) so the exchange effect below can establish the session.
@@ -148,10 +151,22 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
   //     session (declining suppresses until an explicit login).
   //  2) consent granted + token present → exchange into a gallery session.
   useEffect(() => {
-    if (syncConsent === 'unset' && !getSsoToken()) {
-      const cookieToken = getSsoCookieToken();
-      if (cookieToken) {
-        const ok = window.confirm(t.cloudCookieLoginAsk);
+    let cancelled = false;
+    void (async () => {
+      if (syncConsent === 'unset' && !getSsoToken()) {
+        const cookieToken = getSsoCookieToken();
+        if (!cookieToken) return;
+        const ok = ask
+          ? (await ask({
+              title: t.cloudCookieLoginTitle,
+              body: t.cloudCookieLoginAsk,
+              buttons: [
+                { label: t.cloudCookieLoginOk, value: 'ok', kind: 'primary' },
+                { label: t.cloudAskLater, value: 'no' },
+              ],
+            }) === 'ok')
+          : window.confirm(t.cloudCookieLoginAsk);
+        if (cancelled) return;
         if (ok) {
           adoptSsoToken(cookieToken);
           writeCloudSyncConsent('granted');
@@ -160,13 +175,14 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
           // Suppress until an explicit login — same mechanism as logout.
           try { sessionStorage.setItem('sso_logged_out', '1'); } catch { /* ignore */ }
         }
+        return;
       }
-      return;
-    }
-    if (syncConsent === 'granted' && getSsoToken() && !galleryClient.isAuthenticated) {
-      void handleSSOExchange();
-    }
-  }, [syncConsent, handleSSOExchange, t]);
+      if (syncConsent === 'granted' && getSsoToken() && !galleryClient.isAuthenticated) {
+        void handleSSOExchange();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [syncConsent, handleSSOExchange, t, ask]);
 
   /** App-level logout: drop the 4A token + gallery session. */
   const handleGalleryLogout = useCallback(async () => {
@@ -229,9 +245,25 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
           const fresh = await syncEngine.listNewCloudScripts().catch(() => []);
           if (cancelled) return;
           if (fresh.length > 0 && policy === 'ask') {
-            const ok = window.confirm(t.cloudPullAskConfirm.replace('{n}', String(fresh.length)));
-            writeCloudPullPolicy(ok ? 'auto' : 'never');
-            if (ok && !cancelled) await syncEngine.pullAll();
+            const choice = ask
+              ? await ask({
+                  title: t.cloudPullTitle,
+                  body: t.cloudPullAskConfirm.replace('{n}', String(fresh.length)),
+                  buttons: [
+                    { label: t.cloudPullNow, value: 'auto', kind: 'primary' },
+                    { label: t.cloudPullSkip, value: 'skip' },
+                    { label: t.cloudPullNeverLabel, value: 'never' },
+                  ],
+                })
+              : (window.confirm(t.cloudPullAskConfirm.replace('{n}', String(fresh.length))) ? 'auto' : 'never');
+            if (cancelled) return;
+            if (choice === 'auto') {
+              writeCloudPullPolicy('auto');
+              await syncEngine.pullAll();
+            } else if (choice === 'never') {
+              writeCloudPullPolicy('never');
+            }
+            // 'skip': keep asking next launch, pull nothing this time
           } else {
             await syncEngine.pullAll();
           }
@@ -243,7 +275,7 @@ export function useGallerySync({ savedScripts, refreshSavedScripts, t, onToast }
       } catch { /* surfaced via engine events */ }
     })();
     return () => { cancelled = true; };
-  }, [syncConsent, refreshGalleryView, refreshCloudVis, t]);
+  }, [syncConsent, refreshGalleryView, refreshCloudVis, t, ask]);
 
   // P5: keep the credit balance in sync with the signed-in 4A identity.
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { AIState, AIMode, Language, RefBindings } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { useScriptLibrary } from './useScriptLibrary';
+import type { AskFn } from './useAskDialog';
 import { useAppSettings } from './useAppSettings';
 import { useGallerySync } from './useGallerySync';
 import { useRefAssetLibrary } from './useRefAssetLibrary';
@@ -26,6 +27,8 @@ import { useScriptManagement } from './useScriptManagement';
 export function useStoryFlowApp(ui: {
   lang: Language;
   onToast?: (msg: string) => void;
+  /** In-app choice dialog for the privacy prompts (cookie login, pull ask). */
+  ask?: AskFn;
   aiMode: AIMode;
   setAIMode: React.Dispatch<React.SetStateAction<AIMode>>;
   aiState: AIState;
@@ -39,7 +42,7 @@ export function useStoryFlowApp(ui: {
   setShowStyleHeadModal: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const {
-    lang, onToast, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
+    lang, onToast, ask, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
     setIsReadOnly, isReadOnly, promptSource, setTransitionHeadingDraft,
     setSidebarOpen, setShowStyleHeadModal,
   } = ui;
@@ -54,7 +57,7 @@ export function useStoryFlowApp(ui: {
   const { appSettings } = settings;
 
   // ---- Gallery sync domain (4A SSO session, badges, cloud visibility) ------
-  const sync = useGallerySync({ savedScripts: lib.savedScripts, refreshSavedScripts: lib.refreshSavedScripts, t, onToast });
+  const sync = useGallerySync({ savedScripts: lib.savedScripts, refreshSavedScripts: lib.refreshSavedScripts, t, onToast, ask });
 
   // Bindings live INSIDE the screenplay; the writer + derived view sit here.
   const refBindings: RefBindings = lib.screenplay.referenceBindings ?? { characters: {} };

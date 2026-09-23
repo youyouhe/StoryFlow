@@ -26,6 +26,7 @@ import { useImportExport } from './hooks/useImportExport';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useBlockEditing } from './hooks/useBlockEditing';
 import { useScriptManagement } from './hooks/useScriptManagement';
+import { useAskDialog } from './hooks/useAskDialog';
 import { useStoryFlowApp } from './hooks/useStoryFlowApp';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
@@ -51,6 +52,8 @@ function App() {
   const [transitionHeadingDraft, setTransitionHeadingDraft] = useState('');
   // FROM_PROMPT: the pasted production prompt the user wants transcribed.
   const [promptSource, setPromptSource] = useState('');
+  // In-app choice dialog for the privacy prompts (cookie login, pull ask).
+  const { ask, dialog: askDialog } = useAskDialog();
   // Privacy-remediation toasts: conflict forks + first pushes surface here.
   const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
   const showToast = useCallback((msg: string) => {
@@ -68,7 +71,7 @@ function App() {
     lib, settings, sync, assets, h3, ed, ai, kb, mgmt, tpl, io,
     refBindings, handleRefBindingsChange, t, activeSceneId, scrollToBlock,
   } = useStoryFlowApp({
-    lang, onToast: showToast, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
+    lang, onToast: showToast, ask, aiMode, setAIMode, aiState, setAIState, setShowAIModal,
     setIsReadOnly, isReadOnly, promptSource, setTransitionHeadingDraft,
     setSidebarOpen, setShowStyleHeadModal,
   });
@@ -268,6 +271,7 @@ function App() {
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
         />
 
+      {askDialog}
       {toast && (
         <div
           key={toast.key}
