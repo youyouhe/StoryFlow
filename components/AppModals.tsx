@@ -8,7 +8,8 @@ import { ExportMenu } from './ExportMenu';
 import { AIModal } from './AIModal';
 import { TemplateModal } from './TemplateModal';
 import { OpeningPicker } from './OpeningPicker';
-import { RefImage as RefImageType } from '../types';
+import { MINIMAX_VIDEO_MODELS } from '../constants';
+import { isDirStoreAvailable } from '../services/assetDirStore';
 
 /**
  * AppModals — the app-level modal stack: style head, AI, gallery, settings,
@@ -19,13 +20,19 @@ import { RefImage as RefImageType } from '../types';
  * the handlers it had before, verbatim.
  */
 interface AppModalsProps {
-  screenplay: Screenplay;
-  setScreenplay: React.Dispatch<React.SetStateAction<Screenplay>>;
+  lib: ReturnType<typeof import('../hooks/useScriptLibrary').useScriptLibrary>;
+  sync: ReturnType<typeof import('../hooks/useGallerySync').useGallerySync>;
+  assets: ReturnType<typeof import('../hooks/useRefAssetLibrary').useRefAssetLibrary>;
+  h3: ReturnType<typeof import('../hooks/useH3VideoPlan').useH3VideoPlan>;
+  ai: ReturnType<typeof import('../hooks/useAIExecutor').useAIExecutor>;
+  tpl: ReturnType<typeof import('../hooks/useTemplateFlow').useTemplateFlow>;
+  io: ReturnType<typeof import('../hooks/useImportExport').useImportExport>;
+  settings: ReturnType<typeof import('../hooks/useAppSettings').useAppSettings>;
   appSettings: AppSettings;
   t: typeof import('../constants').TRANSLATIONS['en'];
   lang: 'en' | 'zh';
   theme: 'light' | 'dark';
-  // flags + openers
+  // Modal open flags — owned by App because the Sidebar/Toolbar are the openers.
   showStyleHeadModal: boolean;
   setShowStyleHeadModal: React.Dispatch<React.SetStateAction<boolean>>;
   showAIModal: boolean;
@@ -38,7 +45,6 @@ interface AppModalsProps {
   setShowAssetLibrary: React.Dispatch<React.SetStateAction<boolean>>;
   showExportMenu: boolean;
   setShowExportMenu: React.Dispatch<React.SetStateAction<boolean>>;
-  // AI
   aiMode: AIMode;
   setAIMode: React.Dispatch<React.SetStateAction<AIMode>>;
   aiState: AIState;
@@ -47,68 +53,21 @@ interface AppModalsProps {
   setTransitionHeadingDraft: React.Dispatch<React.SetStateAction<string>>;
   promptSource: string;
   setPromptSource: React.Dispatch<React.SetStateAction<string>>;
-  executeAI: (modeOverride?: AIMode) => Promise<void>;
-  runContinuation: (directive?: { allowTransition: boolean; targetSceneHeading?: string }) => Promise<void>;
-  acceptAISuggestion: () => void;
-  // H3 plan
-  submitPlanToH3: () => Promise<void>;
-  planH3Progress: { current: number; total: number } | null;
-  planPreflight: ReturnType<typeof import('../hooks/useH3VideoPlan').useH3VideoPlan>['planPreflight'];
-  planTasks: H3Task[];
-  planCostTotal: number;
-  videoPlanModelId: string;
-  videoPlanModel: { id: string; min: number; resolutions: { id: string }[] };
-  onVideoPlanModelChange: (id: string) => void;
-  videoPlanDuration: number;
-  setVideoPlanDuration: React.Dispatch<React.SetStateAction<number>>;
-  planResolution: '480P' | '768P' | '2K';
-  setPlanResolution: React.Dispatch<React.SetStateAction<'480P' | '768P' | '2K'>>;
-  // settings modal account tab
-  onUpdateSettings: (newMetadata: ScriptMetadata, newAppSettings: AppSettings) => void;
-  galleryUser: { id: string; email: string; displayName: string } | null;
-  syncError: string | null;
-  creditBalance: number | null;
   onSsoLogin: () => void;
   onSsoLogoutEverywhere: () => void;
-  onGalleryLogout: () => Promise<void>;
-  onSyncAll: () => Promise<void>;
-  onRefreshGalleryView: () => void;
-  // asset library
-  refImages: RefImageType[];
-  onUpdateRefImageMeta: (id: string, patch: { name?: string; subject?: string }) => void;
-  onRemoveRefImage: (id: string) => void;
-  assetDirName?: string;
-  dirBackend: 'dir' | 'idb';
-  dirAvailable: boolean;
-  onOpenDir: () => Promise<void>;
-  onSwitchDir: () => Promise<void>;
-  onRescan: () => Promise<void>;
-  savedScriptOptions: { id: string; title: string }[];
-  // export
-  onExport: (format: import('../types').ExportFormat, options: import('../types').ExportOptions) => Promise<void>;
-  onImportScript: (file: File) => Promise<void>;
-  onExportAssetPack: () => Promise<void>;
-  onImportAssetPack: (file: File) => Promise<void>;
-  // template flow
-  showTemplateModal: boolean;
-  setShowTemplateModal: React.Dispatch<React.SetStateAction<boolean>>;
-  viewingTemplate: ScriptTemplate | null;
-  setViewingTemplate: React.Dispatch<React.SetStateAction<ScriptTemplate | null>>;
-  openOpeningPicker: (template: ScriptTemplate) => void;
-  handleCreateBlankScript: (templateId: string) => void;
-  openingPicker: ScriptTemplate | null;
-  setOpeningPicker: React.Dispatch<React.SetStateAction<ScriptTemplate | null>>;
-  openingOptions: import('../services/geminiService').OpeningCandidate[] | null;
-  openingsLoading: boolean;
-  openingsError: string | null;
-  chosenOpening: number | null;
-  setChosenOpening: React.Dispatch<React.SetStateAction<number | null>>;
-  handleCreateFromTemplate: (templateId: string, opening?: import('../services/geminiService').OpeningCandidate) => void;
 }
 
 export function AppModals(props: AppModalsProps) {
+  const { lib, sync, assets, h3, ai, tpl, io, settings } = props;
+  const { appSettings, handleUpdateSettings } = settings;
+  const { screenplay, setScreenplay } = lib;
+  const { galleryUser, syncError, creditBalance, refreshGalleryView,
+          handleGalleryLogout, handleSyncAll } = sync;
+  const { refImages, handleUpdateRefImageMeta, handleRemoveRefImage,
+          assetDir, handleOpenAssetDir, handleSwitchAssetDir, reloadAssets } = assets;
+  const { executeAI, runContinuation, acceptAISuggestion } = ai;
   const {
-    screenplay, setScreenplay, appSettings, t, lang, theme,
+    t, lang,
     showStyleHeadModal, setShowStyleHeadModal,
     showAIModal, setShowAIModal,
     showGallery, setShowGallery,
@@ -118,24 +77,32 @@ export function AppModals(props: AppModalsProps) {
     aiMode, setAIMode, aiState, setAIState,
     transitionHeadingDraft, setTransitionHeadingDraft,
     promptSource, setPromptSource,
-    executeAI, runContinuation, acceptAISuggestion,
-    submitPlanToH3, planH3Progress, planPreflight, planTasks, planCostTotal,
-    videoPlanModelId, videoPlanModel, onVideoPlanModelChange,
-    videoPlanDuration, setVideoPlanDuration,
-    planResolution, setPlanResolution,
-    galleryUser, syncError, creditBalance,
-    onUpdateSettings,
-    onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, onRefreshGalleryView,
-    refImages, onUpdateRefImageMeta, onRemoveRefImage,
-    assetDirName, dirBackend, dirAvailable, onOpenDir, onSwitchDir, onRescan, savedScriptOptions,
-    onExport, onImportScript, onExportAssetPack, onImportAssetPack,
+    onSsoLogin, onSsoLogoutEverywhere,
+  } = props;
+  const {
     showTemplateModal, setShowTemplateModal,
-    viewingTemplate, setViewingTemplate,
-    openOpeningPicker, handleCreateBlankScript,
     openingPicker, setOpeningPicker,
     openingOptions, openingsLoading, openingsError, chosenOpening, setChosenOpening,
-    handleCreateFromTemplate,
-  } = props;
+    viewingTemplate, setViewingTemplate,
+    handleCreateBlankScript, openOpeningPicker, handleCreateFromTemplate,
+  } = tpl;
+  const { handleImportScript, handleExport, handleExportAssetPack, handleImportAssetPack } = io;
+  const {
+    planH3Progress, planPreflight, planTasks, planCostTotal,
+    videoPlanModel, videoPlanDuration, setVideoPlanDuration,
+    planResolution, setPlanResolution, submitPlanToH3,
+  } = h3;
+
+  // Keep both knobs legal on model switch: H3-Max has no 4s window, and
+  // resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
+  const onVideoPlanModelChange = (id: string) => {
+    h3.setVideoPlanModelId(id);
+    const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
+    if (m && h3.videoPlanDuration < m.min) h3.setVideoPlanDuration(m.min);
+    if (m && !m.resolutions.some(r => r.id === planResolution)) {
+      h3.setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
+    }
+  };
 
   return (
     <>
@@ -198,7 +165,7 @@ export function AppModals(props: AppModalsProps) {
                 isOpen={showGallery}
                 onClose={() => setShowGallery(false)}
                 signedIn={!!galleryUser}
-                onLocalChange={onRefreshGalleryView}
+                onLocalChange={refreshGalleryView}
                 t={t}
             />
         )}
@@ -209,7 +176,7 @@ export function AppModals(props: AppModalsProps) {
                 metadata={screenplay.metadata}
                 appSettings={appSettings}
                 onSave={(newMetadata, newAppSettings) => {
-                    onUpdateSettings(newMetadata, newAppSettings);
+                    handleUpdateSettings(newMetadata, newAppSettings);
                     setShowSettingsModal(false);
                 }}
                 onClose={() => setShowSettingsModal(false)}
@@ -219,8 +186,8 @@ export function AppModals(props: AppModalsProps) {
                 creditBalance={creditBalance}
                 onSsoLogin={onSsoLogin}
                 onSsoLogoutEverywhere={onSsoLogoutEverywhere}
-                onGalleryLogout={onGalleryLogout}
-                onSyncAll={onSyncAll}
+                onGalleryLogout={handleGalleryLogout}
+                onSyncAll={handleSyncAll}
             />
         )}
 
@@ -228,18 +195,18 @@ export function AppModals(props: AppModalsProps) {
         {showAssetLibrary && (
             <RefAssetLibraryModal
                 images={refImages}
-                onUpdateMeta={onUpdateRefImageMeta}
-                onDelete={onRemoveRefImage}
+                onUpdateMeta={handleUpdateRefImageMeta}
+                onDelete={handleRemoveRefImage}
                 onClose={() => setShowAssetLibrary(false)}
                 labels={REF_LIBRARY_LABELS[lang]}
                 scriptId={screenplay.id}
-                scripts={savedScriptOptions}
-                backend={dirBackend}
-                backendName={assetDirName}
-                dirAvailable={dirAvailable}
-                onOpenDir={onOpenDir}
-                onSwitchDir={onSwitchDir}
-                onRescan={onRescan}
+                scripts={lib.savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
+                backend={assetDir ? 'dir' : 'idb'}
+                backendName={assetDir?.name}
+                dirAvailable={isDirStoreAvailable()}
+                onOpenDir={handleOpenAssetDir}
+                onSwitchDir={handleSwitchAssetDir}
+                onRescan={reloadAssets}
             />
         )}
 
@@ -247,10 +214,10 @@ export function AppModals(props: AppModalsProps) {
         <ExportMenu
             open={showExportMenu}
             onClose={() => setShowExportMenu(false)}
-            onExport={onExport}
-            onImportJson={(f) => { void onImportScript(f); }}
-            onExportAssetPack={() => { void onExportAssetPack(); }}
-            onImportAssetPack={(f) => { void onImportAssetPack(f); }}
+            onExport={handleExport}
+            onImportJson={(f) => { void handleImportScript(f); }}
+            onExportAssetPack={() => { void handleExportAssetPack(); }}
+            onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
             t={t}
         />
 

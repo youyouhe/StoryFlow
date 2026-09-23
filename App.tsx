@@ -1,39 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Screenplay, ScriptBlock, BlockType, AIState, Language, ScriptMetadata, AppSettings, ScriptTemplate, AIMode, ExportFormat, ExportOptions, GrayboxData, RefImage, RefBindings, H3Task, GalleryUser, SyncStatus } from './types';
+import { Screenplay, AIState, Language, AppSettings, AIMode, RefBindings } from './types';
 import { DEFAULT_SCRIPT, TRANSLATIONS, TEMPLATES, DEFAULT_APP_SETTINGS, MINIMAX_VIDEO_MODELS } from './constants';
-import { EditorBlock } from './components/EditorBlock';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
-import { SettingsModal } from './components/SettingsModal';
-import { StyleHeadModal } from './components/StyleHeadModal';
-import { generateOpenings, OpeningCandidate } from './services/geminiService';
-import { ExportMenu } from './components/ExportMenu';
-import { paginateBlocks } from './utils/pagination';
-import { exportToPDF } from './utils/pdfExport';
 import { registerStoryflowWebMcpTools, StoryflowWebMcpAccessor } from './services/webmcp';
 import { createWebMcpAccessor } from './services/webmcpAccessor';
-import { buildSeedancePrompt, buildH3Prompt } from './utils/whiteModelPrompt';
-import { checkGrayboxHealth } from './utils/grayboxHealth';
-import { resolveActionRef } from './utils/refBindings';
-import { sequenceAt, wardrobeIn } from './utils/sequence';
-import { parseCharacterName, baseCharName } from './utils/beatCast';
 import { shipLog } from './services/debugLog';
-import { generateImages } from './services/minimaxService';
 
 // Boot ping — a mere page load produces a log entry, proving the debug
 // shipping pipeline works end-to-end and telling us which build the user runs.
 shipLog('boot', 'info', `app loaded @ ${new Date().toISOString()} · UA=${navigator.userAgent.slice(0, 60)} · ${screen.width}x${screen.height}`);
 import { isDirStoreAvailable } from './services/assetDirStore';
-import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
-import { GalleryModal } from './components/GalleryModal';
-import { AIModal } from './components/AIModal';
-import { TemplateModal } from './components/TemplateModal';
-import { OpeningPicker } from './components/OpeningPicker';
-import { PromptPanel } from './components/PromptPanel';
-import { getAiLog } from './services/aiLog';
-import { galleryClient, syncEngine } from './services/gallery';
+import { paginateBlocks } from './utils/pagination';
+import { PanelLeft } from 'lucide-react';
+import { clsx } from 'clsx';
 import { clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
-import { exportMarkdown, exportJSON } from './utils/exportData';
 import { useScriptLibrary, STORAGE_KEYS, type ScriptSummary } from './hooks/useScriptLibrary';
 import { useGallerySync } from './hooks/useGallerySync';
 import { useRefAssetLibrary } from './hooks/useRefAssetLibrary';
@@ -48,8 +29,6 @@ import { useScriptManagement } from './hooks/useScriptManagement';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
 import { AppModals } from './components/AppModals';
-import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
-import { clsx } from 'clsx';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -59,7 +38,8 @@ function App() {
   const lib = useScriptLibrary();
 
   // ---- App settings domain (persisted settings + migrations + save) --------
-  const { appSettings, setAppSettings, handleUpdateSettings } = useAppSettings({ setScreenplay: lib.setScreenplay });
+  const settings = useAppSettings({ setScreenplay: lib.setScreenplay });
+  const { appSettings, setAppSettings, handleUpdateSettings } = settings;
 
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
@@ -104,16 +84,6 @@ function App() {
     setAIState,
   });
 
-  // Keep both knobs legal on model switch: H3-Max has no 4s window, and
-  // resolution lists differ per model (H3: 768P/2K, Max: 480P/768P).
-  const handleVideoPlanModelChange = (id: string) => {
-    h3.setVideoPlanModelId(id);
-    const m = MINIMAX_VIDEO_MODELS.find(x => x.id === id);
-    if (m && h3.videoPlanDuration < m.min) h3.setVideoPlanDuration(m.min);
-    if (m && !m.resolutions.some(r => r.id === h3.planResolution)) {
-      h3.setPlanResolution(m.resolutions[m.resolutions.length - 1].id);
-    }
-  };
 
   
   // Title-editing draft state moved into components/AppTopBar.tsx.
@@ -368,8 +338,14 @@ function App() {
         />
 
         <AppModals
-          screenplay={lib.screenplay}
-          setScreenplay={lib.setScreenplay}
+          lib={lib}
+          sync={sync}
+          assets={assets}
+          h3={h3}
+          ai={ai}
+          tpl={tpl}
+          io={io}
+          settings={settings}
           appSettings={appSettings}
           t={t}
           lang={lang}
@@ -394,58 +370,8 @@ function App() {
           setTransitionHeadingDraft={setTransitionHeadingDraft}
           promptSource={promptSource}
           setPromptSource={setPromptSource}
-          executeAI={ai.executeAI}
-          runContinuation={ai.runContinuation}
-          acceptAISuggestion={ai.acceptAISuggestion}
-          submitPlanToH3={h3.submitPlanToH3}
-          planH3Progress={h3.planH3Progress}
-          planPreflight={h3.planPreflight}
-          planTasks={h3.planTasks}
-          planCostTotal={h3.planCostTotal}
-          videoPlanModelId={h3.videoPlanModelId}
-          videoPlanModel={h3.videoPlanModel}
-          onVideoPlanModelChange={handleVideoPlanModelChange}
-          videoPlanDuration={h3.videoPlanDuration}
-          setVideoPlanDuration={h3.setVideoPlanDuration}
-          planResolution={h3.planResolution}
-          setPlanResolution={h3.setPlanResolution}
-          onUpdateSettings={handleUpdateSettings}
-          galleryUser={sync.galleryUser}
-          syncError={sync.syncError}
-          creditBalance={sync.creditBalance}
           onSsoLogin={() => requireLogin()}
           onSsoLogoutEverywhere={() => { clearToken(); logoutEverywhere(); }}
-          onGalleryLogout={sync.handleGalleryLogout}
-          onSyncAll={sync.handleSyncAll}
-          onRefreshGalleryView={sync.refreshGalleryView}
-          refImages={assets.refImages}
-          onUpdateRefImageMeta={assets.handleUpdateRefImageMeta}
-          onRemoveRefImage={assets.handleRemoveRefImage}
-          assetDirName={assets.assetDir?.name}
-          dirBackend={assets.assetDir ? 'dir' : 'idb'}
-          dirAvailable={isDirStoreAvailable()}
-          onOpenDir={assets.handleOpenAssetDir}
-          onSwitchDir={assets.handleSwitchAssetDir}
-          onRescan={assets.reloadAssets}
-          savedScriptOptions={lib.savedScripts.map(sc => ({ id: sc.id, title: sc.title }))}
-          onExport={io.handleExport}
-          onImportScript={io.handleImportScript}
-          onExportAssetPack={io.handleExportAssetPack}
-          onImportAssetPack={io.handleImportAssetPack}
-          showTemplateModal={tpl.showTemplateModal}
-          setShowTemplateModal={tpl.setShowTemplateModal}
-          viewingTemplate={tpl.viewingTemplate}
-          setViewingTemplate={tpl.setViewingTemplate}
-          openOpeningPicker={tpl.openOpeningPicker}
-          handleCreateBlankScript={tpl.handleCreateBlankScript}
-          openingPicker={tpl.openingPicker}
-          setOpeningPicker={tpl.setOpeningPicker}
-          openingOptions={tpl.openingOptions}
-          openingsLoading={tpl.openingsLoading}
-          openingsError={tpl.openingsError}
-          chosenOpening={tpl.chosenOpening}
-          setChosenOpening={tpl.setChosenOpening}
-          handleCreateFromTemplate={tpl.handleCreateFromTemplate}
         />
 
       </div>
