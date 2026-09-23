@@ -44,6 +44,7 @@ import { useTemplateFlow } from './hooks/useTemplateFlow';
 import { useImportExport } from './hooks/useImportExport';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useBlockEditing } from './hooks/useBlockEditing';
+import { AppTopBar } from './components/AppTopBar';
 import { Menu, Moon, Sun, PanelLeft, Cloud, Check, Loader2, Languages } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -159,8 +160,7 @@ function App() {
   }, []);
   
   // States for title editing
-  const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
-  const [headerTitleVal, setHeaderTitleVal] = useState('');
+  // Title-editing draft state moved into components/AppTopBar.tsx.
 
   // ---- WebMCP (Web Model Context Protocol) ---------------------------------
   // Exposes StoryFlow operations as standardized in-browser tools for AI
@@ -428,98 +428,18 @@ function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-full relative overflow-hidden transition-all duration-300">
-        
-        {/* Top Bar */}
-        <div className="h-14 border-b border-gray-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm flex items-center justify-between px-6 shrink-0 z-20">
-          <div className="flex items-center gap-4 ml-10 md:ml-0">
-             <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-widest font-mono">
-                 {headerTitleEditing ? (
-                    <input 
-                        value={headerTitleVal}
-                        onChange={(e) => setHeaderTitleVal(e.target.value)}
-                        onBlur={() => {
-                            if (headerTitleVal.trim()) {
-                                handleRenameScript(screenplay.id, headerTitleVal.trim());
-                            }
-                            setHeaderTitleEditing(false);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                if (headerTitleVal.trim()) {
-                                    handleRenameScript(screenplay.id, headerTitleVal.trim());
-                                }
-                                setHeaderTitleEditing(false);
-                            }
-                            if (e.key === 'Escape') {
-                                setHeaderTitleEditing(false);
-                            }
-                        }}
-                        autoFocus
-                        className="bg-transparent border-b border-indigo-500 outline-none text-gray-900 dark:text-gray-100 min-w-[200px]"
-                    />
-                 ) : (
-                    <span 
-                        onDoubleClick={() => {
-                            setHeaderTitleVal(screenplay.metadata.title);
-                            setHeaderTitleEditing(true);
-                        }}
-                        className="cursor-text hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                        title="Double click to rename"
-                    >
-                        {screenplay.metadata.title}
-                    </span>
-                 )}
-             </div>
-             <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 transition-opacity duration-300">
-                {saveStatus === 'saving' ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>{t.saving}</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3 h-3" />
-                    <span>{t.saved}</span>
-                  </>
-                )}
-             </div>
-             {/* Production mode badge: shows the pipeline level, click to toggle */}
-             <button
-               onClick={() => setScreenplay(prev => ({
-                   ...prev,
-                   productionMode: prev.productionMode === 'simple' ? 'cinematic' : 'simple',
-                   lastModified: Date.now(),
-               }))}
-               title={screenplay.productionMode === 'simple'
-                   ? '简易模式——无灰盒/白模，适合固定机位内容'
-                   : '专业模式——含灰盒+白模完整管线'}
-               className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-colors ${
-                   screenplay.productionMode === 'simple'
-                       ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
-                       : 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-800'
-               }`}
-             >
-                 {screenplay.productionMode === 'simple' ? '简易' : '专业'}
-             </button>
-           </div>
-          <div className="flex items-center gap-2">
-             <button 
-                onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
-                className="p-2 flex items-center gap-1 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800"
-                title="Switch Language"
-             >
-                 <Languages className="w-5 h-5" />
-                 <span className="text-xs font-bold w-4">{lang === 'en' ? 'EN' : '中'}</span>
-             </button>
-             <button 
-                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800"
-                title="Toggle Theme"
-             >
-                 {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-             </button>
-          </div>
-        </div>
+
+        <AppTopBar
+          screenplay={screenplay}
+          setScreenplay={setScreenplay}
+          onRename={handleRenameScript}
+          saveStatus={saveStatus}
+          theme={theme}
+          setTheme={setTheme}
+          lang={lang}
+          setLang={setLang}
+          t={t}
+        />
 
         {/* Editor Canvas (Pagination Implemented) */}
         <div 
