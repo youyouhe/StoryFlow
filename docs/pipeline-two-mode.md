@@ -82,7 +82,8 @@ proAudio?: Record<segmentKey, {         // segmentKey = 段首 blockId
 ### 2.1 TTS = GLM-TTS(`services/glmTtsService.ts`)
 
 ```
-POST https://open.bigmodel.cn/paas/v4/audio/speech
+POST https://open.bigmodel.cn/api/paas/v4/audio/speech
+       (实测注意:必须带 /api 前缀,否则 nginx 裸 405)
 Authorization: Bearer GLM_TTS_API_KEY
 { model: 'glm-tts', input, voice, speed, volume, response_format: 'wav', watermark_enabled }
 → wav(24kHz)

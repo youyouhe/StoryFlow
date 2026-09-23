@@ -15,7 +15,9 @@
  * at build/dev time — never committed, never stored in the settings record.
  */
 
-export const GLM_TTS_URL = 'https://open.bigmodel.cn/paas/v4/audio/speech';
+// NOTE: the real gateway path carries the /api prefix — without it nginx
+// returns a bare 405 (caught in the 2026-09-24 smoke test).
+export const GLM_TTS_URL = 'https://open.bigmodel.cn/api/paas/v4/audio/speech';
 export const GLM_TTS_MAX_INPUT = 1024;
 /** System voices (doc §2.1). Custom clone ids pass through `voice` verbatim. */
 export const GLM_VOICES = ['tongtong', 'chuichui', 'xiaochen', 'jam', 'kazi', 'douji', 'luodo'] as const;

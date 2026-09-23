@@ -1,14 +1,19 @@
 /**
  * fal BGM adapter (docs/pipeline-two-mode.md §2.2) — Pro mode's music track.
  *
- *   POST https://queue.fal.run/sonilo/v1.1/text-to-music   (Key $FAL_KEY)
- *   { prompt } → { request_id }
- *   GET  …/text-to-music/{request_id}/status  → { status }
- *   GET  …/text-to-music/{request_id}         → { … result_url }
+ *   POST https://queue.fal.run/sonilo/v1.1/text-to-music   (Key $FAL_TOKEN)
+ *   { prompt } → { request_id, status_url, response_url }
+ *   GET  status_url → { status: IN_QUEUE | IN_PROGRESS | COMPLETED }
+ *   GET  response_url → { audio, audios }   ← the audio URL lives here
+ *
+ * Smoke-tested 2026-09-24: the poll URLs are the queue's `/requests/{id}`
+ * namespace (the submit response returns them verbatim — use them when
+ * present), and the result payload keys are `audio`/`audios`, NOT
+ * `result_url`.
  *
  * Prompt is derived from the StyleHead scene preset + the scene's mood —
  * one BGM per scene, cached by the caller in `screenplay.proAudio`.
- * Reuses the existing FAL BYOK key (appSettings.falKey / FAL_KEY env).
+ * Key: FAL_TOKEN shell env (getFalToken) or the BYOK settings key.
  */
 
 const QUEUE_BASE = 'https://queue.fal.run';
@@ -21,6 +26,9 @@ export const getFalToken = (): string =>
 
 export interface MusicRequestResult {
   requestId: string;
+  /** The queue's own poll/result URLs — authoritative, use when present. */
+  statusUrl?: string;
+  responseUrl?: string;
 }
 
 export async function requestMusic(
@@ -28,7 +36,7 @@ export async function requestMusic(
   prompt: string,
 ): Promise<MusicRequestResult> {
   const key = falKey.trim();
-  if (!key) throw new Error('未配置 FAL API Key——BGM 需要 FAL(设置 → AI 或 FAL_KEY 环境变量)。');
+  if (!key) throw new Error('未配置 FAL API Key——BGM 需要 FAL(FAL_TOKEN 环境变量或设置 → AI)。');
   const res = await fetch(`${QUEUE_BASE}${FAL_MUSIC_PATH}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Key ${key}` },
@@ -41,7 +49,11 @@ export async function requestMusic(
   const d = await res.json().catch(() => ({} as Record<string, unknown>));
   const requestId = d.request_id ?? d.requestId;
   if (!requestId) throw new Error('BGM 提交响应缺少 request_id');
-  return { requestId: String(requestId) };
+  return {
+    requestId: String(requestId),
+    statusUrl: typeof d.status_url === 'string' ? d.status_url : undefined,
+    responseUrl: typeof d.response_url === 'string' ? d.response_url : undefined,
+  };
 }
 
 export interface MusicPollResult {
@@ -53,31 +65,34 @@ export interface MusicPollResult {
 interface FalQueueStatus {
   status?: string;
   error?: string;
-  response?: { result_url?: string; audio_url?: string } | null;
-  result_url?: string;
-  audio_url?: string;
+  audio?: string;
+  audios?: string[];
+  response?: { audio?: string; audios?: string[]; result_url?: string } | null;
 }
 
-/** Poll once. `COMPLETED` responses carry the audio URL in the queue's
- *  status payload or the request root — tolerate both. */
+/** Poll once for a submitted request. `urls` are the submit response's
+ *  status_url/response_url when available; else the /requests/{id} namespace
+ *  is constructed (smoke-tested shape, 2026-09-24). */
 export async function pollMusic(
   falKey: string,
-  requestId: string,
+  request: MusicRequestResult | string,
 ): Promise<MusicPollResult> {
   const key = falKey.trim();
+  const req: MusicRequestResult = typeof request === 'string' ? { requestId: request } : request;
   const headers = { Authorization: `Key ${key}` };
-  const sRes = await fetch(`${QUEUE_BASE}${FAL_MUSIC_PATH}/${encodeURIComponent(requestId)}/status`, { headers });
+  const statusUrl = req.statusUrl ?? `${QUEUE_BASE}${FAL_MUSIC_PATH}/requests/${encodeURIComponent(req.requestId)}/status`;
+  const sRes = await fetch(statusUrl, { headers });
   if (!sRes.ok) return { status: 'running' };
   const s: FalQueueStatus = await sRes.json().catch(() => ({} as FalQueueStatus));
   const st = (s.status ?? '').toUpperCase();
   if (st === 'COMPLETED') {
-    const root = await fetch(`${QUEUE_BASE}${FAL_MUSIC_PATH}/${encodeURIComponent(requestId)}`, { headers })
+    const responseUrl = req.responseUrl ?? `${QUEUE_BASE}${FAL_MUSIC_PATH}/requests/${encodeURIComponent(req.requestId)}`;
+    const root: FalQueueStatus = await fetch(responseUrl, { headers })
       .then(r => (r.ok ? r.json() : Promise.resolve({} as FalQueueStatus)))
       .catch(() => ({} as FalQueueStatus));
-    const url = root.response?.result_url ?? root.response?.audio_url
-      ?? root.result_url ?? root.audio_url
-      ?? s.response?.result_url ?? s.response?.audio_url
-      ?? s.result_url ?? s.audio_url;
+    const url = root.audio ?? root.audios?.[0]
+      ?? root.response?.audio ?? root.response?.audios?.[0]
+      ?? root.response?.result_url ?? s.audio ?? s.audios?.[0];
     if (!url) return { status: 'failed', errorMessage: 'BGM 完成但没有音频 URL' };
     return { status: 'succeeded', audioUrl: url };
   }
