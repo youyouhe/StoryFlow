@@ -241,7 +241,9 @@ function App() {
   // Which payload the side panel shows when a block holds both an imagePrompt
   // and a graybox. The opener handlers set this so the panel opens on the
   // payload whose chip was clicked.
-  const [panelTab, setPanelTab] = useState<'prompt' | 'graybox' | 'graybox3d'>('prompt');
+  const [panelTab, setPanelTab] = useState<'prompt' | 'graybox' | 'graybox3d' | 'timing'>('prompt');
+  /** P2b: strip → editor navigation (raw character range to select). */
+  const [editorJump, setEditorJump] = useState<{ blockId: string; start: number; end: number } | null>(null);
   // White-model reference-image library (global, IndexedDB-backed) and the
   // per-screenplay capsule→image bindings (localStorage). Blobs stay out of
   // the screenplay JSON so exports remain clean; object URLs are session-only.
@@ -337,6 +339,35 @@ function App() {
   const openGrayboxPanel = useCallback((id: string) => {
     setPanelTab('graybox3d');
     setPromptPanelBlockId(id);
+  }, []);
+  const openTimingPanel = useCallback((id: string) => {
+    setPanelTab('timing');
+    setPromptPanelBlockId(id);
+  }, []);
+
+  /** P2b mark gesture (editor path): Selection/Moment from a text selection. */
+  const handleCreateMark = useCallback((kind: 'selection' | 'moment', name: string, blockId: string, startGap: number, endGap: number) => {
+    setScreenplay(prev => {
+      const cur = prev.marks ?? { selections: [], moments: [] };
+      const taken = new Set([...cur.selections.map(s => s.id), ...cur.moments.map(m => m.id)]);
+      let id = name;
+      let n = 2;
+      while (taken.has(id)) id = `${name}-${n++}`;
+      const marks = kind === 'selection'
+        ? {
+            ...cur,
+            selections: [...cur.selections, {
+              id,
+              start: { blockId, gap: startGap, snap: 'right' as const },
+              end: { blockId, gap: endGap, snap: 'left' as const },
+            }],
+          }
+        : {
+            ...cur,
+            moments: [...cur.moments, { id, at: { blockId, gap: startGap, snap: 'right' as const } }],
+          };
+      return { ...prev, marks, lastModified: Date.now() };
+    });
   }, []);
   
   // States for title editing
@@ -2710,6 +2741,12 @@ function App() {
                                 grayboxOpenLabel={t.grayboxOpen}
                                 onOpenGraybox={openGrayboxPanel}
                                 isGrayboxPanelOpen={promptPanelBlockId === block.id}
+                                timingLabel={t.timingTab}
+                                onOpenTiming={openTimingPanel}
+                                isTimingPanelOpen={promptPanelBlockId === block.id && panelTab === 'timing'}
+                                onCreateMark={handleCreateMark}
+                                markLabels={{ selection: t.markBarSelection, moment: t.markBarMoment, name: t.markBarName }}
+                                highlightRange={editorJump?.blockId === block.id ? { start: editorJump.start, end: editorJump.end } : null}
                             />
                         </div>
                     ))}
@@ -2735,6 +2772,7 @@ function App() {
                 panelTab={panelTab}
                 setPanelTab={setPanelTab}
                 setPromptPanelBlockId={setPromptPanelBlockId}
+                onJumpToEditor={(start, end) => setEditorJump({ blockId: panelBlock.id, start, end })}
                 screenplay={screenplay}
                 theme={theme}
                 lang={lang}

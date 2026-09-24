@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Cloud, Trash2, Boxes, Image as ImageIcon, ZoomIn } from 'lucide-react';
 import { clsx } from 'clsx';
 import { TRANSLATIONS } from '../constants';
 import type { ScriptBlock, Screenplay, GrayboxData, RefImage, RefBindings, H3Task, AppSettings, Language } from '../types';
 import { Graybox3DView } from './Graybox3DView';
+import { TimingStrip } from './TimingStrip';
+import { tokenizeBlock } from '../utils/timing/tokenize';
+import { blockTokenWindows, blockWindow as timelineBlockWindow, buildTimeline } from '../utils/timing/timeline';
+import { applyReflow } from '../utils/timing/reflow';
+import { clearTokenTiming, upsertTokenTiming, applyAsrToBlock } from '../utils/timing/overlay';
+import { AlignmentError, parseAsrResult, transcribeAudio, type AsrResult } from '../services/alignment';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs, normIdentity } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { copyToClipboard } from '../utils/clipboard';
@@ -16,9 +22,11 @@ interface PromptPanelProps {
   /** The block whose AI payload this panel shows. Non-null: the parent only
    *  renders the panel when a valid block is selected. */
   panelBlock: ScriptBlock;
-  panelTab: 'prompt' | 'graybox' | 'graybox3d';
-  setPanelTab: React.Dispatch<React.SetStateAction<'prompt' | 'graybox' | 'graybox3d'>>;
+  panelTab: 'prompt' | 'graybox' | 'graybox3d' | 'timing';
+  setPanelTab: React.Dispatch<React.SetStateAction<'prompt' | 'graybox' | 'graybox3d' | 'timing'>>;
   setPromptPanelBlockId: React.Dispatch<React.SetStateAction<string | null>>;
+  /** P2b: jump the editor caret onto a raw character range (strip → editor). */
+  onJumpToEditor?: (rawStart: number, rawEnd: number) => void;
   screenplay: Screenplay;
   theme: 'light' | 'dark';
   lang: Language;
@@ -70,6 +78,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   panelBlock,
   panelTab,
   setPanelTab,
+  onJumpToEditor,
   setPromptPanelBlockId,
   screenplay,
   theme,
@@ -100,7 +109,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
 }) => {
   const hasPrompt = !!panelBlock.imagePrompt?.trim();
   const hasGraybox = !!panelBlock.graybox;
-  if (!hasPrompt && !hasGraybox) return null;
+  if (!hasPrompt && !hasGraybox && panelTab !== 'timing') return null;
 
   // CHARACTER identity for a variant cue: `张三（浴袍）` → store base 张三 with
   // variant 浴袍 so the sheet lands in the right slot (subject 张三/浴袍).
@@ -116,6 +125,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   const showingGrayboxJSON = hasGraybox && panelTab === 'graybox';
   const showing3D = hasGraybox && panelTab === 'graybox3d';
   const showingGraybox = showingGrayboxJSON || showing3D;
+  const showingTiming = panelTab === 'timing';
 
   const copyText = showingGraybox
     ? JSON.stringify(panelBlock.graybox, null, 2)
@@ -230,6 +240,102 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
     if (link?.url) thumb = { url: link.url, subject: panelBlock.imageResult?.subject ?? '' };
   }
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+
+  // ---- P2b timing: words own time -------------------------------------------
+  const programTimeline = useMemo(() => buildTimeline(screenplay), [screenplay]);
+  const panelTokens = useMemo(() => tokenizeBlock(panelBlock), [panelBlock.id, panelBlock.content]);
+  const panelWindows = blockTokenWindows(programTimeline, panelBlock.id).map(w => ({ start: w.start, end: w.end }));
+  const panelBlockWindow = timelineBlockWindow(programTimeline, panelBlock.id)
+    ?? { blockId: panelBlock.id, start: 0, end: 0, source: 'estimated' as const };
+  const panelMarks = screenplay.marks ?? { selections: [], moments: [] };
+  const [alignBusy, setAlignBusy] = useState(false);
+  const [alignError, setAlignError] = useState<string | null>(null);
+
+  const patchPanelBlock = (fn: (b: ScriptBlock) => ScriptBlock): void => {
+    setScreenplay(prev => applyReflow({
+      ...prev,
+      blocks: prev.blocks.map(b => (b.id === panelBlock.id ? fn(b) : b)),
+      lastModified: Date.now(),
+    }));
+  };
+
+  const handleSetTokenTiming = (index: number, start: number, end: number): void => {
+    patchPanelBlock(b => upsertTokenTiming(b, { index, start, end, source: 'manual' }));
+  };
+  const handleClearTokenTiming = (index: number): void => {
+    patchPanelBlock(b => clearTokenTiming(b, index));
+  };
+
+  const handleCreatePanelMark = (kind: 'selection' | 'moment', name: string, startGap: number, endGap: number): void => {
+    setScreenplay(prev => {
+      const cur = prev.marks ?? { selections: [], moments: [] };
+      const taken = new Set([...cur.selections.map(s => s.id), ...cur.moments.map(m => m.id)]);
+      let id = name;
+      let n = 2;
+      while (taken.has(id)) id = `${name}-${n++}`;
+      const marks = kind === 'selection'
+        ? {
+            ...cur,
+            selections: [...cur.selections, {
+              id,
+              start: { blockId: panelBlock.id, gap: startGap, snap: 'right' as const },
+              end: { blockId: panelBlock.id, gap: endGap, snap: 'left' as const },
+            }],
+          }
+        : {
+            ...cur,
+            moments: [...cur.moments, {
+              id,
+              at: { blockId: panelBlock.id, gap: startGap, snap: 'right' as const },
+            }],
+          };
+      return { ...prev, marks, lastModified: Date.now() };
+    });
+  };
+
+  const handleDeletePanelMark = (id: string): void => {
+    setScreenplay(prev => (prev.marks ? {
+      ...prev,
+      marks: {
+        selections: prev.marks.selections.filter(s => s.id !== id),
+        moments: prev.marks.moments.filter(m => m.id !== id),
+      },
+      lastModified: Date.now(),
+    } : prev));
+  };
+
+  const applyAsrResult = (result: AsrResult, takeRef: string): void => {
+    const applied = applyAsrToBlock(panelBlock, result.words, { takeRef, durationSec: result.durationSec });
+    patchPanelBlock(() => applied.block);
+  };
+
+  const handleAlignAudio = async (file: File): Promise<void> => {
+    setAlignBusy(true);
+    setAlignError(null);
+    try {
+      const lang = screenplay.metadata.scriptLanguage === 'zh' ? 'zh'
+        : screenplay.metadata.scriptLanguage === 'en' ? 'en' : undefined;
+      const result = await transcribeAudio(
+        file,
+        { baseUrl: appSettings.asrBaseUrl, apiKey: appSettings.asrApiKey },
+        lang,
+      );
+      applyAsrResult(result, file.name);
+    } catch (e) {
+      setAlignError(e instanceof AlignmentError ? e.message : String(e));
+    } finally {
+      setAlignBusy(false);
+    }
+  };
+
+  const handleImportAsr = async (file: File): Promise<void> => {
+    setAlignError(null);
+    try {
+      applyAsrResult(parseAsrResult(JSON.parse(await file.text())), file.name);
+    } catch (e) {
+      setAlignError(e instanceof AlignmentError ? e.message : String(e));
+    }
+  };
   // Bootstrap/link escape hatch: when an ACTION's character has no design
   // sheet, the panel offers (a) fresh text-to-image whose result BECOMES the
   // sheet, or (b) linking an existing library asset as the sheet. linkingChar
@@ -245,7 +351,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
       <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
         <div className={`flex items-center gap-2 font-bold text-sm ${showingGraybox ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
           {showingGraybox ? <Boxes className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
-          <span>{showingGraybox ? t.grayboxLabel : t.storyboardPromptLabel}</span>
+          <span>{showingGraybox ? t.grayboxLabel : showingTiming ? t.timingTab : t.storyboardPromptLabel}</span>
         </div>
         <button
           onClick={() => { setPromptPanelBlockId(null); setPanelTab('prompt'); }}
@@ -259,9 +365,9 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
           contributes two sub-tabs: 3D previs (graybox3d) and raw
           JSON (graybox). Build the tab list dynamically so only
           existing payloads appear. */}
-      {(hasPrompt && hasGraybox || hasGraybox) && hasGraybox && (() => {
-        const tabs = (['prompt', 'graybox3d', 'graybox'] as const).filter(tab =>
-          tab === 'prompt' ? hasPrompt : hasGraybox
+      {(() => {
+        const tabs = (['prompt', 'graybox3d', 'graybox', 'timing'] as const).filter(tab =>
+          tab === 'timing' ? true : tab === 'prompt' ? hasPrompt : hasGraybox
         );
         return (
           <div className="px-4 pt-3 flex gap-1 flex-wrap">
@@ -276,11 +382,13 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                         ? "bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500"
                         : tab === 'graybox'
                           ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                          : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800")
+                          : tab === 'timing'
+                            ? "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-800"
+                            : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800")
                     : "bg-transparent text-gray-500 dark:text-gray-400 border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800"
                 )}
               >
-                {tab === 'graybox3d' ? (t.graybox3dLabel || '3D') : tab === 'graybox' ? t.grayboxLabel : t.storyboardPromptLabel}
+                {tab === 'graybox3d' ? (t.graybox3dLabel || '3D') : tab === 'graybox' ? t.grayboxLabel : tab === 'timing' ? t.timingTab : t.storyboardPromptLabel}
               </button>
             ))}
           </div>
@@ -330,6 +438,29 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
             </div>
           );
         })()
+      ) : showingTiming ? (
+        <div className="flex-1 overflow-y-auto">
+          <TimingStrip
+            block={panelBlock}
+            tokens={panelTokens}
+            windows={panelWindows}
+            blockWindow={panelBlockWindow}
+            marks={panelMarks}
+            t={t}
+            readOnly={isReadOnly}
+            alignBusy={alignBusy}
+            alignError={alignError}
+            hasAsrKey={!!appSettings.asrApiKey.trim()}
+            onCreateSelection={(name, s, e) => handleCreatePanelMark('selection', name, s, e)}
+            onCreateMoment={(name, g) => handleCreatePanelMark('moment', name, g, g)}
+            onDeleteMark={handleDeletePanelMark}
+            onSetTokenTiming={handleSetTokenTiming}
+            onClearTokenTiming={handleClearTokenTiming}
+            onJumpToEditor={(s, e) => onJumpToEditor?.(s, e)}
+            onAlignAudio={handleAlignAudio}
+            onImportAsr={handleImportAsr}
+          />
+        </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-4">
           {showingGrayboxJSON && panelBlock.graybox && (
@@ -344,7 +475,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
       )}
       {/* Reference-lock chips: make the ①/③ conditioning visible. A gray/amber
           chip here is the answer to "为什么这张图穿帮" — the lock was missing. */}
-      {refPreview && !showingGraybox && (
+      {refPreview && !showingGraybox && !showingTiming && (
         <div className="px-4 pt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
           <span className="text-gray-400 dark:text-gray-500">{t.refLockLabel}</span>
           {/* Chips are BUTTONS: click to change/link what this frame locks to.

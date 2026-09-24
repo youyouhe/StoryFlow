@@ -86,6 +86,74 @@ export const formatSeconds = (s: number): string => {
 };
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+const round3 = (n: number): number => Math.round(n * 1000) / 1000;
+
+/** A block's time contribution inside its beat envelope: a measured overlay
+ *  duration (manual 校时 / audio alignment) wins over the speech estimate. */
+const blockContribution = (block: ScriptBlock, tokens: ScriptToken[]): number => {
+  const measured = block.timing?.durationSec;
+  if (measured && measured > 0) return measured;
+  return estimateBlockSeconds(tokens, block.type);
+};
+
+/** Place a block's tokens inside [w0, w1]: overlay windows (block-local
+ *  seconds) land exactly and scale to fit; unoverlaid tokens fill the holes
+ *  by estimate weight. Without an overlay this is pure estimate weighting. */
+const placeTokens = (
+  tokens: ScriptToken[],
+  block: ScriptBlock,
+  w0: number,
+  w1: number,
+): { start: number; end: number }[] => {
+  const overlay = block.timing;
+  if (!overlay || !overlay.tokens.length || !(overlay.durationSec > 0)) {
+    // estimate weights (P2a behavior)
+    const weights = tokens.map(estimateTokenSeconds);
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const out: { start: number; end: number }[] = [];
+    let cursor = w0;
+    tokens.forEach((_, i) => {
+      const share = sum > EPS ? (weights[i] / sum) * (w1 - w0) : (w1 - w0) / Math.max(1, tokens.length);
+      const start = cursor;
+      const end = i === tokens.length - 1 ? w1 : cursor + share;
+      cursor = end;
+      out.push({ start: round1(start), end: round1(end) });
+    });
+    return out;
+  }
+
+  // overlay path: local windows on [0, durationSec], then scaled to [w0, w1]
+  const duration = overlay.durationSec;
+  const byIndex = new Map(overlay.tokens.map(e => [e.index, e]));
+  const locals: { start: number; end: number }[] = new Array(tokens.length);
+  tokens.forEach((t, i) => {
+    const e = byIndex.get(i);
+    if (e) locals[i] = { start: Math.min(e.start, e.end), end: Math.max(e.start, e.end) };
+  });
+  let i = 0;
+  while (i < tokens.length) {
+    if (locals[i]) { i++; continue; }
+    const runStart = i;
+    while (i < tokens.length && !locals[i]) i++;
+    const runEnd = i;
+    const gapStart = runStart > 0 ? locals[runStart - 1].end : 0;
+    const gapEnd = runEnd < tokens.length ? locals[runEnd].start : duration;
+    const free = Math.max(0, gapEnd - gapStart);
+    const weights = tokens.slice(runStart, runEnd).map(estimateTokenSeconds);
+    const sum = weights.reduce((a, b) => a + b, 0) || 1;
+    let cursor = gapStart;
+    for (let k = runStart; k < runEnd; k++) {
+      const w = (weights[k - runStart] / sum) * free;
+      locals[k] = { start: cursor, end: cursor + w };
+      cursor += w;
+    }
+  }
+  const scale = duration > 0 ? (w1 - w0) / duration : 1;
+  return locals.map((l, idx) => ({
+    start: idx === 0 ? w0 : round3(w0 + l.start * scale),
+    end: idx === locals.length - 1 ? w1 : round3(w0 + l.end * scale),
+  }));
+};
 
 // ---------------------------------------------------------------------------
 // Beat grouping (videoPlan semantics + estimated openers)
@@ -144,7 +212,7 @@ const groupBeats = (blocks: ScriptBlock[]): RawGroup[] => {
 const groupWeight = (group: RawGroup, tokensByBlock: Map<string, ScriptToken[]>, blocksById: Map<string, ScriptBlock>): number =>
   group.blockIds.reduce((n, id) => {
     const block = blocksById.get(id);
-    return n + (block ? estimateBlockSeconds(tokensByBlock.get(id) ?? [], block.type) : 0);
+    return n + (block ? blockContribution(block, tokensByBlock.get(id) ?? []) : 0);
   }, 0);
 
 /** Project a full screenplay into the program timeline. Pure. */
@@ -183,7 +251,7 @@ export const buildTimeline = (screenplay: Screenplay): ProgramTimeline => {
   for (const beat of beats) {
     const weights = beat.blockIds.map(id => {
       const block = blocksById.get(id);
-      return block ? estimateBlockSeconds(tokensByBlock.get(id) ?? [], block.type) : 0;
+      return block ? blockContribution(block, tokensByBlock.get(id) ?? []) : 0;
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     const span = beat.end - beat.start;
@@ -203,21 +271,16 @@ export const buildTimeline = (screenplay: Screenplay): ProgramTimeline => {
         range: beat.source === 'authored' ? beat.range : undefined,
       });
 
-      // tokens divide the block window by their own estimate weights
+      // tokens land by overlay windows (manual/aligned) or estimate weights
       const tokens = tokensByBlock.get(blockId) ?? [];
-      const tokenWeights = tokens.map(estimateTokenSeconds);
-      const tokenWeightSum = tokenWeights.reduce((a, b) => a + b, 0);
-      let tokenCursor = blockStart;
+      const block = blocksById.get(blockId);
+      const placed = block
+        ? placeTokens(tokens, block, blockStart, blockEnd)
+        : tokens.map((token, ti) => ({ tokenId: token.id, start: 0, end: 0, index: ti }));
       tokens.forEach((token, ti) => {
-        const tShare = tokenWeightSum > EPS
-          ? (tokenWeights[ti] / tokenWeightSum) * (blockEnd - blockStart)
-          : (blockEnd - blockStart) / Math.max(1, tokens.length);
-        const tStart = tokenCursor;
-        const tEnd = ti === tokens.length - 1 ? blockEnd : tokenCursor + tShare;
-        tokenCursor = tEnd;
         tokensOut.push({
           tokenId: token.id, blockId, index: ti,
-          start: round1(tStart), end: round1(tEnd),
+          start: placed[ti].start, end: placed[ti].end,
         });
       });
     });

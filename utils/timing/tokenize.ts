@@ -38,11 +38,12 @@ export const stripBeatTimestamp = (content: string): string =>
  */
 export const tokenizeBlock = (block: Pick<ScriptBlock, 'id' | 'content'>): ScriptToken[] => {
   const tokens: ScriptToken[] = [];
-  const text = stripBeatTimestamp(block.content);
+  const prefixLength = block.content.length - stripBeatTimestamp(block.content).length;
+  const text = block.content.slice(prefixLength);
   let i = 0;
   let spaceBefore = false;
 
-  const push = (display: string, spoken: string, kind: ScriptToken['kind']): void => {
+  const push = (display: string, spoken: string, kind: ScriptToken['kind'], rawStart: number, rawEnd: number): void => {
     tokens.push({
       id: `t_${block.id}_${tokens.length}`,
       blockId: block.id,
@@ -51,6 +52,8 @@ export const tokenizeBlock = (block: Pick<ScriptBlock, 'id' | 'content'>): Scrip
       spokenText: spoken,
       kind,
       spaceBefore,
+      rawStart,
+      rawEnd,
     });
     spaceBefore = false;
   };
@@ -73,7 +76,7 @@ export const tokenizeBlock = (block: Pick<ScriptBlock, 'id' | 'content'>): Scrip
       if (m) {
         const display = m[1].trim();
         const spoken = (m[2].trim() || display);
-        push(display, spoken, 'word');
+        push(display, spoken, 'word', prefixLength + i, prefixLength + i + m[0].length);
         i += m[0].length;
         continue;
       }
@@ -84,18 +87,18 @@ export const tokenizeBlock = (block: Pick<ScriptBlock, 'id' | 'content'>): Scrip
     const rest = text.slice(i);
     const latin = rest.match(LATIN_WORD_RE);
     if (latin) {
-      push(latin[0], latin[0], 'word');
+      push(latin[0], latin[0], 'word', prefixLength + i, prefixLength + i + latin[0].length);
       i += latin[0].length;
       continue;
     }
     if (CJK_RE.test(ch)) {
-      push(ch, ch, 'char');
+      push(ch, ch, 'char', prefixLength + i, prefixLength + i + 1);
       i++;
       continue;
     }
     const punct = rest.match(PUNCT_RE);
     if (punct) {
-      push(punct[0], punct[0], 'punct');
+      push(punct[0], punct[0], 'punct', prefixLength + i, prefixLength + i + punct[0].length);
       i += punct[0].length;
       continue;
     }

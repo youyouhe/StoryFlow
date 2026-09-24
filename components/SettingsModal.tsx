@@ -584,6 +584,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
                     </div>
                  </div>
 
+                 {/* Word-level ASR (P2b alignment) — OpenAI-compatible transcriptions */}
+                 <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                            {t.asrKeyLabel}
+                        </label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="password"
+                                value={appSettingsForm.asrApiKey}
+                                onChange={e => setAppSettingsForm({...appSettingsForm, asrApiKey: e.target.value})}
+                                placeholder="gsk_... / sk-..."
+                                className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white"
+                            />
+                            <CopyKeyButton value={appSettingsForm.asrApiKey} />
+                        </div>
+                        <p className="mt-1 text-[10px] text-gray-400">{t.asrHint}</p>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                            {t.asrUrlLabel}
+                        </label>
+                        <input
+                            type="text"
+                            value={appSettingsForm.asrBaseUrl}
+                            onChange={e => setAppSettingsForm({...appSettingsForm, asrBaseUrl: e.target.value})}
+                            placeholder="https://api.groq.com/openai/v1"
+                            className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:text-white font-mono text-xs"
+                        />
+                    </div>
+                 </div>
+
                  {/* Image generation backend — MiniMax image-01 OR FAL queue */}
                  <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 space-y-4">
                     <div>

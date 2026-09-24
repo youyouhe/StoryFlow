@@ -26,6 +26,8 @@ export interface ScriptBlock {
    *  ACTION/DIALOGUE store a 'shot' graybox (camera). Phase-1: data + AI only;
    *  Three.js rendering arrives in phase 2. */
   graybox?: GrayboxData;
+  /** Word-level timing overlay (P2b): manual 校时 or audio-aligned windows. */
+  timing?: BlockTiming;
 }
 
 /** A primitive object in a scene's gray-box layout. Three.js consumes this as a
@@ -239,6 +241,36 @@ export interface ScriptToken {
   /** True when source whitespace precedes this token (display spacing is
    *  preserved exactly — "3 D" and "3D" stay distinct). */
   spaceBefore: boolean;
+  /** Character span in the RAW block content (including the beat timestamp
+   *  prefix and Dual Text syntax) — the editor's textarea offsets, which is
+   *  what selection → mark and strip → caret jumps map through. */
+  rawStart: number;
+  rawEnd: number;
+}
+
+/** One word-level time overlay entry (P2b) — author-written (manual 校时) or
+ *  measured from audio (aligned). Block-local seconds. */
+export interface TimedToken {
+  /** ScriptToken.index within the same block. */
+  index: number;
+  start: number;
+  end: number;
+  source: 'manual' | 'aligned';
+  /** 0..1 measurement confidence (aligned only); low values get flagged for
+   *  manual review. */
+  confidence?: number;
+}
+
+/** Word-level timing overlay for one block. When present the projection uses
+ *  these windows instead of estimates — manual entries are authored writes
+ *  and participate in reflow like any other author value. */
+export interface BlockTiming {
+  tokens: TimedToken[];
+  /** Measured block duration (audio length); the block's envelope input. */
+  durationSec: number;
+  source: 'manual' | 'aligned';
+  /** Where the measurement came from (generation task / upload name). */
+  takeRef?: string;
 }
 
 /** A named bound in the token stream. `gap` is a position BETWEEN tokens
@@ -322,6 +354,11 @@ export interface AppSettings {
   minimaxApiKey: string;
   /** MiniMax endpoint: CN 'https://api.minimaxi.com' | intl 'https://api.minimax.io'. */
   minimaxBaseUrl: string;
+  /** Word-level ASR (P2b alignment): OpenAI-compatible /audio/transcriptions
+   *  endpoint root (Groq, OpenAI, whisper.cpp server…). Empty key = the Timing
+   *  tab falls back to JSON import + manual 校时 (no service needed). */
+  asrApiKey: string;
+  asrBaseUrl: string;
   /** Video generation backend: 'api' = MiniMax cloud (pay per 刊例), 'comfy' =
    *  self-hosted ComfyUI H3 workflows (GPU box, near-zero marginal cost). */
   videoBackend: 'api' | 'comfy';
