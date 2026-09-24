@@ -46,8 +46,8 @@
 
 /** 契约版本并集(extension policy「旧文档照常通过」):旧档 0.1.0 原样通过,
  *  当前版 0.2.0(P7 additive:Shot.whiteModel 等)。 */
-export type IRVersion = '0.1.0' | '0.2.0';
-export const IR_VERSION: IRVersion = '0.2.0';
+export type IRVersion = '0.1.0' | '0.2.0' | '0.3.0';
+export const IR_VERSION: IRVersion = '0.3.0';
 
 /** Compile profile. Maps 1:1 to Screenplay.productionMode:
  *  'express' = 简易抽卡流水线(无 graybox/白模/音轨必需项);
@@ -235,8 +235,11 @@ export interface GenerationParams {
 
 /** Spoken line bound to a shot, with the TTS duration floor. */
 export interface ShotDialogue {
-  /** The line, verbatim (feeds TTS and the H3 prompt). */
+  /** The line, verbatim (feeds TTS and the H3 prompt). 词锚基文本——
+   *  P0 规则二的作者身份,显读分离不动它。 */
   text: string;
+  /** 显示文本(P12 显读分离):字幕展示用,可含 `||` 作者断句;缺省 = text。 */
+  display?: string;
   /** TTS 时长下限(秒) — the 站长 rule: a clip must never cut its dialogue
    *  short (utils/proAudio.ts: L = ceil(Σ durations + 0.3s breath)). The
    *  compiler fills this after synthesis probing; 0 = not yet measured. */

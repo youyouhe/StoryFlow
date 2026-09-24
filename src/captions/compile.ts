@@ -11,7 +11,7 @@
  * 强制收口;标点/空白随**前**词窗(分词不含标点,只影响窗口归属);
  * 显示文本 = 原文切片(标点保留)。`||` 作者断句待 Dual Text(P12 候选)。
  */
-import type { StoryFlowIR, TtsClip } from '../ir/types';
+import type { Shot, StoryFlowIR, TtsClip } from '../ir/types';
 import type { AlignmentTake, WordTimingCorrection } from '../ir/audio/types';
 import { splitAnchorWords, wordStartMs, fitShotDuration, anchorTextOf } from '../ir/shared';
 import { applyTimingCorrections } from '../ir/audio/timing';
@@ -200,8 +200,100 @@ export const compileCaptions = (
   let filmOffset = 0;
   let index = 0;
 
+  // P12 显读分离片段切分:作者 `||` 断句 > 句末标点 > 行宽;窗 = 朗读总窗
+  // 按显示字素权重比例分配(词级显读 N:M 对齐 = 命名后续)。
+  const splitPlain = (
+    frag: string,
+    startMs: number,
+    endMs: number,
+  ): { text: string; startMs: number; endMs: number }[] => {
+    const span = endMs - startMs;
+    // 句末标点切片(标点随前句)
+    const sentences: string[] = [];
+    let buf = '';
+    for (const ch of frag) {
+      buf += ch;
+      if (TERMINAL.has(ch)) {
+        let j = frag.indexOf(ch) + 1;
+        void j;
+        sentences.push(buf);
+        buf = '';
+      }
+    }
+    if (buf) sentences.push(buf);
+    // 句片窗口(字素权重)+ 超行宽再按字宽切
+    const weights = sentences.map(x => [...x].length);
+    const total = weights.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    const pieces: { text: string; startMs: number; endMs: number }[] = [];
+    sentences.forEach((sentence, i) => {
+      const s0 = startMs + Math.round((acc / total) * span);
+      acc += weights[i];
+      const s1 = startMs + Math.round((acc / total) * span);
+      if ([...sentence].length <= maxChars) {
+        pieces.push({ text: sentence, startMs: s0, endMs: Math.max(s1, s0 + 1) });
+        return;
+      }
+      const chars = [...sentence];
+      for (let k = 0; k < chars.length; k += maxChars) {
+        const chunk = chars.slice(k, k + maxChars).join('');
+        const c0 = s0 + Math.round((k / chars.length) * (s1 - s0));
+        const c1 = s0 + Math.round(((k + chars.slice(k, k + maxChars).length) / chars.length) * (s1 - s0));
+        pieces.push({ text: chunk, startMs: c0, endMs: Math.max(c1, c0 + 1) });
+      }
+    });
+    return pieces;
+  };
+
+  const filmOffsetOf = (shot: Shot): number => {
+    let off = 0;
+    for (const s of orderedShots) {
+      if (s.sequence >= shot.sequence) break;
+      off += s.shotDuration * 1000;
+    }
+    return off;
+  };
+
   for (const shot of orderedShots) {
     if (shot.dialogue) {
+      // ── P12 显读分离路径(display ≠ spoken):||-first 片段 + 比例窗 ──
+      const display = shot.dialogue.display;
+      if (display != null && display !== shot.dialogue.text) {
+        const spoken = shot.dialogue.text;
+        const tokens = splitAnchorWords(spoken);
+        const anchorBase = anchorTextOf(shot);
+        const anchorClip = ir.audio.find(
+          (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id && c.text === anchorBase.text,
+        );
+        const basisSec = (anchorClip && opts.measured?.[anchorClip.id]) ?? fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds;
+        const take = anchorClip ? alignments[anchorClip.id] : undefined;
+        const spans = take ? alignedSpans(take, tokens) : proportionalSpans(tokens, basisSec * 1000);
+        const totalStart = spans[0]?.startMs ?? 0;
+        const totalEnd = spans[spans.length - 1]?.endMs ?? basisSec * 1000;
+        const filmBase = filmOffsetOf(shot) + totalStart;
+        const fragments = display.split('||').map(f => f.trim()).filter(Boolean);
+        const weights = fragments.map(f => [...f].length);
+        const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+        let accW = 0;
+        fragments.forEach((frag, fi) => {
+          const fStart = filmBase + Math.round((accW / totalW) * (totalEnd - totalStart));
+          accW += weights[fi];
+          const fEnd = filmBase + Math.round((accW / totalW) * (totalEnd - totalStart));
+          for (const piece of splitPlain(frag, fStart, fEnd)) {
+            index += 1;
+            captions.push({
+              index,
+              text: opts.speakerPrefix && shot.character ? `${shot.character}：${piece.text}` : piece.text,
+              startMs: piece.startMs,
+              endMs: piece.endMs,
+              ...(shot.character ? { character: shot.character } : {}),
+              shotId: shot.id,
+            });
+          }
+        });
+        filmOffset += shot.shotDuration * 1000;
+        continue;
+      }
       const text = shot.dialogue.text;
       const tokens = splitAnchorWords(text);
       const anchorBase = anchorTextOf(shot);

@@ -139,6 +139,7 @@ export const generationParamsSchema = z.strictObject({
 
 export const shotDialogueSchema = z.strictObject({
   text: z.string().min(1),
+  display: z.string().min(1).optional(),
   ttsFloor: z.number().min(0),
 });
 
@@ -250,9 +251,9 @@ export const spatialLayoutSchema = z.strictObject({
 // ── the document + cross-field invariants ───────────────────────────────────
 
 const baseDocSchema = z.strictObject({
-  // 版本并集:旧档照常通过(extension policy);当前 IR_VERSION = 0.2.0
-  version: z.union([z.literal('0.1.0'), z.literal('0.2.0')], {
-    message: `version 必须是 "0.1.0" 或 "${IR_VERSION}"(契约按 extension policy 升版)`,
+  // 版本并集:旧档照常通过(extension policy);当前 IR_VERSION = 0.3.0
+  version: z.union([z.literal('0.1.0'), z.literal('0.2.0'), z.literal('0.3.0')], {
+    message: `version 必须是 "0.1.0"/"0.2.0"/"${IR_VERSION}"(契约按 extension policy 升版)`,
   }),
   mode: z.enum(['express', 'pro']),
   title: z.string().min(1),

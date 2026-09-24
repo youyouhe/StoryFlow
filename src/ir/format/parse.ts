@@ -120,6 +120,8 @@ export const parseStoryFlowDocument = (xml: string): ParsedDocument => {
     sid: string;
     motionRaw: string;
     dialogueRaw: string;
+    displayRaw?: string;
+    spokenRaw?: string | null;
     roleName?: string;
     sawRole: boolean;
   }
@@ -172,7 +174,11 @@ export const parseStoryFlowDocument = (xml: string): ParsedDocument => {
       if (!state.cur) throw new Error('StoryFlowXML: <role> 在选区外');
       state.cur.sawRole = true;
       state.cur.roleName = part.attrs['name'] ?? '';
-      feedText(part.text, 'dialogue');
+      // P12 显读分离:say 属性载朗读(词锚标记随属性);文本载显示
+      const say = part.attrs['say'];
+      state.cur.spokenRaw = say ?? null;
+      feedText(say ?? part.text, 'dialogue');
+      if (say != null && part.text.trim()) state.cur.displayRaw = part.text;
     } else {
       throw new Error(`StoryFlowXML: <script> 内不支持 <${part.tag}>`);
     }
@@ -422,7 +428,16 @@ export const parseStoryFlowDocument = (xml: string): ParsedDocument => {
       ...(gen.lastFrame ? { lastFrame: gen.lastFrame } : {}),
       ...(gen.whiteModel ? { whiteModel: gen.whiteModel } : {}),
       ...(gen.camera ? { camera: gen.camera } : {}),
-      ...(dialogueText ? { character: d.roleName, dialogue: { text: dialogueText, ttsFloor } } : {}),
+      ...(dialogueText ? {
+        character: d.roleName,
+        dialogue: {
+          text: d.spokenRaw != null ? unmark(d.spokenRaw).trim() : dialogueText,
+          ...(d.displayRaw != null && unmark(d.displayRaw).trim() !== dialogueText
+            ? { display: unmark(d.displayRaw).trim() }
+            : {}),
+          ttsFloor,
+        },
+      } : {}),
       ...(gen.generation ? { generation: gen.generation } : {}),
     };
     return shot;

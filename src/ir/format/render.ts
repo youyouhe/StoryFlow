@@ -107,7 +107,16 @@ export const renderStoryFlowXML = (
     push(2, `@{${sid}}`);
     push(2, injectMomentMarks(shot.motionPrompt, motionMarks.get(shot.id)));
     if (shot.dialogue) {
-      push(2, `<role name="${escapeXml(shot.character ?? '')}">${injectMomentMarks(shot.dialogue.text, dialogueMarks.get(shot.id))}</role>`);
+      // P12 显读分离:文本 = 显示(观众面对的散文真相);朗读 ≠ 显示时以
+      // say 属性携带(词锚时刻标记随 say——SFX 词锚按朗读 token 计)。
+      const display = shot.dialogue.display;
+      const separated = display != null && display !== shot.dialogue.text;
+      const roleText = separated ? display : shot.dialogue.text;
+      const marks = separated ? undefined : dialogueMarks.get(shot.id);
+      const sayAttr = separated
+        ? ` say="${injectMomentMarks(shot.dialogue.text, dialogueMarks.get(shot.id))}"`
+        : '';
+      push(2, `<role name="${escapeXml(shot.character ?? '')}"${sayAttr}>${injectMomentMarks(roleText, marks)}</role>`);
     }
     push(2, `@{/${sid}}`);
   }
