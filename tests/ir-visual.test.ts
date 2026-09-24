@@ -12,8 +12,6 @@ import {
 import { validateVisualCallPlan } from '../src/ir/visual/schema';
 import { estimateVideoCostFen, videoPriceFen } from '../src/ir/visual/cost';
 import { splitAnchorWords, fitShotDuration, chainSegments } from '../src/ir/shared';
-import { compileAudioPlan } from '../src/ir/audio/compile';
-import { renderStoryFlowXML } from '../src/ir/format/render';
 
 const examplePath = fileURLToPath(new URL('../docs/storyflow-ir-example.json', import.meta.url));
 const example = (): StoryFlowIR =>
@@ -252,15 +250,5 @@ describe('shared primitives', () => {
     ]);
     expect(fitShotDuration(32).chain.map(l => l.outputSeconds)).toEqual([11, 11, 10]);
     expect(chainSegments(16).map(l => l.outputSeconds)).toEqual([8, 8]);
-  });
-});
-
-describe('P1-② / P1-③ boundary stubs', () => {
-  it('compileAudioPlan stub is typed and throws', () => {
-    expect(() => compileAudioPlan(example())).toThrow(/P1-② not implemented/);
-  });
-
-  it('renderStoryFlowXML stub is typed and throws', () => {
-    expect(() => renderStoryFlowXML(example())).toThrow(/P1-③ not implemented/);
   });
 });
