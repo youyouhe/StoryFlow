@@ -42,7 +42,7 @@
 | H3 model / outputSeconds / videoSeconds | `vendor.model` ?? `rt.model` / `job.outputSeconds` / r2v 时 `rt.whiteModel.seconds`(否则 0) |
 | H3 videoBlob / videoFileUri | r2v 时 `rt.whiteModel.blob / .fileUri`(上传时序 §3.2) |
 | comfy prompt | `job.prompt.text` + `\n\n` + `renderComfyMaterials(slots, {hasVideo: path==='r2v'})`(①编译层导出的方言助手) |
-| comfy patch.refImageNames | `rt.uploadedRefNames`(槽序上传名) |
+| comfy patch.refImageNames | `rt.uploadedRefNames`(refId 对齐的上传名,过滤重编后按包内序) |
 | comfy patch.refVideoNames | r2v 时 `[rt.uploadedVideoName]` |
 | comfy patch.firstFrameName / stripFirstFrame | i2v → `rt.uploadedFirstFrameName`;t2v 且无槽 → `stripFirstFrame: true`(live 规则 `refs.urls.length === 0`) |
 | comfy patch.durationSeconds / randomizeSeed | `job.outputSeconds` / `job.seed.mode === 'reroll'` |
@@ -50,6 +50,7 @@
 **运行时注入物**:`ImageCallRuntime{provider:'minimax'|'fal', apiKey, baseUrl?, falKey?, falModel?, falQuality?, aspectRatio?, refs: ResolvedRef[]}`、`H3CallRuntime{apiKey, baseUrl, whiteModel?: {blob, seconds, fileUri?}, refs?, resolution?, model?}`、`ComfyCallRuntime{serverUrl, graphJson, uploadedRefNames?, uploadedFirstFrameName?, uploadedVideoName?}`;`ResolvedRef{refId, name, blob}` 按槽序。
 
 **记档(①)**:
+- **无解算槽过滤重编**:运行时查不到 Blob/上传名的槽(= 无资产槽,计划层已 REF_ASSET_MISSING 警告)过滤出包,tag 1..N 连续重编——与 live `resolveSegmentRefs`「missing 不进 urls」同口径;调用方漏传与无资产不可区分(主要成因已被计划层警告覆盖)。
 - **seed**:两服务的提交参数均无显式 seed 字段——`SeedPlan` 的 `fixed` 仅在 comfy 侧以 `randomizeSeed: false` 近似(沿用图内种子);minimax/H3 每次 createH3Task 即新抽卡,`fixed` 不可表达(supports 缺口,不在 P2 补)。
 - **comfy 拼包统一**:t2v/r2v 也写入 `durationSeconds`(live 段路径漏传,`comfyPatchWorkflow` 本就支持;与 P1 `<Picture N>` 修复同性质的记档偏离)。
 - **grok**:`backend:'grok'` 无对应 service → `mapVideoCall` 抛错;`planCallSequence` 标 `call:'unsupported'` 保持时序函数全域(银盐晨光示例含 grok 镜头)。

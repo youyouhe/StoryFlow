@@ -33,7 +33,8 @@ export interface ImageCallRuntime {
   /** minimax = image-01;fal = 队列 /edit。 */
   provider: NonNullable<Parameters<GenerateImagesFn>[0]['provider']>;
   apiKey: string;
-  baseUrl?: string;
+  /** MiniMaxConfig.baseUrl 必填(minimaxService:32-35)。 */
+  baseUrl: string;
   falKey?: string;
   falModel?: string;
   falQuality?: 'high' | 'low';
@@ -56,8 +57,8 @@ export interface ComfyCallRuntime {
   serverUrl: string;
   /** 对应路径(i2v/t2v/r2v)的 API-format 工作流 JSON。 */
   graphJson: string;
-  /** 槽序已上传文件名(comfyUploadImage 返回值)。 */
-  uploadedRefNames?: string[];
+  /** 已上传参考(comfyUploadImage 返回名,按 refId 对齐;无解算槽由映射过滤)。 */
+  uploadedRefNames?: { refId: string; name: string }[];
   /** i2v:首帧已上传文件名。 */
   uploadedFirstFrameName?: string;
   /** r2v:白模已上传文件名。 */
@@ -70,7 +71,8 @@ export interface GenerateImagesCall {
   kind: 'images';
   cfg: Parameters<GenerateImagesFn>[0];
   prompt: Parameters<GenerateImagesFn>[1];
-  opts: Parameters<GenerateImagesFn>[2];
+  /** 调用形状恒带 opts(映射必产出);服务侧参数本为可选。 */
+  opts: NonNullable<Parameters<GenerateImagesFn>[2]>;
 }
 
 export interface CreateH3Call {
