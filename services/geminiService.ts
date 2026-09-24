@@ -231,9 +231,14 @@ Rules:
 2. Walk the story in order (follow the timeline if the input has one; otherwise the narrative flow). Each beat becomes blocks in this labeled format:
      [SCENE] INT./EXT. LOCATION - TIME
      [ACTION] staging, movement, entrances/exits
+     [MOTION] what MOVES inside the frame while the shot plays (when the prompt states motion/camera movement)
+     [DURATION] the shot's length in seconds (when the input has a timeline)
+     [FIRST] the first readable instant of the shot (when derivable)
+     [LAST] the settling instant (when the prompt states an end state)
      [CHARACTER] NAME — or NAME（COSTUME）when that character is wearing a named costume
      [DIALOGUE] the spoken line, VERBATIM from the prompt
      [PARENTHETICAL] (delivery/voice direction, when the prompt gives one)
+     Director tags ([MOTION]/[DURATION]/[FIRST]/[LAST]) attach to the [ACTION] above them. Omit any of them the input does not state — they are auto-filled downstream; never invent filler.
 3. STORY ONLY — the single most important rule. Production prompts contain large non-story sections that exist to constrain the video model, NOT to appear on screen as story beats. Do NOT transcribe them as blocks — not even once, not condensed, not as a summary:
      - visual-style / 画面风格 sections (超真实、电影级、录屏质感…)
      - camera rules (固定机位、一镜到底、不切镜不推拉摇移变焦…)
@@ -758,7 +763,11 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
   Composition: ...
   Lighting: ...
   Material: ...
-  Mood: ...
+  Mood: ...${kind === 'action' ? `
+- ACTION shots ALSO carry the director fields (schema v2) — after Mood, add EXACTLY three more lines, same format:
+  Motion: what MOVES inside the frame while the shot plays (subjects, props, light, particles) — NOT a composition description
+  First: the first readable instant — poses, positions, light state at frame one
+  Last: the settling instant at the end — write "Last: -" when the motion is plain/continuous` : ''}
 - Do NOT include aspect ratio, resolution, or quality-booster terms (no 8k, no "high detail", no "professional photography"). The user adds those separately.
 - Do NOT use markdown, headings, bullet points, code blocks, or any preamble/explanation.
 - Each line must be a single concrete phrase. Be specific and visual (show, don't tell).
@@ -877,6 +886,38 @@ Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six 
 
   return safePrompt;
 };
+
+export interface ImagePromptParts {
+  imagePrompt: string;
+  motionPrompt?: string;
+  firstFrameDesc?: string;
+  lastFrameDesc?: string;
+}
+
+/** Split an Alt+S output into the image prompt (the six visual lines) and the
+ *  director fields (Motion/First/Last). Tolerant: a legacy/loose output with
+ *  no director lines comes back as imagePrompt-only — defaults fill the rest. */
+export function splitImagePromptParts(raw: string): ImagePromptParts {
+  const six: string[] = [];
+  const motion: string[] = [];
+  const first: string[] = [];
+  const last: string[] = [];
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^\s*(Motion|First|Last)\s*:\s*(.*)$/i);
+    if (!m) { six.push(line); continue; }
+    const key = m[1].toLowerCase();
+    const value = m[2].trim();
+    if (key === 'motion') { if (value) motion.push(value); }
+    else if (key === 'first') { if (value) first.push(value); }
+    else if (value && value !== '-') last.push(value);
+  }
+  return {
+    imagePrompt: six.join('\n').trim(),
+    motionPrompt: motion.join(' ').trim() || undefined,
+    firstFrameDesc: first.join(' ').trim() || undefined,
+    lastFrameDesc: last.join(' ').trim() || undefined,
+  };
+}
 
 /**
  * Decide whether the CONTINUE flow should stay in the current scene or
@@ -1277,7 +1318,7 @@ export const generateGraybox = async (
    *  objects) and the shots already generated earlier in this scene (so the
    *  rhythm can vary instead of repeating the same move/size). Both optional;
    *  scene-kind calls ignore them. */
-  shotContext?: { sceneLayout?: GrayboxData | null; priorShots?: GrayboxData[] },
+  shotContext?: { sceneLayout?: GrayboxData | null; priorShots?: GrayboxData[]; durationHint?: number },
 ): Promise<GrayboxData> => {
   // Graybox JSON is language-neutral (numbers + ids); labels may carry the
   // script's language verbatim. Keep it compact and deterministic.
@@ -1463,6 +1504,9 @@ Output only the shot graybox JSON.`;
         return `  ${i + 1}. ${c.shotType} · move: ${move} · focus: ${c.focus || '—'}`;
       }).join('\n');
       parts.push(`Shots already designed for the beats before this one in the same scene:\n${priorLines}\nYou are designing the NEXT beat. Before reaching for the same move or shot size the list above leans on, ask what THIS beat's own subject and emotion demand. If the subject is still (speaking, thinking, reacting), a body push-in is rarely the honest choice — prefer holding the frame, switching size/angle, or sweeping the lens (pan/tilt) between subjects. If several preceding beats share one move or one size, this beat is where the rhythm wants a different axis. Repetition is fine when a beat genuinely needs it; the nudge is to let the beat's own subject lead, not the rhythm's inertia.`);
+    }
+    if (shotContext.durationHint && shotContext.durationHint > 0) {
+      parts.push(`TARGET SHOT LENGTH — the script authoring pins this shot at ${shotContext.durationHint} seconds. "duration" and "targetSeconds" MUST both be exactly ${shotContext.durationHint}. Choreograph the move so it reads within that time.`);
     }
     if (parts.length) {
       userPrompt = `${userPrompt}\n\n--- SCENE CONTEXT (for consistency) ---\n${parts.join('\n\n')}`;

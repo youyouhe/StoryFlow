@@ -1478,3 +1478,22 @@ export const MINIMAX_VIDEO_MODELS: {
     ],
   },
 ];
+
+// ---- Director-field output contract (docs/script-structure-design.md §3.1)
+// Shared by every generation entry (FROM_PROMPT / CONTINUE / Alt+S / Alt+G)
+// so the schema never drifts between prompts.
+export const DIRECTOR_SCHEMA_RULES = `
+DIRECTOR FIELD CONTRACT (schema v2) — every shot-level block group must also carry:
+  [MOTION]  what MOVES inside the frame while the shot plays (subjects, props, light, particles) — NOT a description of the composition
+  [DURATION] the shot's length in seconds (decimals allowed)
+  [FIRST]   the first readable instant: poses, positions, light state at frame one
+  [LAST]    the settling instant at the end (omit if the motion is plain/continuous)
+Place them directly after the [ACTION] they belong to. Example:
+  [SCENE] 内. 茶馆 - 夜
+  [ACTION] 刀客推门而入，雨声灌进屋
+  [MOTION] 门扇急摆，雨水顺檐滴落，刀客收伞甩水
+  [DURATION] 3
+  [FIRST] 刀客立于门口，伞尖点地，水洼倒映灯火
+  [LAST] 刀客三步进店，门在身后合拢
+Missing fields are auto-filled downstream — omit rather than invent filler.
+`;

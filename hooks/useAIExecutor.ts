@@ -1,12 +1,14 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { AIState, AIMode, AppSettings, BlockType, GrayboxData, Screenplay, ScriptBlock } from '../types';
-import { TEMPLATES } from '../constants';
+import { TEMPLATES, DIRECTOR_SCHEMA_RULES } from '../constants';
 import { generateContinuation, suggestIdeas, rewriteBlock, generateImagePrompt, generateGraybox, generateSegmentGraybox, decideSceneTransition, analyzeDubbing, screenplayFromPrompt } from '../services/geminiService';
 import { shipLog } from '../services/debugLog';
 import { planVideoSegments, formatVideoPlan } from '../utils/videoPlan';
 import { sanitizeParsedBlocks } from '../utils/scriptParse';
 import { copyToClipboard } from '../utils/clipboard';
 import { parseCharacterName, baseCharName } from '../utils/beatCast';
+import { parseLabeledScript, applyDirectorPipeline } from '../utils/blockDirectorFill';
+import { splitImagePromptParts } from '../services/geminiService';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -62,7 +64,7 @@ export function useAIExecutor({
 
     const currentTemplateId = screenplay.metadata.templateId || 'standard';
     const activeTemplate = TEMPLATES.find(t => t.id === currentTemplateId) || TEMPLATES[0];
-    const systemInstruction = activeTemplate.systemPrompt;
+    const systemInstruction = activeTemplate.systemPrompt + DIRECTOR_SCHEMA_RULES;
     const scriptLanguage = screenplay.metadata.scriptLanguage || 'en';
 
     try {
@@ -196,16 +198,23 @@ export function useAIExecutor({
                 console.warn(`Storyboard for block ${job.blockId} returned empty`); shipLog("storyboard", "warn", "Storyboard returned empty");
                 continue;
               }
-              // Write live. CHARACTER prompts propagate to the same BASE+variant
-              // slot only — so the bathrobe sheet doesn't overwrite the base
-              // 张三 sheet.
+              // Write live. ACTION frames carry the director fields too
+              // (schema v2: imagePrompt + Motion/First/Last); CHARACTER sheets
+              // propagate to the same BASE+variant slot only — so the bathrobe
+              // sheet doesn't overwrite the base 张三 sheet.
+              const parts = splitImagePromptParts(prompt);
               setScreenplay(prev => ({
                 ...prev,
+                schemaVersion: 2,
                 blocks: prev.blocks.map(b => {
-                  if (b.id === job.blockId) return { ...b, imagePrompt: prompt };
+                  if (b.id === job.blockId) {
+                    return job.kind === 'action'
+                      ? { ...b, imagePrompt: parts.imagePrompt, motionPrompt: parts.motionPrompt, firstFrameDesc: parts.firstFrameDesc, lastFrameDesc: parts.lastFrameDesc }
+                      : { ...b, imagePrompt: parts.imagePrompt };
+                  }
                   if (job.kind === 'character' && job.charName && b.type === 'CHARACTER' &&
                       baseCharName(b.content.trim()) === job.charName && parseCharacterName(b.content.trim()).variant === job.variant) {
-                    return { ...b, imagePrompt: prompt };
+                    return { ...b, imagePrompt: parts.imagePrompt };
                   }
                   return b;
                 }),
@@ -389,7 +398,7 @@ export function useAIExecutor({
               const shotSceneBlocks = screenplay.blocks.slice(sceneStart, blockIdx + 1);
               const shotGraybox = await generateGraybox(
                 shotSceneBlocks, block.id, systemInstruction, appSettings, 'shot',
-                { sceneLayout: sceneLayoutForShots, priorShots: [...priorShots] },
+                { sceneLayout: sceneLayoutForShots, priorShots: [...priorShots], durationHint: block.shotDuration },
               );
               if (shotGraybox.error) {
                 failures++;
@@ -451,7 +460,7 @@ export function useAIExecutor({
         const kind: 'scene' | 'shot' = 'shot';
         const graybox = await generateGraybox(
           sceneBlocks, selectedBlockId, systemInstruction, appSettings, kind,
-          { sceneLayout: sceneLayoutForSingle, priorShots: priorShotsSingle },
+          { sceneLayout: sceneLayoutForSingle, priorShots: priorShotsSingle, durationHint: currentBlock.shotDuration },
         );
         // Surface a degrade error in the error field; otherwise show the JSON
         // in the suggestion box and hold the object for saving.
@@ -600,7 +609,7 @@ export function useAIExecutor({
   const runContinuation = useCallback(async (directive?: { allowTransition: boolean; targetSceneHeading?: string }) => {
     const currentTemplateId = screenplay.metadata.templateId || 'standard';
     const activeTemplate = TEMPLATES.find(t => t.id === currentTemplateId) || TEMPLATES[0];
-    const systemInstruction = activeTemplate.systemPrompt;
+    const systemInstruction = activeTemplate.systemPrompt + DIRECTOR_SCHEMA_RULES;
     const scriptLanguage = screenplay.metadata.scriptLanguage || 'en';
 
     setAIState({ isLoading: true, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
@@ -665,23 +674,29 @@ export function useAIExecutor({
       }
 
       // STORYBOARD: save the generated image prompt onto the selected block.
-      // Does not touch the script body — the prompt lives in block.imagePrompt.
+      // ACTION outputs carry the director fields too (Motion/First/Last after
+      // the six visual lines) — splitImagePromptParts separates them.
       // For CHARACTER blocks, the same character (matched by name/content) may
       // appear in multiple blocks: keep ONE prompt per character by writing it
       // to every CHARACTER block with the same name, so re-running on any
       // occurrence updates the single shared design sheet.
       if (aiMode === 'STORYBOARD') {
-          const prompt = aiState.suggestion;
+          const { imagePrompt, motionPrompt, firstFrameDesc, lastFrameDesc } = splitImagePromptParts(aiState.suggestion);
           const targetBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
           const isCharacter = targetBlock?.type === 'CHARACTER';
           const charName = isCharacter ? targetBlock!.content.trim() : '';
           setScreenplay(prev => ({
               ...prev,
+              schemaVersion: 2,
               blocks: prev.blocks.map(b => {
-                  if (b.id === selectedBlockId) return { ...b, imagePrompt: prompt };
+                  if (b.id === selectedBlockId) {
+                      return b.type === 'ACTION'
+                          ? { ...b, imagePrompt, motionPrompt, firstFrameDesc, lastFrameDesc }
+                          : { ...b, imagePrompt };
+                  }
                   // Propagate to same-name CHARACTER blocks so there's one prompt per character.
                   if (isCharacter && b.type === 'CHARACTER' && b.content.trim() === charName) {
-                      return { ...b, imagePrompt: prompt };
+                      return { ...b, imagePrompt };
                   }
                   return b;
               }),
@@ -693,37 +708,9 @@ export function useAIExecutor({
       }
 
       // CONTINUE: append generated blocks to the end of the script (not after the
-      // currently selected block, which may sit mid-document).
-      const lines = aiState.suggestion.split('\n').filter(l => l.trim().length > 0);
-      const newBlocks: ScriptBlock[] = lines.map(line => {
-          let type: BlockType = 'ACTION';
-          let content = line.trim();
-
-          const tagMatch = content.match(/^\[(SCENE|ACTION|CHARACTER|DIALOGUE|PARENTHETICAL|TRANSITION)\]\s?(.*)/i);
-
-          if (tagMatch) {
-              const tagName = tagMatch[1].toUpperCase();
-              content = tagMatch[2];
-
-              if (tagName === 'SCENE') type = 'SCENE_HEADING';
-              else if (tagName === 'ACTION') type = 'ACTION';
-              else if (tagName === 'CHARACTER') type = 'CHARACTER';
-              else if (tagName === 'DIALOGUE') type = 'DIALOGUE';
-              else if (tagName === 'PARENTHETICAL') type = 'PARENTHETICAL';
-              else if (tagName === 'TRANSITION') type = 'TRANSITION';
-          } else {
-               if (content.match(/^(INT\.|EXT\.|内\.|外\.)/i)) {
-                   type = 'SCENE_HEADING';
-               } else if (content === content.toUpperCase() && content.length < 20 && !content.includes('。') && !content.includes('.')) {
-                   type = 'CHARACTER';
-               }
-          }
-
-          return { id: generateId(), type, content };
-      });
-      // Structural repair for LLM output: drop empties, collapse consecutive
-      // duplicates, guarantee a leading SCENE_HEADING. Deterministic — no model
-      // behavior trusted here.
+      // currently selected block, which may sit mid-document). Parsed + repaired
+      // by the shared director pipeline (labels → split → speakers → defaults).
+      const newBlocks: ScriptBlock[] = applyDirectorPipeline(parseLabeledScript(aiState.suggestion));
       const safeBlocks = sanitizeParsedBlocks(newBlocks);
 
       // FROM_PROMPT: the transcribed screenplay becomes a NEW script — the
@@ -747,6 +734,7 @@ export function useAIExecutor({
                   draft: 'First Draft',
               },
               blocks: safeBlocks,
+              schemaVersion: 2,
               sourcePrompt: promptSource,
               productionMode: isFixedCam ? 'simple' : 'cinematic',
               lastModified: Date.now(),
