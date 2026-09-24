@@ -136,8 +136,9 @@ export interface MixCallRuntime {
   videoUrlOf: (shotId: string) => string;
   /** clipId → 会话存储键(ProSegmentCut.ttsKeys 的取键口径)。 */
   keyOf: (clipId: string) => string;
-  /** clipId → SFX wav(ProSegmentCut.sfx[].blob)。 */
-  blobOf: (clipId: string) => Blob;
+  /** clipId → SFX wav;**undefined = 不可解算**(SFX_MISSING 等),映射层
+   *  过滤出 cut(live exportCut「missing sfx filtered out」同口径)。 */
+  blobOf: (clipId: string) => Blob | undefined;
   /** clipId → BGM URL。 */
   bgmUrlOf: (clipId: string) => string;
 }

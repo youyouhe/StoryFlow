@@ -14,12 +14,6 @@ import {
   planCallSequence,
 } from '../src/bridge/visual';
 import type { ResolvedRef, ImageCallRuntime, H3CallRuntime, ComfyCallRuntime } from '../src/bridge/types';
-import {
-  mapAudioPlanToTtsQueue, mapAudioPlanToSfxQueue, mapAudioPlanToBgmQueue,
-  mapMixToProSegmentCuts,
-} from '../src/bridge/audio';
-import { exportStoryFlowXml } from '../src/bridge/format';
-import { compileAudioPlan } from '../src/ir/audio/compile';
 
 const examplePath = fileURLToPath(new URL('../docs/storyflow-ir-example.json', import.meta.url));
 const example = (): StoryFlowIR =>
@@ -225,19 +219,5 @@ describe('分派与时序', () => {
 
     const grokStep = planCallSequence(proPlan()).find(s => s.call === 'unsupported')!;
     expect(grokStep.reason).toMatch(/grok/);
-  });
-});
-
-describe('P2-② / P2-③ 边界桩', () => {
-  it('audio/format bridge stubs are typed and throw', () => {
-    const plan = compileAudioPlan(example());
-    const mixRt = {
-      videoUrlOf: () => 'v', keyOf: () => 'k', blobOf: () => new Blob([]), bgmUrlOf: () => 'b',
-    };
-    expect(() => mapAudioPlanToTtsQueue(plan, { apiKey: 'k' })).toThrow(/P2-② not implemented/);
-    expect(() => mapAudioPlanToSfxQueue(plan)).toThrow(/P2-② not implemented/);
-    expect(() => mapAudioPlanToBgmQueue(plan, { falKey: 'f' })).toThrow(/P2-② not implemented/);
-    expect(() => mapMixToProSegmentCuts(plan, mixRt)).toThrow(/P2-② not implemented/);
-    expect(() => exportStoryFlowXml(example())).toThrow(/P2-③ not implemented/);
   });
 });
