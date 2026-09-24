@@ -64,7 +64,7 @@
 | `mapAudioPlanToBgmQueue(plan, rt)` | `falMusicService.requestMusic(falKey, prompt)` → `pollMusic` | `BgmCall[]{clipId, falKey, prompt}` |
 | `mapMixToProSegmentCuts(plan, rt)` | `videoExport.exportProCut(segments, opts)` | `ProSegmentCut[]` |
 
-**字段映射要点**:TtsJob.parts → 逐 part 一调用(`GlmTtsOptions{voice, speed, volume, watermarkEnabled: clip.watermark}`——注意适配器参数名是 `watermarkEnabled`);MixSegment → `ProSegmentCut{segKey: shotId, ttsKeys: 按 mix.tts 序的 store 键, bgmUrl, sfx:[{blob, atMs}]}`(atMs 已由 ② 计划给出)。混音增益执行值在 ffmpeg 滤镜层(muxSegment 内置),不进 ProSegmentCut。
+**字段映射要点**:TtsJob.parts → 逐 part 一调用(`GlmTtsOptions{voice, speed, volume, watermarkEnabled: clip.watermark}`——注意适配器参数名是 `watermarkEnabled`);MixSegment → `ProSegmentCut{segKey: shotId, ttsKeys: 按 mix.tts 序的 store 键, bgmUrl, sfx:[{blob, atMs}]}`(atMs 已由 ② 计划给出)。**不可解算的 SFX 过滤出 cut**(live exportCut「missing sfx filtered out」口径;`MixCallRuntime.blobOf` 返回 `Blob | undefined` 表达缺失)。混音增益执行值在 ffmpeg 滤镜层(muxSegment 内置),不进 ProSegmentCut。
 
 **调用时序(②)**:TTS 逐句合成(同参 wav `concatWavs` 拼杆)→ `wavDuration` 回填探活 → SFX `resolveSfx`(`missing` 保留)→ BGM `requestMusic`+`pollMusic`(每床一次)→ `exportProCut`(段内 amix → concat)。
 
@@ -116,8 +116,8 @@ r2v(comfy):  comfyUploadImage 槽图 + 白模 → patch({refVideoNames}) → que
 | 路 | 机器可检门禁 |
 |---|---|
 | ① ✅ | `tests/bridge-visual.test.ts` 全绿(生图映射 per-provider 不对称 / H3 字段映射 / comfy 拼包+seed 近似 / 分派拒绝 grok / 调用时序依赖 / ②③ 桩);映射输出形状与 `services` 签名经 type 级 `Equal` 互注 |
-| ② 🔒 | `tests/bridge-audio.test.ts`:TtsCall 逐 part、ProSegmentCut 字段映射(atMs/键序)、时序队列;桩抛 `P2-② not implemented` |
-| ③ 🔒 | `tests/bridge-format.test.ts`:导出文件名/壳;桩抛 `P2-③ not implemented` |
+| ② ✅ | `tests/bridge-audio.test.ts` 全绿(6 条:逐 part 队列/键序、SFX/BGM 队列、ProSegmentCut 字段映射(atMs/键序)、缺失 SFX 过滤、多台词拼杆序) |
+| ③ ✅ | `tests/bridge-format.test.ts` 全绿(3 条:文件名默认与覆盖、下载壳=golden 文件体、渲染选项透传) |
 
 ## 6. 扩展策略
 
