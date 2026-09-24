@@ -132,3 +132,29 @@ export const fitShotDuration = (shotDuration: number, ttsFloor = 0): ShotDuratio
     lowerBound: fit.lowerBound,
   };
 };
+
+// ── 词锚正/反推(字素比例分窗)──────────────────────────────────────────────
+
+/** 词 i 的窗口起点(毫秒)—— ② 正向推导;token 权重 = 码点数。 */
+export const wordStartMs = (tokens: string[], wordIndex: number, basisMs: number): number => {
+  const weights = tokens.map(t => [...t].length);
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!total) return 0;
+  const before = weights.slice(0, wordIndex).reduce((a, b) => a + b, 0);
+  return Math.round((before / total) * basisMs);
+};
+
+/** 词锚反演(毫秒偏移 → wordIndex)—— wordStartMs 的逆(P4 提取层恢复
+ *  proAudio 秒偏移的锚点)。落在含 `atMs` 的 token 窗;越界兜底末词。 */
+export const wordIndexAtMs = (tokens: string[], atMs: number, basisMs: number): number | null => {
+  const weights = tokens.map(t => [...t].length);
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!total) return null;
+  let acc = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const end = ((acc + weights[i]) / total) * basisMs;
+    if (atMs < end) return i;
+    acc += weights[i];
+  }
+  return tokens.length - 1;
+};

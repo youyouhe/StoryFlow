@@ -3,5 +3,15 @@
   "compilerOptions": {
     "strict": true
   },
-  "include": ["src/ir/**/*.ts", "src/bridge/**/*.ts", "src/exec/**/*.ts", "tests/ir-*.test.ts", "tests/bridge-*.test.ts", "tests/exec-*.test.ts"]
+  "include": [
+    "src/ir/**/*.ts",
+    "src/bridge/**/*.ts",
+    "src/exec/**/*.ts",
+    "tests/ir-*.test.ts",
+    "tests/bridge-*.test.ts",
+    "tests/exec-*.test.ts",
+    "src/extract/**/*.ts",
+    "tests/extract-*.test.ts",
+    "tests/fixtures/**/*.ts"
+  ]
 }

@@ -31,7 +31,7 @@ import type {
 import {
   AUDIO_MIX_PLAN_VERSION, MIX_BGM_LOOP, MIX_GAIN_BGM, MIX_GAIN_SFX, MIX_GAIN_TTS,
 } from './types';
-import { anchorTextOf, fitShotDuration, splitAnchorWords } from '../shared';
+import { anchorTextOf, fitShotDuration, splitAnchorWords, wordStartMs } from '../shared';
 
 /** GLM-TTS 单请求上限(字符),提取源:services/glmTtsService.ts:21。 */
 export const GLM_TTS_MAX_INPUT = 1024;
@@ -59,15 +59,6 @@ export const splitForTts = (input: string, max = GLM_TTS_MAX_INPUT): string[] =>
   }
   if (buf) parts.push(buf);
   return parts;
-};
-
-/** 词 i 的窗口起点(字素比例,毫秒)。token 权重 = 码点数。 */
-const wordStartMs = (tokens: string[], wordIndex: number, basisMs: number): number => {
-  const weights = tokens.map(t => [...t].length);
-  const total = weights.reduce((a, b) => a + b, 0);
-  if (!total) return 0;
-  const before = weights.slice(0, wordIndex).reduce((a, b) => a + b, 0);
-  return Math.round((before / total) * basisMs);
 };
 
 /** SFX 锚 → 段内毫秒落点;null = 无法落点(wordIndex 越界)。
