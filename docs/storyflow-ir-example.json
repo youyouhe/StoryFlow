@@ -255,7 +255,7 @@
       "kind": "sfx",
       "shotId": "SHOT_005",
       "name": "shutter",
-      "anchor": { "kind": "word", "wordIndex": 12 },
+      "anchor": { "kind": "word", "wordIndex": 29 },
       "missing": true,
       "gain": 0.8
     }

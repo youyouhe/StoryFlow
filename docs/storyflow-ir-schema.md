@@ -231,7 +231,7 @@ interface Transition {
     { "id": "aud-tts-002", "kind": "tts", "shotId": "SHOT_004", "character": "苏晚", "text": "好,坐那边,光正好。", "voice": "tongtong", "speed": 0.9, "measuredSeconds": 2.6, "gain": 1.0 },
     { "id": "aud-bgm-001", "kind": "bgm", "fromShotId": "SHOT_001", "prompt": "Nostalgic quiet-morning instrumental bed for a 1990s photo studio at dawn. Warm felt piano with soft tape hiss, no vocals, steady loop, 30 seconds.", "loop": true, "gain": 0.25 },
     { "id": "aud-sfx-001", "kind": "sfx", "shotId": "SHOT_003", "name": "ding", "anchor": { "kind": "shot-start" }, "gain": 0.8 },
-    { "id": "aud-sfx-002", "kind": "sfx", "shotId": "SHOT_005", "name": "shutter", "anchor": { "kind": "word", "wordIndex": 12 }, "missing": true, "gain": 0.8 }
+    { "id": "aud-sfx-002", "kind": "sfx", "shotId": "SHOT_005", "name": "shutter", "anchor": { "kind": "word", "wordIndex": 29 }, "missing": true, "gain": 0.8 }
   ],
   "transitions": [
     { "id": "tr-001", "type": "cut", "target": "SHOT_002", "from": "SHOT_001" },
@@ -277,6 +277,8 @@ if (!r.ok) console.error(r.issues); else compile(r.ir);
 ```
 
 schema 强制的跨字段不变量:镜头 id 唯一 + sequence 连续;`imagePrompt` 带风格前缀;`dialogue ⇒ character`;`refBindings`/audio shot 引用/transitions target 全部可解析;`spatialId` 可解析;注册表 id 形状合法且跨类别唯一;未知字段一律拒绝(strict object——笔误的 `shotDuratoin` 不会静默通过)。
+
+**P1 三路实例的接口边界与排期**(视觉编译器/音频编译器/声明式格式)见 [`storyflow-ir-p1.md`](./storyflow-ir-p1.md)——含缝合不变量(词锚基文本/分词器/ttsFloor 双端生效)、有意偏离记档与各路验收门禁。入口即上文 `compile(r.ir)` 的三个实现方向:`src/ir/visual/`(`compileVisualPlan`,已实现)、`src/ir/audio/`(`compileAudioPlan`,边界锁定)、`src/ir/format/`(`renderStoryFlowXML`,边界锁定)。
 
 ## 9. 版本与扩展策略
 
