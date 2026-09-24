@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": ["src/ir/**/*.ts", "tests/ir-schema.test.ts"]
+}
