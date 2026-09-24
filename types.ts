@@ -26,6 +26,8 @@ export interface ScriptBlock {
    *  ACTION/DIALOGUE store a 'shot' graybox (camera). Phase-1: data + AI only;
    *  Three.js rendering arrives in phase 2. */
   graybox?: GrayboxData;
+  /** Word-level timing overlay (P2b): manual 校时 or audio-aligned windows. */
+  timing?: BlockTiming;
 }
 
 /** A primitive object in a scene's gray-box layout. Three.js consumes this as a
@@ -178,6 +180,8 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
+  /** Word-level Selections/Moments (P2). Absent = no marks yet. */
+  marks?: ScriptMarks;
   /** Pipeline complexity level. 'simple' = fixed-camera / single-scene scripts
    *  where graybox (spatial blocking + camera choreography) adds no value —
    *  the pipeline is: character sheets + variant images + segment video prompts.
@@ -207,6 +211,97 @@ export interface ScriptSequence {
   wardrobe: Record<string, CharacterWardrobe>;
   /** A short label, e.g. the representative scene heading. */
   label?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Word-level time model (P2 of docs/storyflow-adoption-plan.md)
+//
+// Time is anchored to WORDS, never to seconds: tokens carry identity, marks
+// (Selections/Moments) bind to token gaps, and seconds are DERIVED by
+// projecting those anchors over authored beat prefixes or estimated speech
+// durations. Reflow = rebuild the projection after an edit; everything
+// downstream (captions, generation windows, white-model shot lengths)
+// re-arranges without anyone dragging a timeline.
+// ---------------------------------------------------------------------------
+
+/** One lexical unit of a block: an English word, a CJK character, or
+ *  punctuation. Dual Text (`<BCC | B C C>`) collapses to one token whose
+ *  display and spoken surfaces differ (N:M grouping is the P2b refinement). */
+export interface ScriptToken {
+  /** `t_<blockId>_<index>` — stable within one tokenization. */
+  id: string;
+  blockId: string;
+  /** 0-based index within the block. */
+  index: number;
+  /** What the caption shows (Dual Text left side). */
+  text: string;
+  /** What is spoken (Dual Text right side) — owns duration estimation. */
+  spokenText: string;
+  kind: 'word' | 'char' | 'punct';
+  /** True when source whitespace precedes this token (display spacing is
+   *  preserved exactly — "3 D" and "3D" stay distinct). */
+  spaceBefore: boolean;
+  /** Character span in the RAW block content (including the beat timestamp
+   *  prefix and Dual Text syntax) — the editor's textarea offsets, which is
+   *  what selection → mark and strip → caret jumps map through. */
+  rawStart: number;
+  rawEnd: number;
+}
+
+/** One word-level time overlay entry (P2b) — author-written (manual 校时) or
+ *  measured from audio (aligned). Block-local seconds. */
+export interface TimedToken {
+  /** ScriptToken.index within the same block. */
+  index: number;
+  start: number;
+  end: number;
+  source: 'manual' | 'aligned';
+  /** 0..1 measurement confidence (aligned only); low values get flagged for
+   *  manual review. */
+  confidence?: number;
+}
+
+/** Word-level timing overlay for one block. When present the projection uses
+ *  these windows instead of estimates — manual entries are authored writes
+ *  and participate in reflow like any other author value. */
+export interface BlockTiming {
+  tokens: TimedToken[];
+  /** Measured block duration (audio length); the block's envelope input. */
+  durationSec: number;
+  source: 'manual' | 'aligned';
+  /** Where the measurement came from (generation task / upload name). */
+  takeRef?: string;
+}
+
+/** A named bound in the token stream. `gap` is a position BETWEEN tokens
+ *  (0 = before the first, tokenCount = after the last) — the same gap can
+ *  hold two identities (`snap`), mirroring Hypit's left/right absorption so
+ *  coincident cuts keep distinct author identity. */
+export interface MarkRef {
+  blockId: string;
+  gap: number;
+  snap: 'left' | 'right';
+}
+
+/** Named semantic RANGE (a problem, a joke beat, a reveal). May cross other
+ *  selections and span block boundaries — it is not an XML tag. */
+export interface ScriptSelection {
+  id: string;
+  start: MarkRef;
+  end: MarkRef;
+}
+
+/** Named semantic POINT (a punchline lands, a card appears). */
+export interface ScriptMoment {
+  id: string;
+  at: MarkRef;
+}
+
+/** Marks live on the screenplay (not in block text) so the plain editor stays
+ *  plain and prompts never carry marker syntax. Gaps clamp on re-tokenize. */
+export interface ScriptMarks {
+  selections: ScriptSelection[];
+  moments: ScriptMoment[];
 }
 
 export interface ScriptTemplate {
@@ -259,6 +354,11 @@ export interface AppSettings {
   minimaxApiKey: string;
   /** MiniMax endpoint: CN 'https://api.minimaxi.com' | intl 'https://api.minimax.io'. */
   minimaxBaseUrl: string;
+  /** Word-level ASR (P2b alignment): OpenAI-compatible /audio/transcriptions
+   *  endpoint root (Groq, OpenAI, whisper.cpp server…). Empty key = the Timing
+   *  tab falls back to JSON import + manual 校时 (no service needed). */
+  asrApiKey: string;
+  asrBaseUrl: string;
   /** Video generation backend: 'api' = MiniMax cloud (pay per 刊例), 'comfy' =
    *  self-hosted ComfyUI H3 workflows (GPU box, near-zero marginal cost). */
   videoBackend: 'api' | 'comfy';
@@ -421,6 +521,11 @@ export interface H3Task {
   segmentCount?: number;
   /** Which video backend owns this task — decides the poll implementation. */
   backend?: 'api' | 'comfy';
+  /** P3 results address: which frozen-plan run this output belongs to and
+   *  its logical output name (e.g. "video.b1") — completion bytes land at
+   *  `(runId, outputName)` in the results repository. */
+  runId?: string;
+  outputName?: string;
   /** Identifies tasks that belong to one planned generation chain (the shot's
    *  blockId + plan fingerprint). Chains poll independently; when a segment
    *  succeeds its URL is offered for manual concat — H3 does not deliver

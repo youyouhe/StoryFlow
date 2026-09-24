@@ -10,6 +10,7 @@ import { ReferenceBindingPanel, REF_BINDING_LABELS } from './ReferenceBindingPan
 import { estimateH3Cost } from '../services/minimaxService';
 import type { GrayboxPlan } from '../utils/grayboxPlan';
 import { planSegments, defaultTargetSeconds, GenSegment } from '../utils/grayboxPlan';
+import type { PlanDemand, PlanConfirmResult } from '../utils/plan/freeze';
 
 /**
  * Graybox3DView — renders a GrayboxData payload as an interactive 3D previs.
@@ -103,7 +104,14 @@ interface Graybox3DViewProps {
     segmentIndex?: number;
     segmentCount?: number;
     chainId?: string;
+    runId?: string;
+    outputName?: string;
   }) => Promise<{ ok: boolean; taskId?: string; error?: string }>;
+  /** P3 frozen-plan gate: preview/confirm before any paid request. When
+   *  absent the legacy window.confirm runs (component reuse fallback). */
+  onConfirmPlan?: (demands: PlanDemand[]) => Promise<PlanConfirmResult | null>;
+  /** Which backend will serve the request — drives the plan's pricing. */
+  videoBackend?: 'api' | 'comfy';
   /** H3 task records (all blocks; filtered to this blockId for display). */
   h3Tasks?: H3Task[];
   /** True when a MiniMax API key is configured. */
@@ -854,7 +862,7 @@ const UI_LABELS = {
   },
 } as const;
 
-export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, beatCastNames, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, onGrayboxChange, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en', scriptId }) => {
+export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh' }> = ({ graybox, theme, sceneGraybox, beat, sceneHeading, sceneShotTypes, beatCastNames, refImages = [], refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage, onOpenAssetLibrary, onGrayboxChange, blockId, onSubmitH3, h3Tasks = [], h3Ready, uiLang = 'en', scriptId, onConfirmPlan, videoBackend }) => {
   const L = UI_LABELS[uiLang];
 
   // shot playback state
@@ -1022,6 +1030,8 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
     segmentIndex?: number;
     segmentCount?: number;
     chainId?: string;
+    runId?: string;
+    outputName?: string;
   }) => {
     if (exporting || !isShot || !graybox.camera || !wrapRef.current) return;
     if (!exportSupported) return;
@@ -1099,7 +1109,7 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
   }, [exporting, isShot, graybox, exportSupported, healthBlocksExport, onSubmitH3]);
 
   // ---- H3 submission: plan target → confirm cost → record white model → submit ----
-  const startH3Submit = useCallback(() => {
+  const startH3Submit = useCallback(async () => {
     if (!onSubmitH3 || !isShot || !graybox.camera || !blockId || !plan) return;
     if (!h3Ready) { setH3Error(L.h3NeedKey); return; }
     const cam = graybox.camera;
@@ -1133,12 +1143,39 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
       resolution: h3Resolution,
     });
     const imageCount = refImageUrls.length;
-    if (!window.confirm(L.h3Confirm(cost, durSec, totalOutput, imageCount, plan))) return;
+    // ---- P3 frozen-plan gate (fallback: legacy confirm when host omits one) ----
+    const chainPlan = plan.segments.length > 1;
+    const demands: PlanDemand[] = plan.segments.map(seg => ({
+      name: chainPlan ? `video.${blockId}.${seg.index}` : `video.${blockId}`,
+      kind: 'video' as const,
+      blockId: blockId!,
+      service: videoBackend === 'comfy' ? 'comfy:r2v' : 'minimax-h3',
+      params: {
+        resolution: h3Resolution,
+        outputSeconds: seg.outputSeconds,
+        ...(chainPlan ? { part: seg.index, parts: plan.segments.length } : {}),
+      },
+      outputSeconds: seg.outputSeconds,
+      videoSeconds: durSec,
+      imageCount,
+      resolution: h3Resolution,
+    }));
+    let confirmed: PlanConfirmResult;
+    if (onConfirmPlan) {
+      const res = await onConfirmPlan(demands);
+      if (!res) return; // 未确认不提交
+      confirmed = res;
+    } else {
+      if (!window.confirm(L.h3Confirm(cost, durSec, totalOutput, imageCount, plan))) return;
+      confirmed = { runId: '', runName: 'adhoc', satisfied: {} };
+    }
 
     setH3Error(null);
     const isChain = plan.segments.length > 1;
     const chainId = isChain ? `${blockId}::${plan.targetSeconds.toFixed(1)}::${Date.now()}` : undefined;
     for (const seg of plan.segments) {
+      const outputName = isChain ? `video.${blockId}.${seg.index}` : `video.${blockId}`;
+      if (confirmed.satisfied[outputName]) continue; // 由候选满足——不发请求
       startExport({
         blockId,
         blockContent: beat?.content ?? '',
@@ -1147,10 +1184,12 @@ export const Graybox3DView: React.FC<Graybox3DViewProps & { uiLang?: 'en' | 'zh'
         outputSeconds: seg.outputSeconds,
         referenceImageUrls: refImageUrls,
         targetSeconds: plan.targetSeconds,
+        runId: confirmed.runId,
+        outputName,
         ...(isChain ? { segmentIndex: seg.index, segmentCount: plan.segments.length, chainId } : {}),
       });
     }
-  }, [onSubmitH3, onGrayboxChange, isShot, graybox, blockId, h3Ready, castChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor, plan]);
+  }, [onSubmitH3, onConfirmPlan, videoBackend, onGrayboxChange, isShot, graybox, blockId, h3Ready, castChars, refImages, effBindings, h3Resolution, beat, L, startExport, promptInputFor, plan]);
 
   const promptText = useMemo(() => {
     if (!promptTarget || !graybox.camera) return '';

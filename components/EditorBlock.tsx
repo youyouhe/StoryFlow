@@ -1,8 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { ScriptBlock, BlockType, Theme } from '../types';
 import { clsx } from 'clsx';
-import { Image as ImageIcon, Boxes } from 'lucide-react';
+import { Image as ImageIcon, Boxes, Square, Timer } from 'lucide-react';
 import { adaptColorForTheme } from '../utils/color';
+import { tokenizeBlock } from '../utils/timing/tokenize';
+import { gapsFromRange } from '../utils/timing/offsets';
 
 interface EditorBlockProps {
   block: ScriptBlock;
@@ -31,6 +33,18 @@ interface EditorBlockProps {
   grayboxOpenLabel?: string;
   onOpenGraybox?: (id: string) => void;
   isGrayboxPanelOpen?: boolean;
+  /** P2b mark gesture: select text → create a Selection (range) or Moment
+   *  (point at the selection start). Gaps are whole-token (marks never split
+   *  a word). */
+  onCreateMark?: (kind: 'selection' | 'moment', name: string, blockId: string, startGap: number, endGap: number) => void;
+  markLabels?: { selection: string; moment: string; name: string };
+  /** P2b navigation: raw character range to select (from a TimingStrip word
+   *  click). Re-assigned on every jump. */
+  highlightRange?: { start: number; end: number } | null;
+  /** P2b timing chip — opens the TimingStrip tab (word windows, 校时, marks). */
+  timingLabel?: string;
+  onOpenTiming?: (id: string) => void;
+  isTimingPanelOpen?: boolean;
 }
 
 // Map styles for screenplay formatting with distinct light/dark themes
@@ -53,11 +67,11 @@ const getTypeStyles = (type: BlockType): string => {
   }
 };
 
-export const EditorBlock: React.FC<EditorBlockProps> = ({ 
-  block, 
-  isSelected, 
-  onChange, 
-  onKeyDown, 
+export const EditorBlock: React.FC<EditorBlockProps> = ({
+  block,
+  isSelected,
+  onChange,
+  onKeyDown,
   onFocus,
   onChangeType,
   showControls,
@@ -73,9 +87,26 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
   grayboxLabel = 'Graybox',
   grayboxOpenLabel = 'View',
   onOpenGraybox,
-  isGrayboxPanelOpen = false
+  isGrayboxPanelOpen = false,
+  onCreateMark,
+  markLabels,
+  highlightRange = null,
+  timingLabel = 'Timing',
+  onOpenTiming,
+  isTimingPanelOpen = false
 }: EditorBlockProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tokens = useMemo(() => tokenizeBlock(block), [block.id, block.content]);
+  const [markBar, setMarkBar] = useState<{ startGap: number; endGap: number } | null>(null);
+  const [markName, setMarkName] = useState('');
+
+  // Strip → editor jump: select the clicked word's raw range.
+  useEffect(() => {
+    if (!highlightRange || !textareaRef.current) return;
+    const el = textareaRef.current;
+    el.focus();
+    el.setSelectionRange(highlightRange.start, highlightRange.end);
+  }, [highlightRange?.start, highlightRange?.end]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -104,6 +135,24 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
     onKeyDown(e, block.id, e.currentTarget.selectionStart);
   };
 
+  // P2b mark gesture: a non-empty text selection offers Selection/Moment
+  // creation (whole-token gaps). A collapsed caret dismisses the bar.
+  const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    if (readOnly || !onCreateMark) return;
+    const el = e.currentTarget;
+    const gaps = gapsFromRange(tokens, el.selectionStart, el.selectionEnd);
+    setMarkBar(gaps);
+    if (!gaps) setMarkName('');
+  };
+
+  const emitMark = (kind: 'selection' | 'moment'): void => {
+    if (!markBar || !onCreateMark) return;
+    const name = markName.trim() || `${kind === 'selection' ? 'sel' : 'mom'}-${Math.floor(Math.random() * 900 + 100)}`;
+    onCreateMark(kind, name, block.id, markBar.startGap, markBar.endGap);
+    setMarkBar(null);
+    setMarkName('');
+  };
+
   // Build style object for custom colors.
   // The user picks colors tuned for light mode; in dark mode we auto-derive a
   // legible variant (hue preserved, lightness/saturation adjusted) so a single
@@ -113,6 +162,53 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
 
   return (
     <div className="relative group block-container rounded px-2 -mx-2">
+      {/* P2b timing chip — opens the word-level TimingStrip. Teal accent so
+          the three payload chips (indigo prompt / emerald graybox / teal
+          timing) stay distinct when one block carries all of them. */}
+      {tokens.length > 0 && onOpenTiming && (
+        <button
+          type="button"
+          onClick={() => onOpenTiming(block.id)}
+          className={clsx(
+            "mt-2 ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border transition-colors",
+            isTimingPanelOpen
+              ? "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-800"
+              : "bg-teal-50/60 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 border-teal-200/60 dark:border-teal-900/40 hover:bg-teal-100/60 dark:hover:bg-teal-900/20"
+          )}
+        >
+          <Timer className="w-3 h-3" />
+          <span>{timingLabel}</span>
+        </button>
+      )}
+
+      {/* P2b mark bar — appears on text selection (create Selection/Moment). */}
+      {markBar && !readOnly && (
+        <div className="absolute -top-9 right-2 z-20 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 shadow-md">
+          <input
+            type="text"
+            value={markName}
+            onChange={e => setMarkName(e.target.value)}
+            placeholder={markLabels?.name ?? 'name'}
+            className="w-24 px-1.5 py-0.5 text-[11px] bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded"
+          />
+          <button
+            type="button"
+            onClick={() => emitMark('selection')}
+            className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 text-white hover:bg-indigo-500 inline-flex items-center gap-1"
+          >
+            <Square className="w-3 h-3" />
+            {markLabels?.selection ?? 'Selection'}
+          </button>
+          <button
+            type="button"
+            onClick={() => emitMark('moment')}
+            className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white hover:bg-amber-400"
+          >
+            {markLabels?.moment ?? 'Moment'}
+          </button>
+        </div>
+      )}
+
       {/* Type Indicator / Quick Switcher (Visible on hover or focus) - Hide in Read Only */}
       {!readOnly && (
         <div className={clsx(
@@ -128,6 +224,7 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
         value={block.content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onSelect={handleSelect}
         onFocus={() => !readOnly && onFocus(block.id)}
         readOnly={readOnly}
         placeholder={isSelected && !readOnly ? placeholders[block.type] : ''}

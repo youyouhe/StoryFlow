@@ -1,3 +1,5 @@
+import { redactSecrets } from './credentials';
+
 /**
  * Ship operational errors/warnings to the dev-server debug endpoint.
  * Fire-and-forget — never blocks the caller. In production the endpoint
@@ -10,14 +12,15 @@
  */
 export function shipLog(source: string, level: 'info' | 'warn' | 'error', message: string, detail?: unknown): void {
   try {
+    // P4: diagnostics never carry secrets.
     fetch('/api/debug-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         source,
         level,
-        message,
-        detail: detail ? String(detail).slice(0, 500) : undefined,
+        message: redactSecrets(message),
+        detail: detail ? redactSecrets(String(detail).slice(0, 500)) : undefined,
         ts: Date.now(),
       }),
     }).catch(() => {});
