@@ -14,8 +14,10 @@ import type {
   SceneRef, ExtraStyleRef, ActionRef, SpatialLayout, SpatialObject, SpatialCharacter,
   TtsClip, BgmClip, SfxClip, Transition, ShotStatus, GenerationParams, AssetProvenance,
 } from '../types';
+import type { WordTimingCorrection } from '../audio/types';
 import type { IRVersion } from '../types';
 import { splitAnchorWords } from '../shared';
+import type { PriceBooks, StoryFlowAnnotations } from '../annotations';
 import { readXml, type XmlNode } from './xmlReader';
 
 const MARK_RE = /@\{([^}]*)\}/g;
@@ -90,7 +92,13 @@ const parseCamera = (node: XmlNode): CameraMove => {
   return cam;
 };
 
-export const parseStoryFlowXML = (xml: string): StoryFlowIR => {
+interface ParsedDocument {
+  ir: StoryFlowIR;
+  annotations?: StoryFlowAnnotations;
+}
+
+/** P10:全量解析(IR + 可选创作注释节)。 */
+export const parseStoryFlowDocument = (xml: string): ParsedDocument => {
   const root = readXml(xml);
   if (root.tag !== 'storyflow') throw new Error(`StoryFlowXML: 根元素应为 <storyflow>,实为 <${root.tag}>`);
 
@@ -449,15 +457,51 @@ export const parseStoryFlowXML = (xml: string): StoryFlowIR => {
   const title = section('film')?.attrs['title'];
   if (!title) throw new Error('StoryFlowXML: <film> 缺 title');
 
+  // ---- annotations(P10 可选创作注释节) ------------------------------------
+  const annNode = section('annotations');
+  let annotations: StoryFlowAnnotations | undefined;
+  if (annNode) {
+    const timing: Record<string, WordTimingCorrection[]> = {};
+    for (const t of annNode.children.filter(c => c.tag === 'timing')) {
+      const clipId = t.attrs['clip-id'];
+      if (!clipId) throw new Error('StoryFlowXML: <timing> 缺 clip-id');
+      timing[clipId] = t.children.filter(c => c.tag === 'fix').map(f => ({
+        tokenIndex: num(f.attrs['token-index'], 'token-index'),
+        startMs: num(f.attrs['start-ms'], 'start-ms'),
+        endMs: num(f.attrs['end-ms'], 'end-ms'),
+      }));
+    }
+    const pbNode = annNode.children.find(c => c.tag === 'price-books');
+    let priceBooks: PriceBooks | undefined;
+    if (pbNode) {
+      const img = pbNode.children.find(c => c.tag === 'image');
+      const tts = pbNode.children.find(c => c.tag === 'tts');
+      const bgm = pbNode.children.find(c => c.tag === 'bgm');
+      priceBooks = {
+        ...(img ? { image: { perImageFen: num(img.attrs['per-image-fen'], 'per-image-fen') } } : {}),
+        ...(tts ? { tts: { perCharFen: num(tts.attrs['per-char-fen'], 'per-char-fen') } } : {}),
+        ...(bgm ? { bgm: { perRequestFen: num(bgm.attrs['per-request-fen'], 'per-request-fen') } } : {}),
+      };
+      if (!Object.keys(priceBooks).length) priceBooks = undefined;
+    }
+    annotations = { version: '0.1.0', timing, ...(priceBooks ? { priceBooks } : {}) };
+  }
+
   return {
-    version,
-    mode,
-    title,
-    style,
-    refs: parseRegistry(),
-    shots,
-    audio,
-    transitions,
-    spatial: parseSpatial(),
+    ir: {
+      version,
+      mode,
+      title,
+      style,
+      refs: parseRegistry(),
+      shots,
+      audio,
+      transitions,
+      spatial: parseSpatial(),
+    },
+    ...(annotations ? { annotations } : {}),
   };
 };
+
+/** P7 签名保持:只取 IR(注释经 parseStoryFlowDocument 取)。 */
+export const parseStoryFlowXML = (xml: string): StoryFlowIR => parseStoryFlowDocument(xml).ir;

@@ -21,6 +21,7 @@
 import type { StoryFlowIR, SfxClip, TtsClip, AssetProvenance } from '../types';
 import type { StoryFlowXmlOptions, StoryFlowXmlSource } from './types';
 import { STORYFLOW_XML_VERSION } from './types';
+import type { StoryFlowAnnotations } from '../annotations';
 import { anchorTextOf, splitAnchorWords } from '../shared';
 
 const escapeXml = (s: string): string =>
@@ -95,7 +96,7 @@ export const renderStoryFlowXML = (
   }
 
   // ---- root + <style> -------------------------------------------------------
-  push(0, '<?storyflow using="storyflow-ir@0.2"?>');
+  push(0, '<?storyflow using="storyflow-ir@0.3"?>');
   push(0, `<storyflow version="${STORYFLOW_XML_VERSION}" mode="${ir.mode}" ir-version="${ir.version}">`);
   push(1, `<style name="${escapeXml(ir.style.name)}" art-style="${escapeXml(ir.style.artStyle)}" scene-preset="${escapeXml(ir.style.scenePreset)}" prompt-prefix="${escapeXml(ir.style.promptPrefix)}"/>`);
 
@@ -318,6 +319,29 @@ export const renderStoryFlowXML = (
     push(2, `<clip ref="{${scriptId}.selection.${selId(shot.id)}}"/>`);
   }
   push(1, '</film>');
+
+  // ---- <annotations>:创作注释随稿携带(P10,可选) -------------------------
+  const ann = opts.annotations;
+  if (ann) {
+    push(1, '<annotations>');
+    for (const [clipId, fixes] of Object.entries(ann.timing)) {
+      if (!fixes.length) continue;
+      push(2, `<timing clip-id="${escapeXml(clipId)}">`);
+      for (const f of fixes) {
+        push(3, `<fix token-index="${f.tokenIndex}" start-ms="${f.startMs}" end-ms="${f.endMs}"/>`);
+      }
+      push(2, '</timing>');
+    }
+    const pb = ann.priceBooks;
+    if (pb) {
+      push(2, '<price-books>');
+      if (pb.image) push(3, `<image per-image-fen="${pb.image.perImageFen}"/>`);
+      if (pb.tts) push(3, `<tts per-char-fen="${pb.tts.perCharFen}"/>`);
+      if (pb.bgm) push(3, `<bgm per-request-fen="${pb.bgm.perRequestFen}"/>`);
+      push(2, '</price-books>');
+    }
+    push(1, '</annotations>');
+  }
   push(0, '</storyflow>');
 
   return lines.map(l => (pretty ? '  '.repeat(l.indent) + l.text : l.text)).join('\n');

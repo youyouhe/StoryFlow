@@ -1,5 +1,5 @@
-<?storyflow using="storyflow-ir@0.2"?>
-<storyflow version="0.2.0" mode="pro" ir-version="0.1.0">
+<?storyflow using="storyflow-ir@0.3"?>
+<storyflow version="0.3.0" mode="pro" ir-version="0.1.0">
   <style name="银盐晨光" art-style="银盐胶片摄影质感:细腻颗粒、柔和晨光、暖金色调、柯达 Portra 胶片色,轻微暗角与高光光晕" scene-preset="1990 年代中国南方小城的国营照相馆,清晨,木质橱窗,尘埃在光柱中漂浮,旧挂钟与褪色样片墙" prompt-prefix="silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, "/>
   <script id="story">
     @{shot-001}

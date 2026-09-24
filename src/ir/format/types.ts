@@ -12,12 +12,14 @@
  * (成片蓝图声明的角色不变——与命令式 ffmpeg 相对)。
  */
 
-/** 0.2.0(P7):双向互换增补(style/refs/spatial/camera/params/帧元数据)。 */
-export const STORYFLOW_XML_VERSION = '0.2.0';
+/** 0.3.0(P10):`<annotations>` 可选节(校时/费率随稿携带;v0.2 照常解析)。 */
+export const STORYFLOW_XML_VERSION = '0.3.0';
 export type StoryFlowXmlVersion = typeof STORYFLOW_XML_VERSION;
 
+import type { StoryFlowAnnotations } from '../annotations';
+
 /** StoryFlowXML 源文本(prose-first XML;处理指令
- *  `<?storyflow using="storyflow-ir@0.2"?>` 起头)。 */
+ *  `<?storyflow using="storyflow-ir@0.3"?>` 起头)。 */
 export type StoryFlowXmlSource = string;
 
 export interface StoryFlowXmlOptions {
@@ -25,4 +27,6 @@ export interface StoryFlowXmlOptions {
   pretty?: boolean;
   /** `<script>` 的 id(缺省 'story',锚前缀 `story.*` 据此生成)。 */
   scriptId?: string;
+  /** P10 创作注释(校时/费率)随 XML 携带;缺省不发射。 */
+  annotations?: StoryFlowAnnotations;
 }
