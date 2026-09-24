@@ -12,6 +12,7 @@ import { clearTokenTiming, upsertTokenTiming, applyAsrToBlock } from '../utils/t
 import { AlignmentError, parseAsrResult, transcribeAudio, type AsrResult } from '../services/alignment';
 import type { PlanDemand, PlanConfirmResult } from '../utils/plan/freeze';
 import { FAL_SIZE_FOR_ASPECT } from '../services/falService';
+import type { ServiceHub } from '../services/providers';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs, normIdentity } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { copyToClipboard } from '../utils/clipboard';
@@ -36,6 +37,8 @@ interface PromptPanelProps {
   onRecordOutput?: (runId: string, name: string, blob: Blob, meta?: {
     blockId?: string; service?: string; prompt?: string; params?: Record<string, string | number | boolean>;
   }) => Promise<unknown>;
+  /** P4 service layer: capability → bound endpoint (Model/Provider/Endpoint). */
+  services: ServiceHub;
   screenplay: Screenplay;
   theme: 'light' | 'dark';
   lang: Language;
@@ -91,6 +94,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   onConfirmPlan,
   onReadOutput,
   onRecordOutput,
+  services,
   setPromptPanelBlockId,
   screenplay,
   theme,
@@ -327,14 +331,14 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
     try {
       const lang = screenplay.metadata.scriptLanguage === 'zh' ? 'zh'
         : screenplay.metadata.scriptLanguage === 'en' ? 'en' : undefined;
-      const result = await transcribeAudio(
-        file,
-        { baseUrl: appSettings.asrBaseUrl, apiKey: appSettings.asrApiKey },
-        lang,
-      );
+      // P4: the bound asr endpoint owns the transport
+      const endpoint = services.resolve('asr.transcribe');
+      const refusal = endpoint.provider.supports('asr.transcribe', file);
+      if ('reason' in refusal) throw new AlignmentError(refusal.reason);
+      const result = await endpoint.provider.transcribe!(services.context(endpoint), file, { language: lang });
       applyAsrResult(result, file.name);
     } catch (e) {
-      setAlignError(e instanceof AlignmentError ? e.message : String(e));
+      setAlignError(e instanceof AlignmentError || e instanceof Error ? e.message : String(e));
     } finally {
       setAlignBusy(false);
     }
@@ -699,17 +703,26 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     }
                     imgs = [{ blob: reused.blob }];
                   } else {
-                    imgs = await generateImages(
-                      { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
-                        ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
-                      panelBlock.imagePrompt!,
-                      { n: 1, aspectRatio: '16:9',
-                        subjectReference: subjectRef,
-                        references: {
-                          ...(charRefs.length ? { characters: charRefs } : {}),
-                          ...(panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
-                        } },
-                    );
+                    // P4: the bound image endpoint owns the transport
+                    const endpoint = services.resolve('image.generate');
+                    const imageReq = {
+                      prompt: panelBlock.imagePrompt!,
+                      n: 1,
+                      aspectRatio: '16:9',
+                      size: imageDemand.imageSize,
+                      quality: imageDemand.imageQuality,
+                      subjectReference: subjectRef,
+                      references: {
+                        ...(charRefs.length ? { characters: charRefs } : {}),
+                        ...(panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
+                      },
+                    };
+                    const refusal = endpoint.provider.supports('image.generate', imageReq);
+                    if ('reason' in refusal) {
+                      setImageGenError(refusal.reason);
+                      return;
+                    }
+                    imgs = await endpoint.provider.generateImage!(services.context(endpoint), imageReq);
                     if (confirm?.runId) {
                       void onRecordOutput?.(confirm.runId, imageDemand.name, imgs[0].blob, {
                         blockId: panelBlock.id, service: imageDemand.service,

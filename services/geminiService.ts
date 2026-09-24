@@ -1,4 +1,5 @@
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { defaultProfile, defaultRegistry, createServiceHub } from "./providers";
+import { getSessionCredential } from "./credentials";
 import { logAiCall, classifyError } from "./aiLog";
 import { buildSequenceContext } from '../utils/sequence';
 import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion, CharacterWardrobe, ScriptSequence } from "../types";
@@ -65,110 +66,51 @@ const callAIProvider = async (
     return text;
   };
 
-  // 1. DeepSeek Provider
-  if (settings.provider === 'deepseek') {
-    if (!settings.deepseekApiKey) throw new Error("DEEPSEEK_KEY_MISSING");
-    const model = settings.deepseekModel || 'deepseek-v4-flash';
-
-    let lastErr: unknown = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${settings.deepseekApiKey}`
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: messages.system },
-              { role: "user", content: messages.user }
-            ],
-            stream: false,
-            ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
-          }),
-          signal: AbortSignal.timeout(180_000),
-        });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          const message = err.error?.message || `DeepSeek API Error: ${response.statusText}`;
-          if (response.status >= 500 && attempt === 1) {
-            lastErr = new Error(message);
-            await new Promise(r => setTimeout(r, 1500));
-            continue;
-          }
-          // Log the attempt, then THROW: silent empty-string returns made hard
-          // failures (余额不足, invalid key, content policy) indistinguishable
-          // from success downstream — the UI showed a generic retry message
-          // while the real reason sat in a local log.
-          finish(model, 'error', '', { errorType: `http:${response.status}`, error: message, attempt });
-          throw new Error(message);
-        }
-
-        const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || '';
-        return finish(model, 'ok', text, { attempt });
-      } catch (e) {
-        const { errorType, message } = classifyError(e);
-        const transient = errorType === 'timeout' || errorType === 'network';
-        if (attempt === 1 && transient) {
-          lastErr = e;
-          await new Promise(r => setTimeout(r, 1500));
-          continue;
-        }
-        console.error("DeepSeek API Error:", e);
-  shipLog('gemini', 'error', "DeepSeek API Error:", e);
-        finish(model, errorType === 'timeout' ? 'timeout' : 'error', '',
-          { errorType, error: message, attempt });
-        throw new Error(message);
-      }
-    }
-    const { errorType, message } = classifyError(lastErr);
-    finish(model, 'error', '', { errorType, error: message, attempt: 2 });
-    throw new Error(message);
-  }
-
-  // 2. Google Gemini Provider (Default)
-  const key = settings.geminiApiKey || process.env.API_KEY;
-  if (!key) throw new Error("GEMINI_KEY_MISSING");
-  const model = settings.geminiModel || 'gemini-3.7-flash';
-  const ai = new GoogleGenAI({ apiKey: key });
-
-  const combinedPrompt = `${messages.system}\n\n${messages.user}`;
-
-  const userLevel = settings.geminiThinkingLevel;
-  const levelMap: Record<'low' | 'medium' | 'high', ThinkingLevel> = {
-    low: ThinkingLevel.LOW,
-    medium: ThinkingLevel.MEDIUM,
-    high: ThinkingLevel.HIGH,
+  // P4: the bound llm-chat endpoint owns the transport (gemini / deepseek /
+  // any future provider). This wrapper keeps timing, logging and the
+  // transient-retry policy (timeout/network/5xx, providers marked
+  // transientRetry — DeepSeek's continuation API is intermittently slow).
+  const hub = createServiceHub(defaultRegistry(), defaultProfile(settings), getSessionCredential);
+  const resolved = hub.resolve('llm-chat');
+  const request = {
+    system: messages.system,
+    user: messages.user,
+    model: settings.provider === 'deepseek' ? settings.deepseekModel : settings.geminiModel,
+    jsonMode,
+    thinkingLevel: settings.geminiThinkingLevel,
   };
-  const thinkingConfig = userLevel === 'none'
-    ? { thinkingBudget: 0 }
-    : { thinkingLevel: levelMap[userLevel] };
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: combinedPrompt,
-      config: {
-        temperature: 0.9,
-        thinkingConfig,
-        ...(jsonMode ? { responseMimeType: 'application/json' as const } : {}),
+  const refusal = resolved.provider.supports('llm-chat', request);
+  if ('reason' in refusal) throw new Error(refusal.reason); // refuse, never clamp
+  const model = request.model
+    || (resolved.provider.id === 'deepseek' ? 'deepseek-v4-flash' : 'gemini-3.7-flash');
+  const ctx = hub.context(resolved);
+  const attempts = resolved.provider.transientRetry ? 2 : 1;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const text = await resolved.provider.chat!(ctx, request);
+      return finish(model, 'ok', text, { attempt });
+    } catch (e) {
+      const { errorType, message } = classifyError(e);
+      const transient = errorType === 'timeout' || errorType === 'network' || /^http:5/.test(errorType);
+      if (attempt < attempts && transient) {
+        lastErr = e;
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
       }
-    });
-    return finish(model, 'ok', response.text || '');
-  } catch (error) {
-    const { errorType, message } = classifyError(error);
-    console.error("Gemini Generate Error:", error);
-  shipLog('gemini', 'error', "Gemini Generate Error:", error);
-    finish(model, 'error', '', { errorType, error: message });
-    // Same contract as the DeepSeek branch: hard failures THROW the real
-    // message so the UI shows 余额不足/invalid key instead of a generic retry.
-    throw new Error(message);
+      console.error(`${resolved.provider.id} API Error:`, e);
+      shipLog('gemini', 'error', `${resolved.provider.id} API Error:`, e);
+      finish(model, errorType === 'timeout' ? 'timeout' : 'error', '', { errorType, error: message, attempt });
+      // Hard failures THROW the real message so the UI shows 余额不足/invalid
+      // key instead of a generic retry.
+      throw new Error(message);
+    }
   }
+  const { errorType, message } = classifyError(lastErr);
+  finish(model, 'error', '', { errorType, error: message, attempt: attempts });
+  throw new Error(message);
 };
+
 
 
 /**

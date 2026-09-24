@@ -45,6 +45,8 @@ import {
   type StyleFileData,
 } from './files';
 import { buildProjectScaffold, buildStyleFileData } from './migrate';
+import { parseRuntimeProfile, serializeRuntimeProfile } from '../providers';
+import type { RuntimeProfile } from '../providers';
 
 const PROJECT_HANDLE_KEY = 'projectDir';
 
@@ -143,6 +145,17 @@ export const saveRunFile = async (dir: FileSystemDirectoryHandle, run: RunFileDa
   const runs = await runsDir(dir, true);
   await writeText(runs, runFileName(run.name), serializeRunFile(run));
 };
+
+export const RUNTIME_FILE_NAME = 'storyflow.runtime.json';
+
+/** P4: the project's service selection (endpoints + credential refs + bindings). */
+export const loadRuntimeProfile = async (dir: FileSystemDirectoryHandle): Promise<RuntimeProfile | null> => {
+  const text = await readText(dir, RUNTIME_FILE_NAME);
+  return text === null ? null : parseRuntimeProfile(text);
+};
+
+export const saveRuntimeProfile = (dir: FileSystemDirectoryHandle, profile: RuntimeProfile): Promise<void> =>
+  writeText(dir, RUNTIME_FILE_NAME, serializeRuntimeProfile(profile));
 
 export interface OpenedProject {
   screenplay: Screenplay;

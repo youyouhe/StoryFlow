@@ -6,6 +6,8 @@
  * instead of anecdotal. Exposed to agents via storyflow_get_ai_log.
  */
 
+import { redactSecrets } from './credentials';
+
 const KEY = 'ai_perf_log';
 const CAP = 300;
 
@@ -25,19 +27,20 @@ export interface AiLogEntry {
 }
 
 export function logAiCall(e: AiLogEntry): void {
+  const entry: AiLogEntry = e.error ? { ...e, error: redactSecrets(e.error) } : e;
   try {
     const raw = localStorage.getItem(KEY);
     const list: AiLogEntry[] = raw ? JSON.parse(raw) : [];
-    list.push(e);
+    list.push(entry);
     if (list.length > CAP) list.splice(0, list.length - CAP);
     localStorage.setItem(KEY, JSON.stringify(list));
   } catch { /* logging must never break the call path */ }
-  const flag = e.outcome === 'ok' ? '✓' : '✗';
+  const flag = entry.outcome === 'ok' ? '✓' : '✗';
   console.debug(
-    `[ai] ${flag} ${e.op} ${e.provider}/${e.model} ${e.durationMs}ms` +
-    `${e.attempt && e.attempt > 1 ? ` attempt${e.attempt}` : ''}` +
-    `${e.promptChars ? ` in=${e.promptChars}` : ''}${e.responseChars ? ` out=${e.responseChars}` : ''}` +
-    `${e.errorType ? ` (${e.errorType})` : ''}${e.error ? ` ${e.error.slice(0, 80)}` : ''}`,
+    `[ai] ${flag} ${entry.op} ${entry.provider}/${entry.model} ${entry.durationMs}ms` +
+    `${entry.attempt && entry.attempt > 1 ? ` attempt${entry.attempt}` : ''}` +
+    `${entry.promptChars ? ` in=${entry.promptChars}` : ''}${entry.responseChars ? ` out=${entry.responseChars}` : ''}` +
+    `${entry.errorType ? ` (${entry.errorType})` : ''}${entry.error ? ` ${entry.error.slice(0, 80)}` : ''}`,
   );
 
   // Dev server shipping: fire-and-forget POST to the Vite debug middleware.
@@ -46,7 +49,7 @@ export function logAiCall(e: AiLogEntry): void {
     fetch('/api/debug-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: 'ai-call', ...e }),
+      body: JSON.stringify({ source: 'ai-call', ...entry }),
     }).catch(() => {});
   } catch { /* never break the call path */ }
 }
@@ -78,7 +81,7 @@ export function classifyError(e: unknown): { errorType: string; message: string 
 /** Ship an uncaught error to the dev-server debug log. Fire-and-forget. */
 export function shipError(context: string, error: unknown): void {
   try {
-    const msg = String((error as Error)?.message ?? error);
+    const msg = redactSecrets(String((error as Error)?.message ?? error));
     fetch('/api/debug-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

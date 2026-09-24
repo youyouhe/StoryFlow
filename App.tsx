@@ -38,8 +38,16 @@ import {
 import {
   isProjectStoreAvailable, pickProjectDir, persistProjectDir, loadPersistedProjectDir,
   forgetProjectDir, openProject, loadStoryFile, saveStoryFile, saveStyleBundle,
-  listRunFiles, loadRunFile,
+  listRunFiles, loadRunFile, loadRuntimeProfile,
 } from './services/project/projectStore';
+import {
+  defaultRegistry, defaultProfile, createServiceHub, type ServiceHub, type VideoSubmitRequest,
+} from './services/providers';
+import type { RuntimeProfile } from './services/providers';
+import {
+  getSessionCredential, setSessionCredential, stripSecrets, clearSessionCredentials,
+  sessionCredentialSnapshot, exportCredentialFile, importCredentialFile, SLOT_FOR_FIELD,
+} from './services/credentials';
 import { PlanPreviewModal } from './components/PlanPreviewModal';
 import { freezePlan, type PlanDemand, type PlanConfirmResult, type SatisfiedBy } from './utils/plan/freeze';
 import { resultsStoreFor } from './services/project/results';
@@ -168,6 +176,12 @@ function App() {
         const saved = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
         if (saved) {
             const parsed = JSON.parse(saved);
+            // P4: legacy saves carried API keys — lift them into the session
+            // store (this session only); the next save strips them from disk.
+            for (const [field, slot] of Object.entries(SLOT_FOR_FIELD)) {
+              const v = (parsed as Record<string, string>)[field];
+              if (v) setSessionCredential(slot, v);
+            }
             return {
                 ...DEFAULT_APP_SETTINGS,
                 ...parsed,
@@ -350,6 +364,22 @@ function App() {
     setPromptPanelBlockId(id);
   }, []);
 
+  // ---- P4 service layer: Model/Provider/Endpoint via the runtime profile ----
+  const [runtimeProfile, setRuntimeProfile] = useState<RuntimeProfile | null>(null);
+  useEffect(() => {
+    if (!projectDir) { setRuntimeProfile(null); return; }
+    let cancelled = false;
+    void loadRuntimeProfile(projectDir)
+      .then(profile => { if (!cancelled) setRuntimeProfile(profile); })
+      .catch(() => { if (!cancelled) setRuntimeProfile(null); });
+    return () => { cancelled = true; };
+  }, [projectDir]);
+  const services: ServiceHub = useMemo(() => createServiceHub(
+    defaultRegistry(),
+    runtimeProfile ?? defaultProfile(appSettings),
+    getSessionCredential,
+  ), [runtimeProfile, appSettings]);
+
   // ---- P3 frozen-plan gate (docs/storyflow-adoption-plan.md) ----------------
   // Every paid request passes through one read-only preview: exact params,
   // price (or explicit unknown), and candidate-satisfied rows that will send
@@ -417,6 +447,57 @@ function App() {
     }
     pending.resolve({ runId, runName: planRunName ?? 'adhoc', satisfied });
   }, [pendingPlan, frozenPlan, planRunName, planRunData, projectDir]);
+
+  // ---- P4 credential library: session memory + explicit encrypted file ----
+  const handleExportCredentials = useCallback(async () => {
+    const slots: Record<string, string> = {};
+    for (const [field, slot] of Object.entries(SLOT_FOR_FIELD)) {
+      const v = (appSettings as unknown as Record<string, string>)[field];
+      if (v) slots[slot] = v;
+    }
+    for (const [slot, v] of Object.entries(sessionCredentialSnapshot())) if (!slots[slot]) slots[slot] = v;
+    const passphrase = window.prompt('设置凭证文件口令（用于加密导出）');
+    if (!passphrase) return;
+    const blob = await exportCredentialFile(slots, passphrase);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'storyflow-credentials.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [appSettings]);
+
+  const handleImportCredentials = useCallback(async (file: File) => {
+    const passphrase = window.prompt('输入凭证文件口令');
+    if (!passphrase) return;
+    try {
+      const slots = await importCredentialFile(file, passphrase);
+      const fieldForSlot: Record<string, string> = Object.fromEntries(
+        Object.entries(SLOT_FOR_FIELD).map(([field, slot]) => [slot, field]),
+      );
+      const patch: Record<string, string> = {};
+      for (const [slot, v] of Object.entries(slots)) {
+        const field = fieldForSlot[slot];
+        if (field && v) {
+          patch[field] = v;
+          setSessionCredential(slot, v);
+        }
+      }
+      setAppSettings(prev => ({ ...prev, ...patch }));
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  const handleClearCredentials = useCallback(() => {
+    clearSessionCredentials();
+    setAppSettings(prev => ({
+      ...prev,
+      geminiApiKey: '', deepseekApiKey: '', minimaxApiKey: '', asrApiKey: '', falKey: '',
+    }));
+  }, []);
 
   /** Results-repo readers/recorders for children (PromptPanel image path). */
   const readResultOutput = useCallback((runId: string, name: string) =>
@@ -745,6 +826,8 @@ function App() {
     videoBlob?: Blob;
     videoSeconds?: number;
     prompt: string;
+    /** <Picture N>/<Video 1> reference tags — appended for the comfy backend. */
+    promptTags?: string[];
     resolution: '480P' | '768P' | '2K';
     outputSeconds: number;
     model?: string;
@@ -756,9 +839,6 @@ function App() {
     runId?: string;
     outputName?: string;
   }): Promise<{ ok: true; taskId: string } | { ok: false; error: string }> => {
-    if (!appSettings.minimaxApiKey.trim()) {
-      return { ok: false, error: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。' };
-    }
     // resolve bound reference images (object URLs → blobs)
     const images: H3ReferenceImage[] = [];
     for (const url of payload.referenceImageUrls.slice(0, 9)) {
@@ -767,77 +847,52 @@ function App() {
         images.push({ name: `ref-${images.length + 1}`, blob });
       } catch { /* skip unreadable */ }
     }
-    // Self-hosted ComfyUI (R2V): the white-model recording becomes <Video 1>
-    // (motion/staging/timing reference), the bound sheets ride as <Picture N>.
-    // Replaces the paid API reference-video path entirely on this backend.
-    if (appSettings.videoBackend === 'comfy') {
-      const graphJson = appSettings.comfyWorkflowR2V;
-      if (!appSettings.comfyServerUrl.trim() || !graphJson.trim()) {
-        return { ok: false, error: 'ComfyUI 未配置——请在 Settings → AI 填写服务器地址并导入 R2V 工作流。' };
-      }
-      const comfyCfg = { serverUrl: appSettings.comfyServerUrl };
-      try {
-        const refNames: string[] = [];
-        for (let i = 0; i < images.length; i++) {
-          refNames.push(await comfyUploadImage(comfyCfg, images[i].blob, `sf-ref-${Date.now()}-${i}.png`));
-        }
-        let videoName: string | undefined;
-        if (payload.videoBlob) {
-          videoName = await comfyUploadImage(comfyCfg, payload.videoBlob, `sf-white-${Date.now()}.mp4`);
-        }
-        const tags = [
-          ...images.map((_, i) => `<Picture ${i + 1}> is a design/scene reference — preserve the identity and background shown in it.`),
-          ...(videoName ? ['<Video 1> is the white-model motion reference — follow its staging, camera move and timing exactly.'] : []),
-        ];
-        const comfyPrompt = `${payload.prompt}\n\nReference materials:\n${tags.join('\n')}`;
-        const graph = comfyPatchWorkflow(graphJson, {
-          prompt: comfyPrompt,
-          refImageNames: refNames,
-          refVideoNames: videoName ? [videoName] : undefined,
-        });
-        const promptId = await comfyQueuePrompt(comfyCfg, graph);
-        const localId = generateId();
-        setH3Tasks(prev => [{
-          id: localId,
-          taskId: promptId,
-          blockId: payload.blockId,
-          blockContent: payload.blockContent.slice(0, 60),
-          status: 'queued',
-          prompt: payload.prompt,
-          resolution: payload.resolution,
-          videoSeconds: payload.videoSeconds ?? 0,
-          outputSeconds: payload.outputSeconds,
-          estimatedCost: 0, // self-hosted GPU — no API billing
-          targetSeconds: payload.targetSeconds,
-          segmentIndex: payload.segmentIndex,
-          segmentCount: payload.segmentCount,
-          chainId: payload.chainId,
-          runId: payload.runId,
-          outputName: payload.outputName,
-          backend: 'comfy',
-          createdAt: Date.now(),
-        }, ...prev]);
-        shipLog('flow', 'info', `COMFY white-model task queued: ${promptId} (refs=${refNames.length}, video=${videoName ? 'yes' : 'no'})`);
-        return { ok: true, taskId: promptId };
-      } catch (e) {
-        const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
-        shipLog('flow', 'error', `COMFY submit FAILED: ${msg}`);
-        return { ok: false, error: msg.slice(0, 250) };
+
+    // ---- P4: one bound endpoint decides the service (config, not code) ----
+    let resolved;
+    try {
+      resolved = services.resolve('video.generate');
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    const isComfy = resolved.provider.id === 'comfy';
+    const request: VideoSubmitRequest = {
+      prompt: isComfy && payload.promptTags?.length
+        ? `${payload.prompt}\n\nReference materials:\n${payload.promptTags.join('\n')}`
+        : payload.prompt,
+      outputSeconds: payload.outputSeconds,
+      resolution: payload.resolution,
+      model: payload.model,
+      videoSeconds: payload.videoSeconds,
+      videoBlob: payload.videoBlob,
+      referenceImages: images,
+      extras: isComfy
+        ? {
+            workflow: (payload.videoBlob || images.length) ? 'r2v' : 't2v',
+            stripFirstFrame: !payload.videoBlob && images.length === 0,
+          }
+        : undefined,
+    };
+    // Model limits refuse rather than clamp (P4 acceptance: duration=20 → 拒绝)
+    const refusal = resolved.provider.supports('video.generate', request);
+    if ('reason' in refusal) return { ok: false, error: refusal.reason };
+    if (!isComfy) {
+      const invalid = validateH3Submission({
+        prompt: payload.prompt,
+        videoBlob: payload.videoBlob,
+        videoSeconds: payload.videoSeconds,
+        referenceImages: images,
+        resolution: payload.resolution,
+        outputSeconds: payload.outputSeconds,
+      });
+      if (invalid) return { ok: false, error: invalid };
+      if (!resolved.credentialSlot || !getSessionCredential(resolved.credentialSlot)) {
+        return { ok: false, error: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写（密钥只存本次会话）。' };
       }
     }
 
-    const invalid = validateH3Submission({
-      prompt: payload.prompt,
-      videoBlob: payload.videoBlob,
-      videoSeconds: payload.videoSeconds,
-      referenceImages: images,
-      resolution: payload.resolution,
-      outputSeconds: payload.outputSeconds,
-    });
-    if (invalid) return { ok: false, error: invalid };
-
     const localId = generateId();
-    const estimatedCost = estimateH3Cost({
+    const estimatedCost = isComfy ? 0 : estimateH3Cost({
       videoSeconds: payload.videoSeconds,
       outputSeconds: payload.outputSeconds,
       imageCount: images.length,
@@ -851,7 +906,7 @@ function App() {
       status: 'uploading',
       prompt: payload.prompt,
       resolution: payload.resolution,
-      videoSeconds: payload.videoSeconds,
+      videoSeconds: payload.videoSeconds ?? 0,
       outputSeconds: payload.outputSeconds,
       ...(payload.targetSeconds != null ? { targetSeconds: payload.targetSeconds } : {}),
       ...(payload.segmentIndex != null ? { segmentIndex: payload.segmentIndex } : {}),
@@ -860,33 +915,24 @@ function App() {
       ...(payload.runId ? { runId: payload.runId } : {}),
       ...(payload.outputName ? { outputName: payload.outputName } : {}),
       estimatedCost,
+      backend: isComfy ? 'comfy' : 'api',
       createdAt: Date.now(),
     };
     setH3Tasks(prev => [baseTask, ...prev]); // P3: history is unbounded (results repo is the durable store)
 
-    const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
     try {
       setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, status: 'submitting' } : t));
-      // Simple mode: no white-model video — H3 generates text-to-video
-      // conditioned on prompt + character reference images only.
-      const fileUri = payload.videoBlob ? await uploadH3Video(cfg, payload.videoBlob) : undefined;
-      const taskId = await createH3Task(cfg, {
-        prompt: payload.prompt,
-        videoBlob: payload.videoBlob,
-        videoSeconds: payload.videoSeconds,
-        referenceImages: images,
-        resolution: payload.resolution,
-        outputSeconds: payload.outputSeconds,
-        model: payload.model,
-      }, fileUri);
-      setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, taskId, status: 'queued' } : t));
-      return { ok: true, taskId };
+      const ctx = services.context(resolved);
+      const ref = await resolved.provider.submitVideo!(ctx, request);
+      setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, taskId: ref.taskId, status: 'queued' } : t));
+      shipLog('flow', 'info', `${resolved.provider.id} task queued: ${ref.taskId} via ${resolved.name}`);
+      return { ok: true, taskId: ref.taskId };
     } catch (e: any) {
       const msg = String(e?.message || e);
       setH3Tasks(prev => prev.map(t => t.id === localId ? { ...t, status: 'failed', error: msg } : t));
       return { ok: false, error: msg };
     }
-  }, [appSettings.minimaxApiKey, appSettings.minimaxBaseUrl]);
+  }, [services]);
 
   /** Submit every VIDEO_PLAN segment to H3 as text-to-video (simple mode):
    *  prompt = the segment's timed beats, references = bound character sheets,
@@ -942,70 +988,12 @@ function App() {
       const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
       shipLog('flow', 'info', `H3 segment ${si + 1}/${plan.segments.length}: refs=${refs.bound.length}${refs.missing.length ? ` missing=[${refs.missing.join(',')}]` : ''} prompt=${prompt.length}ch`);
 
-      // ---- Self-hosted ComfyUI path (R2V with refs, else T2V) ----
-      // Generation runs on the user's GPU box at near-zero marginal cost;
-      // tasks reuse the H3Task record (backend: 'comfy') and the shared
-      // poller branches on it.
-      if (appSettings.videoBackend === 'comfy' && appSettings.comfyServerUrl.trim()) {
-        const comfyCfg = { serverUrl: appSettings.comfyServerUrl };
-        const hasT2V = !!appSettings.comfyWorkflowT2V.trim();
-        const useR2V = refs.urls.length > 0 && !!appSettings.comfyWorkflowR2V.trim();
-        const graphJson = useR2V ? appSettings.comfyWorkflowR2V : appSettings.comfyWorkflowT2V;
-        if (!graphJson.trim()) {
-          const need = refs.urls.length ? 'R2V（有参考图）' : 'T2V（纯文生图）';
-          setPlanH3Progress(null);
-          setAIState(prev => ({ ...prev, error: `ComfyUI 缺少${need}工作流——请在 Settings → AI 里导入对应 API 格式 JSON。` }));
-          return;
-        }
-        setPlanH3Progress({ current: si + 1, total: plan.segments.length });
-        shipLog('flow', 'info', `COMFY segment ${si + 1}/${plan.segments.length}: ${useR2V ? 'R2V' : 'T2V'} refs=${refs.urls.length} prompt=${prompt.length}ch`);
-        try {
-          // R2V prompts must reference the materials by tag (pack contract):
-          // <Picture 1> = scene env, <Picture N> = each cast sheet in order.
-          const refNames: string[] = [];
-          for (let ri = 0; ri < refs.urls.length; ri++) {
-            const blob = await (await fetch(refs.urls[ri])).blob();
-            refNames.push(await comfyUploadImage(comfyCfg, blob, `sf-seg${si + 1}-${ri}.png`));
-          }
-          const tagLines = [
-            ...(sceneEnvTag(refs) ? [sceneEnvTag(refs)!] : []),
-            ...refs.bound.map((c, i) => `<Picture ${(sceneEnvTag(refs) ? 1 : 0) + i + 2}> is the design sheet of ${c.name} — the character's identity and face must come from it.`),
-          ];
-          const comfyPrompt = tagLines.length
-            ? `${prompt}\n\nReference materials:\n${tagLines.join('\n')}`
-            : prompt;
-          const graph = comfyPatchWorkflow(graphJson, { prompt: comfyPrompt, refImageNames: refNames, stripFirstFrame: refs.urls.length === 0 });
-          const promptId = await comfyQueuePrompt(comfyCfg, graph);
-          shipLog('flow', 'info', `COMFY segment ${si + 1}: queued ${promptId}`);
-          const localId = generateId();
-          setH3Tasks(prev => [{
-            id: localId,
-            taskId: promptId,
-            blockId: seg.blockIds[0],
-            blockContent: (seg.beats[0]?.text ?? seg.sceneHeading).slice(0, 60),
-            status: 'queued',
-            prompt,
-            resolution: planResolution,
-            videoSeconds: 0,
-            outputSeconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
-            estimatedCost: 0, // self-hosted GPU — no API billing
-            segmentIndex: si + 1,
-            segmentCount: plan.segments.length,
-            chainId,
-            runId: confirm.runId,
-            outputName,
-            backend: 'comfy',
-            createdAt: Date.now(),
-          }, ...prev]);
-          okCount++;
-          continue;
-        } catch (e) {
-          const msg = (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : String(e);
-          if (!firstErr) firstErr = msg;
-          shipLog('flow', 'error', `COMFY segment ${si + 1} FAILED: ${msg}`);
-          continue;
-        }
-      }
+      // ---- P4: Comfy reference tags ride the prompt; the bound provider
+      // owns upload + graph patch (backend switch = profile binding). ----
+      const promptTags = [
+        ...(sceneEnvTag(refs) ? [sceneEnvTag(refs)!] : []),
+        ...refs.bound.map((c, i) => `<Picture ${(sceneEnvTag(refs) ? 1 : 0) + i + 2}> is the design sheet of ${c.name} — the character's identity and face must come from it.`),
+      ];
       // ---- MiniMax cloud API path (default) ----
       if (refs.missing.length) {
         shipLog('flow', 'warn', `H3 segment ${si + 1}: characters without sheets: ${refs.missing.join(', ')}`);
@@ -1014,6 +1002,7 @@ function App() {
         blockId: seg.blockIds[0],
         blockContent: seg.beats[0]?.text ?? seg.sceneHeading,
         prompt,
+        promptTags,
         resolution: planResolution,
         model: videoPlanModel.id,
         outputSeconds: clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration),
@@ -1231,10 +1220,17 @@ function App() {
     return off;
   }, [refreshGalleryView]);
 
-  // App Settings Autosave
+  // App Settings Autosave — secrets are session-only (P4): strip before write.
   useEffect(() => {
-      localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(appSettings));
+      localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(stripSecrets(appSettings)));
   }, [appSettings]);
+
+  // P4: keep the session credential store in sync with the in-memory fields.
+  useEffect(() => {
+    for (const [field, slot] of Object.entries(SLOT_FOR_FIELD)) {
+      setSessionCredential(slot, (appSettings as unknown as Record<string, string>)[field] ?? '');
+    }
+  }, [appSettings.geminiApiKey, appSettings.deepseekApiKey, appSettings.minimaxApiKey, appSettings.asrApiKey, appSettings.falKey]);
 
   // P1: style.sfstyle tracks the visual DNA + palette whenever a project is open.
   useEffect(() => {
@@ -2952,6 +2948,7 @@ function App() {
                 onConfirmPlan={confirmPlan}
                 onReadOutput={readResultOutput}
                 onRecordOutput={recordResultOutput}
+                services={services}
                 screenplay={screenplay}
                 theme={theme}
                 lang={lang}
@@ -3089,6 +3086,14 @@ function App() {
                 onSave={handleUpdateSettings}
                 onClose={() => setShowSettingsModal(false)}
                 t={t}
+                onExportCredentials={handleExportCredentials}
+                onImportCredentials={handleImportCredentials}
+                onClearCredentials={handleClearCredentials}
+                runtimeProfileInfo={{
+                  source: runtimeProfile ? 'file' : 'default',
+                  bindings: services.profile.bindings,
+                  endpoints: Object.keys(services.profile.endpoints),
+                }}
                 projectName={projectDir?.name ?? null}
                 projectAvailable={isProjectStoreAvailable()}
                 projectError={projectError}
