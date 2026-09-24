@@ -109,9 +109,48 @@ describe('splitInlineDialogue — 站长指定项', () => {
     expect(out[2].content).toBe('张三');
   });
 
+  it('keeps the 括注 on the cue and takes the WHOLE spoken line (regression: the line was the parenthetical)', () => {
+    // 银盐晨光形态 — 「女儿（愣住）："你以前从不喝咖啡。"」
+    const blocks = [blk('g', 'CHARACTER', '女儿（愣住）："你以前从不喝咖啡。"')];
+    const out = splitInlineDialogue(blocks);
+    expect(out.map(b => b.type)).toEqual(['CHARACTER', 'DIALOGUE']);
+    expect(out[0].content).toBe('女儿（愣住）'); // direction/variant stays on the cue
+    expect(out[1].content).toBe('你以前从不喝咖啡。'); // quotes stripped, line intact
+  });
+
+  it('splits a DIALOGUE block stuffed with a mashed cue (母亲（微笑）：…)', () => {
+    const blocks = [blk('z', 'DIALOGUE', '母亲（微笑）："但我想记住你现在的样子。"')];
+    const out = splitInlineDialogue(blocks);
+    expect(out.map(b => b.type)).toEqual(['CHARACTER', 'DIALOGUE']);
+    expect(out[0].content).toBe('母亲（微笑）');
+    expect(out[1].content).toBe('但我想记住你现在的样子。');
+  });
+
+  it('splits a 括注 cue even when its name is not yet in the universe', () => {
+    // mother is a NEW name mid-script — the 括注 makes the mash unambiguous
+    const blocks = [
+      blk('0', 'CHARACTER', '女儿'),
+      blk('1', 'DIALOGUE', '你以前从不喝咖啡。'),
+      blk('2', 'DIALOGUE', '母亲（微笑）：但我想记住你现在的样子。'),
+    ];
+    const out = splitInlineDialogue(blocks);
+    expect(out.map(b => b.type)).toEqual(['CHARACTER', 'DIALOGUE', 'CHARACTER', 'DIALOGUE']);
+    expect(out[2].content).toBe('母亲（微笑）');
+  });
+
   it('leaves non-character prefixed ACTIONs alone', () => {
     const blocks = [blk('0', 'ACTION', '时间：深夜')];
     expect(splitInlineDialogue(blocks)).toEqual(blocks);
+  });
+
+  it('leaves a bare unknown-name ACTION alone when the universe is non-empty', () => {
+    const blocks = [
+      blk('0', 'CHARACTER', '刀客'),
+      blk('1', 'ACTION', '注意：地板很滑。'), // staging, not 刀客 speaking
+    ];
+    const out = splitInlineDialogue(blocks);
+    expect(out.map(b => b.type)).toEqual(['CHARACTER', 'ACTION']);
+    expect(out[1].content).toBe('注意：地板很滑。');
   });
 });
 

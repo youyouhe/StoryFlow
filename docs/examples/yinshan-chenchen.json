@@ -1,0 +1,392 @@
+{
+  "id": "3uy6wo084",
+  "metadata": {
+    "title": "Untitled 商业广告",
+    "author": "Unknown",
+    "draft": "First Draft",
+    "templateId": "commercial",
+    "scriptLanguage": "zh",
+    "styleHead": {
+      "name": "银盐晨光",
+      "artStyle": "35mm实拍电影质感，浅景深与呼吸式手持，自然窗光单一光源，细密胶片颗粒与高光轻微溢出，肤色真实有毛孔细节；米灰、暖褐与低饱和青的克制调色，质感冷静而温存。",
+      "scenePreset": "当代东亚城市住宅厨房，清晨七点，百叶窗在台面切出条状光影，不锈钢咖啡机、白瓷杯、木质台面构成写实静物；生活流、私密、几乎无戏剧感的真实空间。",
+      "promptPrefix": "live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet intimate kitchen realism"
+    }
+  },
+  "blocks": [
+    {
+      "id": "7bixaxocr",
+      "type": "SCENE_HEADING",
+      "content": "清晨厨房，阳光斜照，咖啡机嗡鸣。",
+      "imagePrompt": "Global Style: live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet warm kitchen realism\nSubject: a small domestic morning kitchen — a low wooden table, a brushed-steel drip coffee machine mid-brew on the counter, one ceramic mug pushed to the table's edge with a faint steam plume curling up and a small minimal sunburst logo band printed on its side, a chair pulled slightly back\nEnvironment: contemporary home kitchen in early morning, pale oak cabinets and a single undressed window looking onto a softly blurred quiet street, sheer curtain breathing inward, no people, era-neutral domestic realism with no anachronistic props\nComposition: wide establishing frame at eye level, the whole kitchen readable in depth from window through counter to table, foreground mug anchoring the lower third with the window glow far behind\nLighting: one single natural window light source, low raking morning sun at a shallow angle, hard-edged but diffused through the sheer curtain, warm amber highlights rolling off the mug rim and counter, soft desaturated teal shadow filling the room's far side\nMaterial: matte glazed porcelain mug, brushed steel and dark plastic machine housing, pale oak grain, worn oiled floorboards, creased linen curtain, faint condensation sheen, fine 35mm film grain with soft halation on the brightest highlights\nMood: quiet warm morning warmth, nostalgic and unhurried, muted beige and warm brown palette with cool teal undertones, shallow depth of field leaving the background gently out of focus",
+      "graybox": {
+        "kind": "scene",
+        "layout": [
+          {
+            "id": "floor",
+            "type": "plane",
+            "role": "floor",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "size": [
+              7,
+              0.1,
+              6
+            ],
+            "color": "#d9d9d9"
+          },
+          {
+            "id": "wall_north",
+            "type": "box",
+            "role": "wall",
+            "position": [
+              0,
+              1.5,
+              -3
+            ],
+            "size": [
+              7,
+              3,
+              0.1
+            ],
+            "color": "#cccccc"
+          },
+          {
+            "id": "wall_south",
+            "type": "box",
+            "role": "wall",
+            "position": [
+              0,
+              1.5,
+              3
+            ],
+            "size": [
+              7,
+              3,
+              0.1
+            ],
+            "color": "#cccccc"
+          },
+          {
+            "id": "wall_east",
+            "type": "box",
+            "role": "wall",
+            "position": [
+              3.5,
+              1.5,
+              0
+            ],
+            "size": [
+              0.1,
+              3,
+              6
+            ],
+            "color": "#cccccc"
+          },
+          {
+            "id": "wall_west",
+            "type": "box",
+            "role": "wall",
+            "position": [
+              -3.5,
+              1.5,
+              0
+            ],
+            "size": [
+              0.1,
+              3,
+              6
+            ],
+            "color": "#cccccc"
+          },
+          {
+            "id": "window_east",
+            "type": "box",
+            "role": "window",
+            "label": "窗户",
+            "position": [
+              3.45,
+              1.6,
+              0
+            ],
+            "size": [
+              0.05,
+              1.2,
+              2
+            ],
+            "color": "#aaddff"
+          },
+          {
+            "id": "kitchen_island",
+            "type": "box",
+            "role": "furniture",
+            "label": "厨房岛台",
+            "position": [
+              0,
+              0.45,
+              0
+            ],
+            "size": [
+              2.5,
+              0.9,
+              1
+            ],
+            "color": "#b8b8b8"
+          },
+          {
+            "id": "coffee_machine",
+            "type": "box",
+            "role": "prop",
+            "label": "咖啡机",
+            "position": [
+              -0.7,
+              1.1,
+              0.2
+            ],
+            "size": [
+              0.3,
+              0.4,
+              0.3
+            ],
+            "color": "#333333"
+          },
+          {
+            "id": "coffee_cup",
+            "type": "cylinder",
+            "role": "prop",
+            "label": "晨光咖啡杯",
+            "position": [
+              0,
+              0.95,
+              -0.2
+            ],
+            "size": [
+              0.08,
+              0.1,
+              0.08
+            ],
+            "color": "#ffffff"
+          }
+        ],
+        "characters": [
+          {
+            "name": "母亲",
+            "position": [
+              -0.3,
+              1
+            ],
+            "facing": 3.1416,
+            "pose": "standing"
+          },
+          {
+            "name": "女儿",
+            "position": [
+              0.3,
+              -1
+            ],
+            "facing": 0,
+            "pose": "standing"
+          }
+        ]
+      },
+      "motionPrompt": "咖啡机蒸汽缓缓上升，百叶窗光影在台面上缓慢平移，杯口热气轻晃",
+      "shotDuration": 4,
+      "firstFrameDesc": "清晨厨房全景，阳光斜照木质台面与白瓷杯，咖啡机指示灯亮着，空间无人",
+      "lastFrameDesc": "蒸汽在杯口盘旋成细线，光影稍移半格，空间安静就绪"
+    },
+    {
+      "id": "5mhg8d4b2",
+      "type": "ACTION",
+      "content": "母亲把一杯咖啡推给刚起床的女儿，杯壁印着“晨光咖啡”标志。",
+      "imagePrompt": "Global Style: live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet warm kitchen realism\nSubject: An adult mother in her fifties, soft cotton shirt, smiling faintly as she slides a glazed ceramic cup across the table toward her adult daughter, who has just woken and sits with sleep-soft hair and loose linen pyjama shirt, both women's fingertips resting near the cup's rim.\nEnvironment: A contemporary domestic kitchen at early morning, wooden table, chrome coffee machine still humming, thin curtain edge, a few scattered everyday objects on the counter, no clutter of any other era.\nComposition: Medium shot across the table at cup height, slight low angle, the cup and its rising steam sharp in the foreground, both women softly out of focus behind it, shallow depth of field.\nLighting: One single natural window light, low raking sun from the left, warm golden quality, soft-edged shadows across the tabletop, gentle halation blooming on the cup's rim and steam.\nMaterial: Glazed ceramic cup with a small sunrise emblem and the brand mark 晨光咖啡 printed on the wall, worn wood grain, creased linen, brushed steel and glass, faint steam haze.\nMood: Quiet, tender morning warmth, unhurried affection, muted beige and warm brown with a desaturated teal shadow in the background.",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "pov",
+          "position": [
+            0.6,
+            1.6,
+            0.8
+          ],
+          "lookAt": [
+            -0.35,
+            0.95,
+            0
+          ],
+          "movement": {
+            "type": "pan",
+            "duration": 2.5,
+            "path": [
+              [
+                0.6,
+                1.6,
+                0.8
+              ]
+            ],
+            "lookPath": [
+              [
+                -0.35,
+                0.95,
+                0
+              ],
+              [
+                0.45,
+                0.95,
+                0
+              ]
+            ],
+            "targetSeconds": 4
+          },
+          "shotDescription": "Daughter's POV follows the cup as her mother pushes it toward her, keeping the '晨光咖啡' logo front and center.",
+          "focus": "咖啡杯上的“晨光咖啡”标志"
+        }
+      },
+      "motionPrompt": "母亲手臂前送将杯推过桌面，杯口热气上扬，女儿发丝被窗风微动，两人的指尖一前一后靠近杯沿",
+      "shotDuration": 5,
+      "firstFrameDesc": "杯沿将触未触女儿一侧，母亲指尖搭在杯壁，晨光切过桌面形成条状光影",
+      "lastFrameDesc": "杯停在女儿面前，两人指尖轻搭杯沿，热气在两人之间升起"
+    },
+    {
+      "id": "g60az7ygd",
+      "type": "CHARACTER",
+      "content": "女儿（愣住）",
+      "imagePrompt": "Global Style: live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet intimate kitchen realism\nIdentity: 女儿 — adult East Asian woman, 24, slim, shoulder-length sleep-tousled black hair, bare-faced; keywords: sleepy / startled / unguarded / wry / soft-hearted; core theme: a grown daughter still half-asleep to how much she is loved.\nPalette: 8 swatches — warm skin #E8C4A8, tousled black hair #1A1A1A, deep brown eyes #4A3728, oversized cream sleep shirt #F0E6D8, heather-grey lounge trousers #9A9A96, barefoot skin #E0B898, desaturated teal tile #5F7A78, morning window light #FFE8C0\nMain: LARGEST panel — three full-body figures side by side at identical scale (front / three-quarter / back), standard relaxed standing pose, height scale line beside the figures, no props, identical oversized cream sleep shirt and heather-grey lounge trousers in all three; every panel on the sheet keeps the same person (identical face, hairstyle, proportions) with zero style drift.\nSilhouette: clean solid front + side full-body silhouettes matching the turnaround proportions exactly\nExpressions: 8 head-and-shoulder studies in a grid — calm / curious / tense / surprised / afraid / sad / determined / relaxed\nMicro: 5 tight facial studies — near-smile twitch, eyebrow micro-furrow, lip press, eye-narrow tell, breath-held stillness\nHeads: 3 extra head studies — three-quarter, low angle looking up, high angle looking down\nPoses: 3 studies — relaxed (sleep-soft slouch), tense (shoulders braced, startled), confident (straightening, meeting the eye)\nBust: chest-up portrait with a strong startled affection — lips slightly parted, eyes bright\nCostume: 4 close-ups — hairstyle (shoulder-length sleep-tousled black hair), fabric (washed cream cotton sleep shirt), accessories (none — bare wrists, bare face), footwear (barefoot)\nHands: 4 studies — relaxed open, tense clenched, pointing, gripping the rim of a ceramic cup",
+      "motionPrompt": "女儿呼吸微动，睡乱的发丝随窗风轻晃，眼神从惺忪转向愣住",
+      "shotDuration": 3,
+      "firstFrameDesc": "女儿睡眼惺忪，唇微张，定格在愣住的一瞬",
+      "lastFrameDesc": "女儿眼神完全清醒，带着被说中的柔软"
+    },
+    {
+      "id": "g60az7ygd-d1",
+      "type": "DIALOGUE",
+      "content": "你以前从不喝咖啡。",
+      "speaker": "女儿"
+    },
+    {
+      "id": "mother-cue-01",
+      "type": "CHARACTER",
+      "content": "母亲（微笑）",
+      "imagePrompt": "Global Style: live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet intimate kitchen realism\nIdentity: 母亲 — adult East Asian woman, mid-fifties, slim, softly greying black hair pinned in a low knot, warm observant eyes, faint smile lines; keywords: tender / patient / quietly devoted / understated / resilient; core theme: a woman who remembers her daughter's every morning and now wants one kept.\nPalette: 8 swatches — warm skin #E0B898, salt-and-pepper hair #4A4540, deep brown eyes #4A3728, soft cotton shirt #E8DFD2, warm brown cardigan #8B6F55, desaturated teal apron trim #5F7A78, glazed ceramic cream #F2EFE8, kitchen oak #C4A574\nMain: LARGEST panel — three full-body figures side by side at identical scale (front / three-quarter / back), standard relaxed standing pose, height scale line beside the figures, no props, identical soft cotton shirt and warm brown cardigan in all three; every panel on the sheet keeps the same person (identical face, hairstyle, proportions) with zero style drift.\nSilhouette: clean solid front + side full-body silhouettes matching the turnaround proportions exactly\nExpressions: 8 head-and-shoulder studies in a grid — calm / curious / tense / surprised / afraid / sad / determined / relaxed\nMicro: 5 tight facial studies — near-smile twitch, eyebrow micro-furrow, lip press, eye-narrow tell, breath-held stillness\nHeads: 3 extra head studies — three-quarter, low angle looking up, high angle looking down\nPoses: 3 studies — relaxed (weight settled, shoulders easy), tense (hands clasped tight), confident (chin level, open stance)\nBust: chest-up portrait with a strong restrained tenderness about to break into tears\nCostume: 4 close-ups — hairstyle (soft low knot, silver strands at the temple), fabric (washed cotton weave of the shirt), accessories (thin gold wedding band, small pearl studs), footwear (worn cream house slippers)\nHands: 4 studies — relaxed open, tense clenched, pointing, gripping a warm ceramic cup",
+      "motionPrompt": "母亲睫毛微颤，笑意从眼底漫到唇角，肩线缓缓放松",
+      "shotDuration": 4,
+      "firstFrameDesc": "母亲笑意未起，目光已落在女儿脸上",
+      "lastFrameDesc": "母亲笑意完全绽开，眼底有薄薄的水光"
+    },
+    {
+      "id": "zkydyf1qf",
+      "type": "DIALOGUE",
+      "content": "但我想记住你现在的样子。",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "close-up",
+          "position": [
+            0.55,
+            1.58,
+            0.25
+          ],
+          "lookAt": [
+            -0.3,
+            1.58,
+            1
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 5,
+            "path": [
+              [
+                0.55,
+                1.58,
+                0.25
+              ],
+              [
+                0.45,
+                1.58,
+                0.34
+              ],
+              [
+                0.36,
+                1.58,
+                0.42
+              ]
+            ],
+            "lookPath": [
+              [
+                -0.3,
+                1.58,
+                1
+              ],
+              [
+                -0.3,
+                1.58,
+                1
+              ]
+            ],
+            "targetSeconds": 6
+          },
+          "shotDescription": "Slow push-in close-up on 母亲's smiling face as she delivers the line, letting the warmth and intent land on her expression while the sunlit kitchen stays soft be",
+          "focus": "母亲"
+        }
+      },
+      "speaker": "母亲"
+    },
+    {
+      "id": "bxb4mr3z6",
+      "type": "ACTION",
+      "content": "两人手指轻触杯沿，品牌口号浮现：“晨光咖啡，让每一刻都值得醒来。”",
+      "imagePrompt": "Global Style: live-action 35mm film cinematography, shallow depth of field, single natural window light source, fine film grain, soft halation on highlights, realistic skin and porcelain texture, muted beige, warm brown and desaturated teal palette, quiet warm kitchen realism\nSubject: adult daughter with sleep-tousled hair and her adult mother, both leaning in, fingertips of one hand each just grazing the warm rim of a single ceramic coffee cup, the daughter's eyes soft with surprise, the mother smiling gently.\nEnvironment: a quiet home kitchen at early morning, plain beige plaster walls, a worn wooden table, a humming drip coffee machine on the counter, faint steam rising, nothing anachronistic, lived-in everyday domestic detail.\nComposition: tight close-up on the two hands and the cup at the center of frame, faces softly out of focus behind them, shallow depth of field, slightly low eye-level angle, cup rim and touching fingertips as the sharp focal point.\nLighting: one low morning sunbeam raking through a window from the left, warm golden highlights with soft halation, long gentle shadows falling right, cool desaturated teal filling the shaded corners.\nMaterial: matte glazed ceramic with a small printed wordmark on the cup wall, fine lines and pores of adult skin, soft brushed cotton sleeves, grain of the pale wooden tabletop, thin bead of steam.\nMood: hushed tenderness and dawn quiet, an unhurried moment of connection, muted beige and warm brown palette with desaturated teal shadows.",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "extreme-close-up",
+          "position": [
+            0.45,
+            1.15,
+            0.35
+          ],
+          "lookAt": [
+            0,
+            0.95,
+            -0.2
+          ],
+          "movement": {
+            "type": "tilt",
+            "duration": 4,
+            "path": [
+              [
+                0.45,
+                1.15,
+                0.35
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                0.95,
+                -0.2
+              ],
+              [
+                0,
+                1.3,
+                -0.2
+              ]
+            ],
+            "targetSeconds": 5
+          },
+          "shotDescription": "Extreme close-up on the two fingertips meeting the cup rim, then a slow tilt up off the rim as the slogan surfaces, isolating the one detail the brand line is b",
+          "focus": "晨光咖啡杯"
+        }
+      },
+      "motionPrompt": "两人手指同时轻触杯沿，热气托起光线，品牌口号字迹在画面里缓缓浮现",
+      "shotDuration": 4,
+      "firstFrameDesc": "两根手指即将触上杯沿，杯壁晨光咖啡标志清晰，热气正盛",
+      "lastFrameDesc": "两指停在杯沿，口号「晨光咖啡，让每一刻都值得醒来。」完全浮现"
+    }
+  ],
+  "schemaVersion": 2,
+  "productionMode": "cinematic",
+  "lastModified": 1790228530377
+}

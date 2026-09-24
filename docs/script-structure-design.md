@@ -75,6 +75,8 @@ interface ScriptBlock {
 | SCENE | kind=environment(+sceneKey) |
 | (第五类)风格 | StyleHead,全局生效,已有 |
 
+CHARACTER 主/变体 ref 的**设计图(imagePrompt)格式**见 `docs/character-sheet.md`(工业级 11 模块 Character Sheet,替代旧三视图 turnaround)。
+
 ### 2.2 speaker 字段(DIALOGUE 必标说话人)
 - 块新增 `speaker?: string`(base name;画外=`名(画外)`)。
 - 生成契约:DIALOGUE 上方必须 `[CHARACTER]` cue(现有规则),解析时**自动回填** speaker= 最近 cue。
@@ -160,3 +162,12 @@ parseTypedLines(扩展:[MOTION]/[DURATION]/[FIRST]/[LAST] 附着最近可生成�
 | §6 开放问题 | 按建议口径 | DURATION 允许小数;lastFrameDesc v1 仅存;旧稿纯默认值;speaker 先数据层 |
 
 **遗留**:lastFrameDesc 双图一致性校验(v2)、「AI 补全导演字段」按钮(v2)、speaker 行内 UI(v2)。
+
+## 收尾(2026-09-24,第二轮)
+
+| 项 | 状态 | 内容 |
+|---|---|---|
+| E2E `/tmp/mode-verify/structure-e2e.mjs` | ✅ 12/12 | mock DeepSeek(含 CORS 预检)→ FROM_PROMPT 全链:parse→split→speakers→defaults→schemaVersion 2→Express 工作台列镜头 |
+| 拆分缺陷修复 | ✅ | `splitInlineDialogue` 两处真 bug:①带括注 cue 正则把括注当台词(`女儿（愣住）：…` 丢台词);②DIALOGUE 塞台词(`母亲（微笑）：…`)不拆。现 ONE regex + 括注 cue 即使不在 universe 也拆 + DIALOGUE 纳入拆分面 |
+| 《银盐晨光》剧本补齐 | ✅ | `docs/examples/yinshan-chenchen.json`:g60az7ygd 拆 CHARACTER+DIALOGUE、补母亲 CHARACTER ref(双 11 模块 sheet)、每 shot 补 motionPrompt/shotDuration/首尾帧、speaker 回填 |
+| CHARACTER 设计图升级 | ✅ | 三视图 turnaround → 工业级 11 模块 Character Sheet,见 `docs/character-sheet.md` |

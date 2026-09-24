@@ -100,29 +100,56 @@ const SPLIT_STOPWORDS = new Set(['时间', '地点', '此时', '突然', '片刻
 const looksLikeDialogueLine = (line: string): boolean =>
   /[。．.!?!?…~～]$/.test(line) || line.length >= 8;
 
+/** Strip one matched pair of surrounding dialogue quotes (「」 『』 "" '' …). */
+const stripQuotes = (s: string): string =>
+  s.replace(/^[「『"'‘’“]\s*/, '').replace(/\s*[」』"'‘’”]$/, '').trim();
+
+/**
+ * 站长指定项 — inline dialogue auto-split: models regularly emit
+ * 「ACTION: 刀客：你的刀很快」 or a bare-named line with the cue and the line
+ * mashed together (and DIALOGUE blocks stuffed with
+ * 「母亲（微笑）："但我想记住你现在的样子。"」). When the prefix IS a character
+ * cue, split it into CHARACTER cue + DIALOGUE.
+ *
+ * Accept forms:
+ *   NAME：台词            (known cue, or empty-universe auto-split)
+ *   NAME（括注）：台词      (unambiguous mashed cue — direction/variant paren)
+ */
 export function splitInlineDialogue(blocks: ScriptBlock[]): ScriptBlock[] {
-  let universe = collectCharacterNames(blocks);
+  // Universe from CLEAN cue text: mashed CHARACTER blocks pollute
+  // collectCharacterNames (the tail after ： is not part of the name), so strip
+  // the spoken tail before asking for the base name.
+  let universe = collectCharacterNames(blocks.map(b =>
+    b.type === 'CHARACTER' ? { ...b, content: b.content.split(/[：:]/)[0] } : b,
+  ));
   const out: ScriptBlock[] = [];
   for (const b of blocks) {
     // timestamp prefixes pollute the name match — strip before matching
-    const content = b.type === 'ACTION' || b.type === 'CHARACTER'
+    const content = b.type === 'ACTION' || b.type === 'CHARACTER' || b.type === 'DIALOGUE'
       ? b.content.replace(/^\s*\d{1,2}:\d{2}(?:\.\d+)?\s*-\s*\d{1,2}:\d{2}(?:\.\d+)?\s*[。.，,]?\s*/, '')
       : b.content;
-    const m = content.match(/^\s*([^：:（(]{1,20})\s*[（(]([^）)]{1,20})[)）]?\s*[：:]\s*(.+)$/s)
-      ?? content.match(/^\s*([^：:（(]{1,20})\s*[：:]\s*(.+)$/s);
-    if (!m || (b.type !== 'ACTION' && b.type !== 'CHARACTER')) { out.push(b); continue; }
+    // ONE regex: name (with optional 括注) + spoken line. The old two-regex
+    // chain captured the parenthetical as m[2] and then read m[2] as the LINE
+    // — 「女儿（愣住）：台词」 yielded line "愣住" and threw the台词 away.
+    const m = content.match(/^\s*([^：:（(]{1,20}(?:[（(][^）)]{1,20}[)）])?)\s*[：:]\s*(.+)$/s);
+    if (!m || (b.type !== 'ACTION' && b.type !== 'CHARACTER' && b.type !== 'DIALOGUE')) { out.push(b); continue; }
     const rawName = m[1].trim();
-    const line = m[2].trim();
+    const line = stripQuotes(m[2].trim());
     const { base } = parseCharacterName(rawName);
     if (!base || !line) { out.push(b); continue; }
-    // Accept when the cue universe knows the name — or, when the script has
-    // NO cues at all (the exact case auto-split exists for), when the prefix
-    // looks like a name AND the line looks like spoken dialogue (terminal
-    // punctuation or substantial length; 时间：深夜 is staging, not speech).
     const known = universe.includes(base);
     const nameLike = base.length <= 12 && /^[^\d]/.test(base) && !SPLIT_STOPWORDS.has(base);
     const dialogueLike = looksLikeDialogueLine(line);
-    if (!known && (universe.length > 0 || !nameLike || !dialogueLike)) { out.push(b); continue; }
+    const hasParen = /[（(][^）)]{1,20}[)）]/.test(rawName);
+    // Accept when the cue universe knows the name; or, when the script has NO
+    // cues at all (the exact case auto-split exists for), when the prefix looks
+    // like a name AND the line looks like spoken dialogue (时间：深夜 is staging,
+    // not speech); or — NEW — when the cue carries a 括注 (女儿（愣住）：…), which
+    // is unambiguously a mashed cue+direction and never staging.
+    const accept = known
+      || (universe.length === 0 && nameLike && dialogueLike)
+      || (hasParen && nameLike && dialogueLike);
+    if (!accept) { out.push(b); continue; }
     if (!known) universe = [...universe, base];
     // A pure-dialogue beat replaces the ACTION wholesale — the shot's
     // timestamp duration must ride along on the DIALOGUE block.

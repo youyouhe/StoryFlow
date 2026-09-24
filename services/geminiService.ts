@@ -3,6 +3,11 @@ import { logAiCall, classifyError } from "./aiLog";
 import { buildSequenceContext } from '../utils/sequence';
 import { BlockType, ScriptBlock, ScriptLanguage, AppSettings, SceneTransitionDecision, GrayboxData, GrayboxObject, GrayboxCharacter, GrayboxCamera, StyleHead, DubEmotion, CharacterWardrobe, ScriptSequence } from "../types";
 import { shipLog } from './debugLog';
+import {
+  buildCharacterSheetSystemPrompt,
+  normalizeCharacterSheetPrompt,
+  applySheetFilterSafety,
+} from '../utils/characterSheet';
 
 // Helper to get plain text context from blocks
 const getScriptContext = (blocks: ScriptBlock[], count: number): string => {
@@ -658,7 +663,90 @@ Return ONLY a JSON array (no markdown fences, no commentary):
 };
 
 /**
- * Generate a structured text-to-image prompt for an ACTION or CHARACTER block
+ * CHARACTER-sheet imagePrompt path (kind === 'character').
+ *
+ * Emits the industrial 11-module Character Sheet contract
+ * (utils/characterSheet.ts): identity header → palette → LARGEST main
+ * turnaround → silhouettes → 8-expression grid → micro-expressions → head
+ * angles → poses → bust close-up → costume details → hand poses, with a hard
+ * consistency lock. Style comes from styleHead (dynamic — ink-wash / photoreal
+ * / anime all valid); refBindings 主/变体 classification is untouched.
+ *
+ * When the character already has an established design (globalCharDesigns),
+ * the sheet KEEPS that identity and only re-skins the costume variant.
+ */
+const generateCharacterSheetPrompt = async (
+  sceneBlocks: ScriptBlock[],
+  targetBlockId: string,
+  systemInstruction: string,
+  settings: AppSettings,
+  styleHead?: StyleHead,
+  globalCharDesigns?: Map<string, string>,
+  wardrobe?: { costume?: string; age?: string },
+  charName?: string,
+  variant?: string,
+): Promise<string> => {
+  const context = sceneBlocks.map(b => {
+    const isTarget = b.id === targetBlockId;
+    const tag = isTarget ? ' [TARGET CHARACTER TO DESIGN]' : '';
+    return `${b.type}:${tag} ${b.content}`;
+  }).join('\n');
+
+  // Established designs — the character's own prior sheet (variant re-skin)
+  // plus other cast members so the sheet's person matches the ensemble.
+  const charDesigns = new Map<string, string>();
+  if (globalCharDesigns) {
+    for (const [n, p] of globalCharDesigns) if (p?.trim()) charDesigns.set(n, p.trim());
+  } else {
+    for (const b of sceneBlocks) {
+      if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+        const name = b.content.trim();
+        if (!charDesigns.has(name)) charDesigns.set(name, b.imagePrompt.trim());
+      }
+    }
+  }
+
+  const selfDesign = charName ? (charDesigns.get(charName) ?? '') : '';
+  const variantNote = selfDesign
+    ? `\nVARIANT MODE — an established sheet for this character already exists (below). Reuse the person EXACTLY (same face, hairstyle, body proportions) and change ONLY the ${variant ? `costume (${variant})` : (wardrobe?.age ? `age (to ${wardrobe.age})` : 'costume/age')}${!variant && wardrobe?.costume ? ` and wardrobe (${wardrobe.costume})` : ''}. Do NOT redesign the person. The 11-module layout is unchanged.\nEstablished sheet:\n---\n${selfDesign}\n---\n`
+    : '';
+
+  const others = [...charDesigns.entries()].filter(([n]) => n !== (charName ?? ''));
+  const ensembleNote = others.length
+    ? `\nEnsemble identity anchors (when the sheet's person appears with them later, they must read as the same world):\n---\n${others.slice(0, 6).map(([n, p]) => `[${n}] ${p.slice(0, 220)}`).join('\n')}\n---\n`
+    : '';
+
+  const wardrobeNote = (wardrobe?.costume || wardrobe?.age || variant)
+    ? `\nAt this story point the character is ${[variant, wardrobe?.age, wardrobe?.costume].filter(Boolean).join(', ')}. Portray that state on the sheet's Main / Pose / Costume panels, keeping the established identity.\n`
+    : '';
+
+  const systemPrompt = buildCharacterSheetSystemPrompt({
+    systemInstruction,
+    styleHead,
+    langInstruction: 'Respond in English only.',
+    variantNote: variantNote + ensembleNote,
+    wardrobeNote,
+  });
+
+  const userPrompt = `Scene context (the marked target character is the one to design):
+---
+${context}
+---
+Generate the 11-line industrial character-sheet image prompt for the TARGET CHARACTER. Remember: exactly 11 labeled lines (Identity/Palette/Main/Silhouette/Expressions/Micro/Heads/Poses/Bust/Costume/Hands), English, no markdown, Main panel largest, identical person in every panel.`;
+
+  const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'character-sheet');
+
+  const sheet = normalizeCharacterSheetPrompt(responseText);
+  const lines: string[] = [];
+  if (styleHead?.promptPrefix?.trim()) {
+    lines.push(`Global Style: ${styleHead.promptPrefix.trim()}`);
+  }
+  if (sheet) lines.push(sheet);
+  return applySheetFilterSafety(lines.join('\n'));
+};
+
+/**
+ * Generate a structured text-to-image prompt for an ACTION or ENVIRONMENT block
  * (storyboard).
  *
  * The prompt covers only the six core visual elements (subject, environment,
@@ -669,7 +757,8 @@ Return ONLY a JSON array (no markdown fences, no commentary):
  *
  * `sceneBlocks` is the current-scene context (most recent SCENE_HEADING through
  * the target block, inclusive), pre-sliced by the caller. `kind` selects the
- * focus: 'action' (scene illustration) or 'character' (character design sheet).
+ * focus: 'action' (scene illustration) or 'environment' (establishing sheet).
+ * CHARACTER targets route to generateCharacterSheetPrompt (11-module sheet).
  *
  * `shotGraybox` — the target beat's own SHOT graybox (camera), injected as a
  * COMPOSITION LOCK so the generated image reproduces the same camera the
@@ -680,10 +769,7 @@ Return ONLY a JSON array (no markdown fences, no commentary):
  * `globalCharDesigns` — a SCRIPT-WIDE name→design-text map (from every
  * CHARACTER block across ALL scenes, not just this scene). ACTION/DIALOGUE
  * prompts use it so a character defined in an EARLIER scene still resolves its
- * identity here (cross-scene consistency). For a CHARACTER (isCharacter) target
- * that already has a design (present in this map), the prompt KEEPS that
- * identity and only re-skins the costume variant — it must not invent a new
- * person.
+ * identity here (cross-scene consistency).
  *
  * `wardrobe` — the character's costume/age state within its Sequence (from the
  * split). Injected so a shot depicts the right outfit/age at this story point.
@@ -712,33 +798,33 @@ export const generateImagePrompt = async (
   const isCharacter = kind === 'character';
   const isEnvironment = kind === 'environment';
 
-  const roleLine = isCharacter
-    ? 'Your job: turn a screenplay CHARACTER into a single character-design image prompt.'
-    : isEnvironment
+  // CHARACTER blocks use the industrial 11-module Character Sheet contract
+  // (utils/characterSheet.ts) instead of the six-element shot format. Style is
+  // injected dynamically from styleHead — ink-wash / photoreal / anime all work.
+  if (isCharacter) {
+    return generateCharacterSheetPrompt(
+      sceneBlocks, targetBlockId, systemInstruction, settings,
+      styleHead, globalCharDesigns, wardrobe, charName, variant,
+    );
+  }
+
+  const roleLine = isEnvironment
     ? 'Your job: turn a screenplay SCENE HEADING into a single environment-establishing image prompt (a set "定妆照" for the space).'
     : 'Your job: turn a screenplay ACTION into a single, vivid, camera-ready image prompt.';
 
-  const subjectGuidance = isCharacter
-    ? '1. Subject — the character: name/role, age, ethnicity, body type, hair (style/color/length), face features, expression. A full head-to-toe appearance description, with costume and hair styled to the story\'s era and genre (period-accurate when the setting is period). If the surrounding beats imply a specific outfit state for THIS moment (battle-worn, formal court dress, travel gear, injured), describe that outfit — it defines this design sheet\'s costume variant.'
-    : isEnvironment
+  const subjectGuidance = isEnvironment
     ? '1. Subject — the SPACE itself: location type, architecture/terrain, key furnishings or landmarks, era/genre styling, atmosphere. No characters (or tiny silhouettes for scale only).'
     : '1. Subject — who/what is in frame (characters, key objects), with pose, expression, motion.';
 
-  const envGuidance = isCharacter
-    ? '2. Environment — a neutral or simple backdrop suitable for a character design sheet (e.g. plain studio background). Keep it minimal so the character stands out.'
-    : '2. Environment — location, time of day, weather, background detail. Architecture, furnishings, and set dressing must match the story\'s era and genre (period piece = period buildings and props, no anachronistic objects).';
+  const envGuidance = '2. Environment — location, time of day, weather, background detail. Architecture, furnishings, and set dressing must match the story\'s era and genre (period piece = period buildings and props, no anachronistic objects).';
 
-  const compGuidance = isCharacter
-    ? '3. Composition — character turnaround sheet with EXACTLY THREE figures side by side, each full-body and identical in scale, styling and spacing: the LEFT figure faces the camera (front view), the CENTER figure is a strict profile side view (90°, looking right), the RIGHT figure shows the back (back view, head turned away). All three wear the identical outfit and share the same neutral standing pose — an animation model sheet.'
-    : isEnvironment
+  const compGuidance = isEnvironment
     ? '3. Composition — wide establishing frame of the whole space, eye level, full depth readable.'
     : '3. Composition — shot type (wide/medium/close), camera angle, framing, focus, depth of field.';
 
-  const matGuidance = isCharacter
-    ? '5. Material — clothing fabric, accessories, armor/prop materials, surface textures of garments.'
-    : '5. Material — textures, fabrics, surfaces, finishes that sell realism or style.';
+  const matGuidance = '5. Material — textures, fabrics, surfaces, finishes that sell realism or style.';
 
-  const targetTag = isCharacter ? ' [TARGET CHARACTER TO DESIGN]' : isEnvironment ? ' [TARGET SCENE TO ESTABLISH]' : ' [TARGET ACTION TO ILLUSTRATE]';
+  const targetTag = isEnvironment ? ' [TARGET SCENE TO ESTABLISH]' : ' [TARGET ACTION TO ILLUSTRATE]';
 
   const systemPrompt = `You are a Storyboard Artist and expert Text-to-Image Prompt Engineer.
 ${roleLine}
@@ -791,7 +877,7 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
     for (const [n, p] of globalCharDesigns) {
       if (p?.trim()) charDesigns.set(n, p.trim());
     }
-  } else if (!isCharacter) {
+  } else {
     for (const b of sceneBlocks) {
       if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
         const name = b.content.trim();
@@ -803,21 +889,14 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
     ? `\nEstablished character designs (CANONICAL — when these characters appear in frame, reuse their identity EXACTLY: same age, hair, face, and clothing wording. Do NOT invent new appearances for them):\n---\n${[...charDesigns.entries()].map(([n, p]) => `[CHARACTER ${n}] established design:\n${p}`).join('\n\n')}\n---\n`
     : '';
 
-  // When generating a CHARACTER VARIANT (isCharacter) whose base design already
-  // exists, keep the same person and only swap costume — not a new design.
-  const selfDesignForChar = isCharacter && charName ? (charDesigns.get(charName) ?? '') : '';
-  const variantSection =
-    (kind === 'character' && selfDesignForChar)
-      ? `\nThis is a VARIANT of the established design above. Reuse the person EXACTLY (same face, body, hair style/color) and change ONLY the ${variant ? `costume (${variant})` : (wardrobe?.age ? `age (to ${wardrobe.age})` : 'costume/age')}${!variant && wardrobe?.costume ? ` and wardrobe (${wardrobe.costume})` : ''} per the story. Do NOT alter the base identity.\n`
-      : '';
-
-  // Sequence wardrobe/age / costume variant note for action/dialogue frames.
+  // Sequence wardrobe/age / costume variant note for action frames. (CHARACTER
+  // targets already returned through generateCharacterSheetPrompt above.)
   const wardrobeNote =
-    (kind !== 'character' && (wardrobe?.costume || wardrobe?.age || variant))
+    (wardrobe?.costume || wardrobe?.age || variant)
       ? `\nAt this story point the character is ${[variant, wardrobe?.age, wardrobe?.costume].filter(Boolean).join(', ')}. Portray that state (outfit/age) for ${charName ?? 'the subject'}, keeping the established identity.\n`
       : '';
 
-  const targetNoun = isCharacter ? 'TARGET CHARACTER' : isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';
+  const targetNoun = isEnvironment ? 'TARGET SCENE' : 'TARGET ACTION';
 
   // Composition lock (option A): when the beat already has a SHOT graybox, its
   // camera is the single source of truth for framing. Anchor the Composition
@@ -840,7 +919,7 @@ ${styleHead ? `GLOBAL STYLE LOCK — this script has a fixed visual head that OV
   const userPrompt = `Scene context (the marked ${targetNoun.toLowerCase()} is the one to turn into an image prompt):
 ---
 ${context}
----${designSection}${variantSection}${wardrobeNote}${compLock}
+---${designSection}${wardrobeNote}${compLock}
 Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six labeled lines, English, no technical terms, no markdown.${charDesigns.size && !isEnvironment ? ' Characters in frame MUST match the established designs above.' : ''}`;
 
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'image-prompt');
