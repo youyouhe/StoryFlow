@@ -12,6 +12,7 @@ import { synthesizeSpeech, concatWavs, wavDuration } from '../../services/glmTts
 import { resolveSfx } from '../../services/sfxService';
 import { requestMusic, pollMusic } from '../../services/falMusicService';
 import { exportProCut, concatClipsToMp4 } from '../../services/videoExport';
+import { createAlignClient } from '../align/client';
 import type { VisualExecPorts, AudioExecPorts, ExportExecPorts } from './types';
 
 export const defaultVisualPorts = (): VisualExecPorts => ({
@@ -19,8 +20,13 @@ export const defaultVisualPorts = (): VisualExecPorts => ({
   comfyUploadImage, comfyPatchWorkflow, comfyQueuePrompt, comfyQueryTask,
 });
 
-export const defaultAudioPorts = (): AudioExecPorts => ({
+export const defaultAudioPorts = (opts: { alignEndpoint?: string } = {}): AudioExecPorts => ({
   synthesizeSpeech, concatWavs, wavDuration, resolveSfx, requestMusic, pollMusic,
+  // P8:配 endpoint 才绑定真客户端(WhisperX 类,强制对齐契约);缺省不绑,
+  // ② 编译照常回退字素比例(P5 口径)。
+  ...(opts.alignEndpoint
+    ? { alignTake: createAlignClient({ endpoint: opts.alignEndpoint }) }
+    : {}),
 });
 
 export const defaultExportPorts = (): ExportExecPorts => ({

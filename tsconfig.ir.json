@@ -12,6 +12,8 @@
     "tests/exec-*.test.ts",
     "src/extract/**/*.ts",
     "tests/extract-*.test.ts",
-    "tests/fixtures/**/*.ts"
+    "tests/fixtures/**/*.ts",
+    "src/align/**/*.ts",
+    "tests/align-*.test.ts"
   ]
 }
