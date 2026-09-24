@@ -1,0 +1,74 @@
+<?storyflow using="storyflow-ir@0.1"?>
+<storyflow version="0.1.0">
+  <script id="story">
+    @{shot-001}
+    镜头极缓慢前推,光柱中尘埃缓缓漂浮,样片墙高光微微呼吸;画面内无人物
+    @{/shot-001}
+    @{shot-002}
+    苏晚双手沿机身缓慢画圆擦拭,软布起伏,快门线轻微晃动;镜头固定
+    @{/shot-002}
+    @{shot-003}
+    陈默推门进店,门铃轻晃;他抬手示意;苏晚在柜台后抬头;镜头固定中景
+    <role name="陈默">拍一张证件照,要赶九点的火车。</role>
+    @{/shot-003}
+    @{shot-004}
+    苏晚抬头,嘴角渐展微笑,围巾边缘随转身轻动;镜头缓慢推近半档
+    <role name="苏晚">好,坐那边,光正好。</role>
+    @{/shot-004}
+    @{shot-005}
+    固定镜头微距:腰平取景器里的倒立窗光微微呼吸,尘埃缓浮,画面渐暗@{sfx-002!}收黑
+    @{/shot-005}
+  </script>
+  <generation>
+    <shot ref="{story.selection.shot-001}" seconds="6" backend="comfyui" seed="10240001">
+      <first-frame>silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, wide interior at dawn, sunbeams cutting through the wooden display window, dust motes floating, faded sample prints on the brick wall, empty counter, no people</first-frame>
+      <ref>scene:照相馆</ref>
+      <ref>style:晨光光柱</ref>
+    </shot>
+    <shot ref="{story.selection.shot-002}" seconds="5" backend="comfyui" seed="10240002">
+      <first-frame>silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, close-up of a young woman's hands polishing a vintage twin-lens reflex camera on the wooden counter, shallow depth of field</first-frame>
+      <ref>char:苏晚</ref>
+      <ref>prop:海鸥相机</ref>
+      <ref>scene:照相馆</ref>
+      <ref>action:擦拭相机</ref>
+    </shot>
+    <shot ref="{story.selection.shot-003}" seconds="6" backend="minimax">
+      <first-frame>silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium two-shot, a man in a dark green work jacket entering through the studio door, morning light flaring briefly behind him, woman at the counter turning her head</first-frame>
+      <ref>char:陈默</ref>
+      <ref>char:苏晚</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+    <shot ref="{story.selection.shot-004}" seconds="5" backend="grok" seed="10240004">
+      <first-frame>silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium close-up of the young woman in a mist-grey knit scarf looking up from the counter with a gentle smile, warm rim light on her hair</first-frame>
+      <ref>char:苏晚:晨雾围巾</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+    <shot ref="{story.selection.shot-005}" seconds="4" backend="comfyui" seed="10240005">
+      <first-frame>silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, macro still life on the counter, the twin-lens reflex camera viewfinder catching a tiny upside-down image of the window light, dust in the beam, quiet morning</first-frame>
+      <last-frame>同机位,画面整体压暗至近黑,仅取景器亮点残留</last-frame>
+      <ref>prop:海鸥相机</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+  </generation>
+  <audio>
+    <tts id="aud-tts-001" text="{story.selection.shot-003.dialogue}" role="陈默" voice="jam" speed="1" watermark="false" gain="1"/>
+    <tts id="aud-tts-002" text="{story.selection.shot-004.dialogue}" role="苏晚" voice="tongtong" speed="0.9" gain="1"/>
+    <bgm id="aud-bgm-001" from="{story.selection.shot-001}" loop="true" gain="0.25">Nostalgic quiet-morning instrumental bed for a 1990s photo studio at dawn. Warm felt piano with soft tape hiss, no vocals, steady loop, 30 seconds.</bgm>
+    <sfx id="aud-sfx-001" at="{story.selection.shot-003.start}" name="ding" gain="0.8"/>
+    <sfx id="aud-sfx-002" at="{story.moment.sfx-002}" name="shutter" missing="true" gain="0.8"/>
+  </audio>
+  <transition>
+    <cut from="{story.selection.shot-001}" to="{story.selection.shot-002}"/>
+    <cut from="{story.selection.shot-002}" to="{story.selection.shot-003}"/>
+    <cut from="{story.selection.shot-003}" to="{story.selection.shot-004}"/>
+    <dissolve from="{story.selection.shot-004}" to="{story.selection.shot-005}" seconds="1.2"/>
+    <fade-out from="{story.selection.shot-004}" to="{story.selection.shot-005}"/>
+  </transition>
+  <film id="final" title="银盐晨光">
+    <clip ref="{story.selection.shot-001}"/>
+    <clip ref="{story.selection.shot-002}"/>
+    <clip ref="{story.selection.shot-003}"/>
+    <clip ref="{story.selection.shot-004}"/>
+    <clip ref="{story.selection.shot-005}"/>
+  </film>
+</storyflow>

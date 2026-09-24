@@ -16,9 +16,9 @@
 
 | 路 | 模块 | 入口 | 输出 | 状态 |
 |---|---|---|---|---|
-| ①视觉编译器 | `src/ir/visual/` | `compileVisualPlan(ir, opts?)` | `VisualCallPlan` | ✅ 本实例实现 |
-| ②音频编译器 | `src/ir/audio/` | `compileAudioPlan(ir, opts?)` | `AudioMixPlan` | 🔒 边界锁定(types+schema+桩) |
-| ③声明式格式 | `src/ir/format/` | `renderStoryFlowXML(ir, opts?)` | `StoryFlowXmlSource`(prose-first XML 文本) | 🔒 边界锁定(types+桩) |
+| ①视觉编译器 | `src/ir/visual/` | `compileVisualPlan(ir, opts?)` | `VisualCallPlan` | ✅ 已实现 |
+| ②音频编译器 | `src/ir/audio/` | `compileAudioPlan(ir, opts?)` | `AudioMixPlan` | ✅ 已实现 |
+| ③声明式格式 | `src/ir/format/` | `renderStoryFlowXML(ir, opts?)` | `StoryFlowXmlSource`(prose-first XML 文本) | ✅ 已实现 |
 
 ### 2.1 ①视觉编译器 `compileVisualPlan(ir, opts?) → VisualCallPlan`
 
@@ -44,7 +44,7 @@
 任务书:**TTS 词级锚定→时间轴 + 三轨混音计划**。
 
 - `jobs: TtsJob|BgmJob|SfxJob` —— 三轨合成任务(TTS 带 ≤1024 字 `parts` 分段/voice/speed/volume/watermark;BGM 带 `buildBgmPrompt` 语义文案 + loop/gain;SFX 带 `SfxAnchor` + `missing`);`kind` 判别(与 IR 音轨同形制)。
-- `timeline: {clipId, startMs, durationMs?}` —— **词级锚定→时间轴**:`SfxAnchor.wordIndex` → 毫秒偏移,v1 按字素比例把 `measured` 探活秒数摊到 `splitAnchorWords` token 窗口;锚是作者身份,毫秒是编译产物(P0 规则二)。WhisperX 级逐词对齐是 P2 升级位。
+- `timeline: {clipId, startMs, durationMs?}` —— **词级锚定→时间轴**:`SfxAnchor.wordIndex` → 毫秒偏移,v1 按字素比例(token 权重=码点数)把 basis 摊到 `splitAnchorWords` token 窗口;basis = 探活秒数(对白锚=锚 clip 的 measured,`opts.measured` 覆盖 IR 回填)否则计划时长 `fit.wantSeconds`。`shot-start → 0`;`shot-end → 镜头内容终点 fit.wantSeconds×1000`(镜头尾音效归镜头尾,不随对白杆长度漂移)。TTS 缺探活值不进 timeline;锚是作者身份,毫秒是编译产物(P0 规则二)。WhisperX 级逐词对齐是 P2 升级位。
 - `mix: SegmentMix[]` —— 三轨混音计划 = `ProSegmentCut`(services/videoExport.ts:175-182)的声明化:`tts[{clipId, gain:1.0}]` / `bgm{clipId, gain:0.25, loop:true}` / `sfx[{clipId, atMs, gain:0.8}]`。**增益常量钉死**在 `audio/types.ts`(MIX_GAIN_TTS/BGM/SFX),与 `muxSegment` 的 filter_complex(services/videoExport.ts:230-238)互注,schema 校验混音条目的增益必须等于契约值。
 - `fits: {shotId, durationFit}[]` —— 时长拟合复用 `shared.fitShotDuration`(§3 钉死规则,与①同源)。
 - 警告码:`TTS_ANCHOR_UNMATCHED | AUDIO_TOO_LONG | SFX_MISSING | SFX_ANCHOR_OUT_OF_RANGE`。
@@ -80,7 +80,7 @@ SVML 形制(hypit-study.md §2 + examples/*/reference.svml):
 
 ## 4. 排期拆分(哪路先动)
 
-**①先动(✅ 本实例已实现)→ ② ∥ ③ 并发跟进。**
+**①先动(✅)→ ② ∥ ③(✅ 均已实现)。**
 
 - ① 是复用面最密的一路(refSlots 打包/时长钳制/拆链/成本),解耦 express+pro 生成路径;其 `RefSlot`/`jobs`/`outputSeconds` 词汇被 ③ 的 `<generation>` 声明引用。
 - ②③ 在边界锁定后只依赖 `shared.ts` + 本文契约,**互不依赖,可并发**;若必须串行:**② 先于 ③**(② 与①共享锚/时长原语并闭合 ttsFloor 接缝;③ 是 golden 快照可验的纯渲染,耦合最低)。
@@ -92,12 +92,13 @@ SVML 形制(hypit-study.md §2 + examples/*/reference.svml):
 
 | 路 | 机器可检门禁 |
 |---|---|
-| ① ✅ | `tests/ir-visual.test.ts` 全绿(20 条:路径分派×3 / refSlots×4 / 时长拟合×3 / seed+vendor×2 / 成本×2 / prompt+接缝×2 / shared×2 / 桩×2);改坏任一产出字段 → `typecheck:ir` 因 `visual/schema.ts` 防漂移断言失败;`src/ir/visual/` 无 services/hooks/components import |
-| ② 🔒 | `tests/ir-audio.test.ts` 全绿;`compileAudioPlan` 桩抛 `P1-② not implemented`;`AudioMixPlan` types+zod+防漂移守卫齐(已预置);混音增益常量与 services/videoExport.ts:230-238 互注(已预置);词锚→ms 用合成 `measured` fixture 测试(无 IO) |
-| ③ 🔒 | `tests/ir-format.test.ts` 全绿;`renderStoryFlowXML(银盐晨光)` 匹配入库 golden 快照;`<script>` 内只含角色 cue+逐字文本+`||`/选区/时刻标记(断言 script 节无 `Picture`/`gain`/`seconds` 等 token);script 外锚引用均可解析 |
+| ① ✅ | `tests/ir-visual.test.ts` 全绿(18 条:路径分派×3 / refSlots×4 / 时长拟合×3 / seed+vendor×2 / 成本×2 / prompt+接缝×2 / shared×2);改坏任一产出字段 → `typecheck:ir` 因 `visual/schema.ts` 防漂移断言失败;`src/ir/visual/` 无 services/hooks/components import |
+| ② ✅ | `tests/ir-audio.test.ts` 全绿(16 条:三轨任务×3 / 词锚→时间轴×5 / 混音计划×4 / 警告×4);`AudioMixPlan` types+zod+防漂移守卫;混音增益常量与 services/videoExport.ts:230-238 互注;词锚→ms 用合成 `measured` fixture 测试(无 IO) |
+| ③ ✅ | `tests/ir-format.test.ts` 全绿(8 条);`renderStoryFlowXML(银盐晨光)` 匹配入库 golden `docs/storyflow-xml-example.xml`;script 节无 `Picture`/`gain`/`seconds` token(仅角色 cue+逐字文本+选区/时刻标记);script 外锚引用全部可解析;输出过 well-formed 校验 |
 
 ## 6. 扩展策略
 
 - **additive optional 字段 = minor 升版**(VisualCallPlan/AudioMixPlan 各自的 `version`);改名/删除/语义变更 = major,校验层大声失败(P0 同款)。
 - `imageRefPolicy`(每生图任务的参考槽位策略)属 **vendor pack**,不进核心——`primaryRefSlot` 已给确定性单槽选取,多槽映射是执行器方言。
 - ② 的逐词对齐(WhisperX 级)、③ 的 parser/round-trip、R2V 白模资产入 IR,都是命名扩展位,走同一条 additive 路径。
+- v1 已记档的执行简化:IR per-clip `gain`/`loop` 作者覆盖暂不生效(混音参数 UI 是既知遗留项,docs/pipeline-two-mode.md 遗留 1)——AudioMixPlan 如实描述 muxSegment 内置默认的执行值。
