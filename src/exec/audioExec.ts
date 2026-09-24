@@ -6,7 +6,7 @@
  * (P2「失败=新调用」);`measurements` 即②编译 `opts.measured` 的回填输入——
  * 合成→探活→回填→重编时间轴,闭合 P1 缝合不变量(锚是作者身份,毫秒是编译产物)。
  */
-import type { AudioMixPlan } from '../ir/audio/types';
+import type { AlignmentTake, AudioMixPlan } from '../ir/audio/types';
 import {
   mapAudioPlanToBgmQueue, mapAudioPlanToSfxQueue, mapAudioPlanToTtsQueue,
 } from '../bridge/audio';
@@ -75,4 +75,35 @@ export const executeAudioPlan = async (
   }
 
   return { clipBlobs, measurements, sfxResolutions, bgmUrls, failures };
+};
+
+
+/** P5:逐 clip 逐词对齐(`alignTake` port;未绑定即抛——拒绝而非钳制)。
+ *  产出 = ② 编译 `opts.alignments` 的输入;单 clip 失败不中断其余。 */
+export const alignAudioClips = async (
+  clipBlobs: Record<string, Blob>,
+  plan: AudioMixPlan,
+  deps: AudioExecDeps,
+): Promise<{
+  takes: Record<string, AlignmentTake>;
+  failures: { clipId: string; error: string }[];
+}> => {
+  const alignTake = deps.ports.alignTake;
+  if (!alignTake) {
+    throw new Error('未绑定对齐服务(alignTake)——拒绝而非钳制(见 docs/storyflow-ir-p5.md §5)');
+  }
+  const takes: Record<string, AlignmentTake> = {};
+  const failures: { clipId: string; error: string }[] = [];
+  for (const job of plan.jobs) {
+    if (job.kind !== 'tts') continue;
+    const blob = clipBlobs[job.clipId];
+    if (!blob) continue;
+    try {
+      // clipId 由 runner 权威盖章(对齐服务只见 wav+text)
+      takes[job.clipId] = { ...(await alignTake(blob, job.text)), clipId: job.clipId };
+    } catch (e) {
+      failures.push({ clipId: job.clipId, error: errMsg(e) });
+    }
+  }
+  return { takes, failures };
 };

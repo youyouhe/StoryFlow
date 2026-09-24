@@ -184,3 +184,116 @@ describe('warnings', () => {
     if (!v.ok) throw new Error(`plan must validate:\n${(v as { issues: string[] }).issues.join('\n')}`);
   });
 });
+
+describe('P5 词级对齐 — 对齐窗优先与 reflow', () => {
+  const LINE = '拍一张证件照,要赶九点的火车。';
+  const withWordSfx = mutated(ir => {
+    const sfx = ir.audio.find(c => c.id === 'aud-sfx-001') as SfxClip;
+    sfx.anchor = { kind: 'word', wordIndex: 10 };
+    sfx.shotId = 'SHOT_003';
+    sfx.missing = false;
+  });
+
+  it('aligned windows win over proportional (stemOffset + startMs)', () => {
+    const plan = compileAudioPlan(withWordSfx, {
+      alignments: {
+        'aud-tts-001': {
+          text: LINE, clipId: 'aud-tts-001', durationMs: 3400,
+          tokens: [{ tokenIndex: 10, text: '的', startMs: 2600, endMs: 2680 }],
+        },
+      },
+    });
+    // 对齐窗 2600(字素比例会是 2615——对齐优先)
+    expect(plan.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs).toBe(2600);
+    expect(plan.warnings.some(w => w.code === 'ALIGNMENT_UNUSABLE')).toBe(false);
+  });
+
+  it('stale text fingerprint falls back to proportional with ALIGNMENT_UNUSABLE', () => {
+    const plan = compileAudioPlan(withWordSfx, {
+      alignments: {
+        'aud-tts-001': {
+          text: '旧台词(改词前)', clipId: 'aud-tts-001', durationMs: 3400,
+          tokens: [{ tokenIndex: 10, startMs: 2600, endMs: 2680 }],
+        },
+      },
+    });
+    expect(plan.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs)
+      .toBe(Math.round((10 / 13) * 3400)); // 字素回退 2615
+    expect(plan.warnings.some(w => w.code === 'ALIGNMENT_UNUSABLE' && /stale/.test(w.message))).toBe(true);
+  });
+
+  it('missing token falls back too (不静默降级)', () => {
+    const plan = compileAudioPlan(withWordSfx, {
+      alignments: {
+        'aud-tts-001': {
+          text: LINE, clipId: 'aud-tts-001', durationMs: 3400,
+          tokens: [{ tokenIndex: 11, startMs: 2800, endMs: 2900 }], // 无 token 10
+        },
+      },
+    });
+    expect(plan.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs)
+      .toBe(Math.round((10 / 13) * 3400));
+    expect(plan.warnings.some(w => w.code === 'ALIGNMENT_UNUSABLE' && /token 10/.test(w.message))).toBe(true);
+  });
+
+  it('reflow: 改词→旧对齐失效回退→重对齐窗口生效(无手工重排)', () => {
+    const anchorAt0 = mutated(ir => {
+      const sfx = ir.audio.find(c => c.id === 'aud-sfx-001') as SfxClip;
+      sfx.anchor = { kind: 'word', wordIndex: 0 };
+      sfx.shotId = 'SHOT_003';
+      sfx.missing = false;
+    });
+    const take1 = {
+      text: LINE, clipId: 'aud-tts-001', durationMs: 3400,
+      tokens: [{ tokenIndex: 0, startMs: 100, endMs: 250 }],
+    };
+    const v1 = compileAudioPlan(anchorAt0, { alignments: { 'aud-tts-001': take1 } });
+    expect(v1.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs).toBe(100);
+
+    // 改词(十点)——对白与 TtsClip 同步改,锚基文本漂移
+    const LINE2 = '拍一张证件照,要赶十点的火车。';
+    const edited = mutated(ir => {
+      const sfx = ir.audio.find(c => c.id === 'aud-sfx-001') as SfxClip;
+      sfx.anchor = { kind: 'word', wordIndex: 0 };
+      sfx.shotId = 'SHOT_003';
+      sfx.missing = false;
+      (ir.shots[2] as Shot).dialogue = { text: LINE2, ttsFloor: 4 };
+      (ir.audio.find(c => c.id === 'aud-tts-001') as TtsClip).text = LINE2;
+    });
+    const v2 = compileAudioPlan(edited, { alignments: { 'aud-tts-001': take1 } });
+    expect(v2.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs).toBe(0); // 字素接管(word 0)
+    expect(v2.warnings.some(w => w.code === 'ALIGNMENT_UNUSABLE')).toBe(true);
+
+    // 重对齐后窗口生效
+    const take2 = {
+      text: LINE2, clipId: 'aud-tts-001', durationMs: 3400,
+      tokens: [{ tokenIndex: 0, startMs: 55, endMs: 200 }],
+    };
+    const v3 = compileAudioPlan(edited, { alignments: { 'aud-tts-001': take2 } });
+    expect(v3.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs).toBe(55);
+    expect(v3.warnings.some(w => w.code === 'ALIGNMENT_UNUSABLE')).toBe(false);
+  });
+
+  it('对齐窗叠在拼杆偏移上(锚 clip 非首段)', () => {
+    const reordered = mutated(ir => {
+      const sfx = ir.audio.find(c => c.id === 'aud-sfx-001') as SfxClip;
+      sfx.anchor = { kind: 'word', wordIndex: 10 };
+      sfx.shotId = 'SHOT_003';
+      sfx.missing = false;
+      ir.audio.unshift({
+        id: 'aud-tts-009', kind: 'tts', shotId: 'SHOT_003', text: '先来一句。',
+        voice: 'jam', measuredSeconds: 1.5,
+      } as TtsClip);
+    });
+    const plan = compileAudioPlan(reordered, {
+      alignments: {
+        'aud-tts-001': {
+          text: LINE, clipId: 'aud-tts-001', durationMs: 3400,
+          tokens: [{ tokenIndex: 10, startMs: 2600, endMs: 2680 }],
+        },
+      },
+    });
+    // 拼杆偏移 1500(前置句)+ 对齐窗 2600
+    expect(plan.timeline.find(e => e.clipId === 'aud-sfx-001')?.startMs).toBe(4100);
+  });
+});

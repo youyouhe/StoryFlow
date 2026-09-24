@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { StoryFlowIR, TtsClip } from '../src/ir/types';
 import { parseStoryFlowIR } from '../src/ir/schema';
 import { compileAudioPlan } from '../src/ir/audio/compile';
-import { executeAudioPlan } from '../src/exec/audioExec';
+import { executeAudioPlan, alignAudioClips } from '../src/exec/audioExec';
 import type { AudioExecDeps, AudioExecPorts } from '../src/exec/types';
 
 const examplePath = fileURLToPath(new URL('../docs/storyflow-ir-example.json', import.meta.url));
@@ -106,5 +106,50 @@ describe('executeAudioPlan — SFX 查表 + BGM 轮询', () => {
     expect(result.failures).toEqual([{ clipId: 'aud-tts-001', error: 'TTS 网络抖动' }]);
     expect(result.clipBlobs['aud-tts-002']).toBeInstanceOf(Blob); // 其余照常
     expect(result.bgmUrls['aud-bgm-001']).toBe('bgm://1.m4a');
+  });
+});
+
+describe('alignAudioClips — 对齐计算 IO 边缘(P5)', () => {
+  it('per-clip alignTake with verbatim text; clipId 由 runner 盖章', async () => {
+    const plan = compileAudioPlan(example());
+    const seen: string[] = [];
+    const { ports } = mockAudioPorts({
+      alignTake: async (_blob, text) => {
+        seen.push(text);
+        return { text, clipId: 'stale-from-service', durationMs: 1000, tokens: [] };
+      },
+    });
+    const result = await alignAudioClips(
+      { 'aud-tts-001': new Blob(['a']), 'aud-tts-002': new Blob(['b']) },
+      plan,
+      baseDeps(ports),
+    );
+    expect(seen).toEqual(['拍一张证件照,要赶九点的火车。', '好,坐那边,光正好。']);
+    expect(result.takes['aud-tts-001'].clipId).toBe('aud-tts-001'); // 权威盖章
+    expect(result.failures).toEqual([]);
+  });
+
+  it('单 clip 对齐失败不中断其余', async () => {
+    const plan = compileAudioPlan(example());
+    const { ports } = mockAudioPorts({
+      alignTake: async (_blob, text) => {
+        if (text.startsWith('拍一张')) throw new Error('对齐服务超时');
+        return { text, clipId: '', durationMs: 1000, tokens: [] };
+      },
+    });
+    const result = await alignAudioClips(
+      { 'aud-tts-001': new Blob(['a']), 'aud-tts-002': new Blob(['b']) },
+      plan,
+      baseDeps(ports),
+    );
+    expect(result.failures).toEqual([{ clipId: 'aud-tts-001', error: '对齐服务超时' }]);
+    expect(result.takes['aud-tts-002']).toBeDefined();
+  });
+
+  it('未绑定 alignTake 即抛(拒绝而非钳制)', async () => {
+    const plan = compileAudioPlan(example());
+    const { ports } = mockAudioPorts(); // 无 alignTake
+    await expect(alignAudioClips({}, plan, baseDeps(ports)))
+      .rejects.toThrow(/未绑定对齐服务/);
   });
 });

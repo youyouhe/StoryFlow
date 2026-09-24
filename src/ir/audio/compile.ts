@@ -184,8 +184,10 @@ export const compileAudioPlan = (
 
     // 对白拼杆(muxSegment: 顺序 wav 直拼)——缺探活值的 clip 不进 timeline
     let stemMs = 0;
+    const stemOffsetMs = new Map<string, number>();
     for (const clip of ttsOfShot(shot.id)) {
       mixTts.push({ clipId: clip.id, gain: MIX_GAIN_TTS });
+      stemOffsetMs.set(clip.id, stemMs); // 对齐窗的拼杆基点(P5)
       const m = measuredOf(clip);
       if (m == null) continue;
       timeline.push({
@@ -206,7 +208,29 @@ export const compileAudioPlan = (
           message: `SFX「${clip.name}」无 manifest/文件命中(SFX_MISSING),混音计划中保留占位。`,
         });
       }
-      const atMs = resolveAnchorMs(clip.anchor, tokens, basisMs, fit.wantSeconds * 1000);
+      // P5:对齐窗优先(对白锚 + 新鲜对齐件),失效/缺 token 显式回退字素比例
+      let atMs: number | null = null;
+      if (clip.anchor.kind === 'word' && anchorBase.source === 'dialogue' && anchorClip) {
+        const take = opts.alignments?.[anchorClip.id];
+        if (take) {
+          const wordIndex = clip.anchor.wordIndex;
+          const tok = take.text === anchorBase.text
+            ? take.tokens.find(t => t.tokenIndex === wordIndex)
+            : undefined;
+          if (tok) {
+            atMs = Math.round((stemOffsetMs.get(anchorClip.id) ?? 0) + tok.startMs);
+          } else {
+            warnings.push({
+              code: 'ALIGNMENT_UNUSABLE',
+              shotId: shot.id,
+              message: take.text !== anchorBase.text
+                ? '对齐件文本已漂移(stale)——改词后未重对齐,回退字素比例。'
+                : `对齐件缺 token ${wordIndex},回退字素比例。`,
+            });
+          }
+        }
+      }
+      if (atMs == null) atMs = resolveAnchorMs(clip.anchor, tokens, basisMs, fit.wantSeconds * 1000);
       if (atMs == null) {
         warnings.push({
           code: 'SFX_ANCHOR_OUT_OF_RANGE',

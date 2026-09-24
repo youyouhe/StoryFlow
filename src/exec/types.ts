@@ -8,6 +8,7 @@
  */
 import type { SfxResolution } from '../../services/sfxService';
 import type { ResolvedRef } from '../bridge/types';
+import type { AlignmentTake } from '../ir/audio/types';
 
 // ── 服务签名推导源 ─────────────────────────────────────────────────────────
 
@@ -48,6 +49,9 @@ export interface AudioExecPorts {
   resolveSfx: ResolveSfxFn;
   requestMusic: RequestMusicFn;
   pollMusic: PollMusicFn;
+  /** P5 逐词对齐(WhisperX 类服务,IO 边缘);未绑定 = 不可对齐,② 编译层
+   *  回退字素比例。真服务接线属命名扩展位(wiring 故意不绑)。 */
+  alignTake?: (blob: Blob, text: string) => Promise<AlignmentTake>;
 }
 
 export interface ExportExecPorts {
