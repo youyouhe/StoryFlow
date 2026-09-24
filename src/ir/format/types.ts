@@ -8,15 +8,16 @@
  *   · 生成 / 音轨 / 转场 / 成片声明全部**引用** `story.*` 锚——
  *     「Everything else in the pipeline reads the Script; the Script reads nothing.」
  *
- * v0.1 是 IR→XML 的**单向渲染**(成片蓝图声明,与命令式 ffmpeg 相对);
- * parser/round-trip 是 ③ 实例的扩展位。
+ * v0.2(P7)是**双向互换**:parse.ts 反演全 IR,双固定点 golden 锁定
+ * (成片蓝图声明的角色不变——与命令式 ffmpeg 相对)。
  */
 
-export const STORYFLOW_XML_VERSION = '0.1.0';
+/** 0.2.0(P7):双向互换增补(style/refs/spatial/camera/params/帧元数据)。 */
+export const STORYFLOW_XML_VERSION = '0.2.0';
 export type StoryFlowXmlVersion = typeof STORYFLOW_XML_VERSION;
 
 /** StoryFlowXML 源文本(prose-first XML;处理指令
- *  `<?storyflow using="storyflow-ir@0.1"?>` 起头)。 */
+ *  `<?storyflow using="storyflow-ir@0.2"?>` 起头)。 */
 export type StoryFlowXmlSource = string;
 
 export interface StoryFlowXmlOptions {

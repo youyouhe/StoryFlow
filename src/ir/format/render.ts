@@ -9,15 +9,16 @@
  *   · `<generation>/<audio>/<transition>/<film>` 全部**引用** `story.selection.*`
  *     / `story.moment.*` 锚,不回写 script。
  *
- * v0.1 语法要点(对齐边界契约 §2.3):
- *   · 词锚时刻落点 = `splitAnchorWords` 同款分词器的 token 序(wordIndex 与
- *     ② 同源);越界词锚**降级**为 `selection.end` 并留 XML 注释(不产生悬空引用)。
- *   · 对白锚 clip(text 逐字 = dialogue.text)以 `text={…dialogue}` 绑定引用
- *     script,不复制正文;非锚行内嵌文本。
- *   · `||`/Dual Text 是作者声明的显读分离,IR 尚无对应字段——v0.1 不产出
- *     (additive 扩展位)。
+ * v0.2(P7,双向互换):增补 style/refs/spatial 声明节与 generation/audio
+ * 属性(status/steps/params/帧元数据/white-model/camera/measured-seconds/
+ * tts-floor/shot-id)——`parse` 可反演全 IR(双固定点 golden 锁定)。script
+ * 节**零增补**,prose-first 不破。
+ *
+ * 词锚时刻落点 = `splitAnchorWords` 同款分词器的 token 序(wordIndex 与
+ * ② 同源);越界词锚**降级**为 `selection.end` 并留 XML 注释(不产生悬空引用,
+ * 降级不可逆——记档)。对白锚 clip 以 `text={…dialogue}` 绑定引用 script。
  */
-import type { StoryFlowIR, SfxClip } from '../types';
+import type { StoryFlowIR, SfxClip, TtsClip, AssetProvenance } from '../types';
 import type { StoryFlowXmlOptions, StoryFlowXmlSource } from './types';
 import { STORYFLOW_XML_VERSION } from './types';
 import { anchorTextOf, splitAnchorWords } from '../shared';
@@ -29,6 +30,8 @@ const escapeXml = (s: string): string =>
 const selId = (shotId: string): string => `shot-${shotId.slice('SHOT_'.length)}`;
 /** aud-sfx-002 → sfx-002(时刻 id)。 */
 const momentId = (clipId: string): string => clipId.replace(/^aud-/, '');
+/** [x,y,z] → "x,y,z"(坐标宪章数值原样)。 */
+const vecToStr = (v: readonly number[]): string => v.join(',');
 
 type Marks = Map<number, string[]>;
 
@@ -52,6 +55,9 @@ const injectMomentMarks = (text: string, marks: Marks | undefined): string => {
   out += escapeXml(text.slice(last));
   return out;
 };
+
+const paramTypeOf = (v: string | number | boolean): 'string' | 'number' | 'boolean' =>
+  typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string';
 
 export const renderStoryFlowXML = (
   ir: StoryFlowIR,
@@ -88,9 +94,12 @@ export const renderStoryFlowXML = (
     marks.set(wordIndex, ids);
   }
 
-  // ---- <script>:叙事真相(唯一语义源) --------------------------------------
-  push(0, '<?storyflow using="storyflow-ir@0.1"?>');
-  push(0, `<storyflow version="${STORYFLOW_XML_VERSION}">`);
+  // ---- root + <style> -------------------------------------------------------
+  push(0, '<?storyflow using="storyflow-ir@0.2"?>');
+  push(0, `<storyflow version="${STORYFLOW_XML_VERSION}" mode="${ir.mode}" ir-version="${ir.version}">`);
+  push(1, `<style name="${escapeXml(ir.style.name)}" art-style="${escapeXml(ir.style.artStyle)}" scene-preset="${escapeXml(ir.style.scenePreset)}" prompt-prefix="${escapeXml(ir.style.promptPrefix)}"/>`);
+
+  // ---- <script>:叙事真相(唯一语义源;v0.2 零增补) -------------------------
   push(1, `<script id="${escapeXml(scriptId)}">`);
   for (const shot of orderedShots) {
     const sid = selId(shot.id);
@@ -103,6 +112,75 @@ export const renderStoryFlowXML = (
   }
   push(1, '</script>');
 
+  // ---- <refs>:注册表五类(资产只存 id + 溯源) ------------------------------
+  push(1, '<refs>');
+  const assetAttrs = (a?: AssetProvenance): string => {
+    const out: string[] = [];
+    if (a?.assetId) out.push(`asset-id="${escapeXml(a.assetId)}"`);
+    if (a?.source) out.push(`source="${escapeXml(a.source)}"`);
+    if (a?.sourcePrompt) out.push(`source-prompt="${escapeXml(a.sourcePrompt)}"`);
+    if (a?.versionGroup) out.push(`version-group="${escapeXml(a.versionGroup)}"`);
+    if (a?.version != null) out.push(`version="${a.version}"`);
+    return out.length ? ` ${out.join(' ')}` : '';
+  };
+  for (const c of ir.refs.characters) {
+    const head = `<character id="${escapeXml(c.id)}" name="${escapeXml(c.name)}"`
+      + (c.variant ? ` variant="${escapeXml(c.variant)}"` : '') + assetAttrs(c.asset) + '>';
+    push(2, head);
+    push(3, `<description>${escapeXml(c.description)}</description>`);
+    push(2, '</character>');
+  }
+  for (const p of ir.refs.props) {
+    push(2, `<prop id="${escapeXml(p.id)}" name="${escapeXml(p.name)}"${assetAttrs(p.asset)}>`);
+    push(3, `<description>${escapeXml(p.description)}</description>`);
+    push(2, '</prop>');
+  }
+  for (const sc of ir.refs.scenes) {
+    const head = `<scene id="${escapeXml(sc.id)}" name="${escapeXml(sc.name)}"`
+      + (sc.sceneHeading ? ` scene-heading="${escapeXml(sc.sceneHeading)}"` : '')
+      + (sc.spatialId ? ` spatial-id="${escapeXml(sc.spatialId)}"` : '')
+      + assetAttrs(sc.asset) + '>';
+    push(2, head);
+    push(3, `<description>${escapeXml(sc.description)}</description>`);
+    push(2, '</scene>');
+  }
+  for (const st of ir.refs.styles) {
+    push(2, `<style-ref id="${escapeXml(st.id)}" name="${escapeXml(st.name)}"${assetAttrs(st.asset)}>`);
+    push(3, `<description>${escapeXml(st.description)}</description>`);
+    push(2, '</style-ref>');
+  }
+  for (const a of ir.refs.actions ?? []) {
+    push(2, `<action id="${escapeXml(a.id)}" name="${escapeXml(a.name)}"${assetAttrs(a.asset)}>`);
+    push(3, `<description>${escapeXml(a.description)}</description>`);
+    push(2, '</action>');
+  }
+  push(1, '</refs>');
+
+  // ---- <spatial>:场景空间锚定(坐标宪章原样) -------------------------------
+  push(1, '<spatial>');
+  for (const sp of ir.spatial) {
+    push(2, `<layout id="${escapeXml(sp.id)}" scene-heading="${escapeXml(sp.sceneHeading)}">`);
+    for (const o of sp.objects) {
+      const attrs = [`id="${escapeXml(o.id)}"`, `type="${o.type}"`, `role="${o.role}"`]
+        .concat(o.label ? [`label="${escapeXml(o.label)}"`] : [])
+        .concat([
+          `position="${vecToStr(o.position)}"`,
+          `size="${vecToStr(o.size)}"`,
+        ])
+        .concat(o.rotation ? [`rotation="${vecToStr(o.rotation)}"`] : [])
+        .concat(o.color ? [`color="${escapeXml(o.color)}"`] : []);
+      push(3, `<object ${attrs.join(' ')}/>`);
+    }
+    for (const c of sp.characters) {
+      const attrs = [`name="${escapeXml(c.name)}"`, `position="${vecToStr(c.position)}"`]
+        .concat(c.facing != null ? [`facing="${c.facing}"`] : [])
+        .concat(c.pose ? [`pose="${escapeXml(c.pose)}"`] : []);
+      push(3, `<character ${attrs.join(' ')}/>`);
+    }
+    push(2, '</layout>');
+  }
+  push(1, '</spatial>');
+
   // ---- <generation>:生成声明(引用 selection,自带 prompt/refs/参数) ---------
   push(1, '<generation>');
   for (const shot of orderedShots) {
@@ -111,12 +189,51 @@ export const renderStoryFlowXML = (
     const attrs = [
       `ref="{${scriptId}.selection.${sid}}"`,
       `seconds="${shot.shotDuration}"`,
+      `status="${shot.status}"`,
     ];
     if (g?.backend) attrs.push(`backend="${g.backend}"`);
     if (g?.seed != null) attrs.push(`seed="${g.seed}"`);
+    if (g?.steps != null) attrs.push(`steps="${g.steps}"`);
     push(2, `<shot ${attrs.join(' ')}>`);
-    push(3, `<first-frame>${escapeXml(shot.imagePrompt)}</first-frame>`);
-    if (shot.lastFrame) push(3, `<last-frame>${escapeXml(shot.lastFrame.description)}</last-frame>`);
+    const ffAttrs = (shot.firstFrame.description ? ` description="${escapeXml(shot.firstFrame.description)}"` : '')
+      + (shot.firstFrame.assetId ? ` asset-id="${escapeXml(shot.firstFrame.assetId)}"` : '');
+    push(3, `<first-frame${ffAttrs}>${escapeXml(shot.imagePrompt)}</first-frame>`);
+    if (shot.lastFrame) {
+      push(3, `<last-frame${shot.lastFrame.assetId ? ` asset-id="${escapeXml(shot.lastFrame.assetId)}"` : ''}>${escapeXml(shot.lastFrame.description)}</last-frame>`);
+    }
+    if (shot.whiteModel) {
+      push(3, `<white-model${shot.whiteModel.assetId ? ` asset-id="${escapeXml(shot.whiteModel.assetId)}"` : ''} duration-seconds="${shot.whiteModel.durationSeconds}"/>`);
+    }
+    if (shot.camera) {
+      const cam = shot.camera;
+      const camAttrs = [`shot-type="${cam.shotType}"`]
+        .concat(cam.description ? [`description="${escapeXml(cam.description)}"`] : [])
+        .concat([
+          `position="${vecToStr(cam.position)}"`,
+          `look-at="${vecToStr(cam.lookAt)}"`,
+        ])
+        .concat(cam.focus ? [`focus="${escapeXml(cam.focus)}"`] : []);
+      push(3, `<camera ${camAttrs.join(' ')}>`);
+      const mv = cam.movement;
+      const mvAttrs = [`type="${mv.type}"`, `duration="${mv.duration}"`]
+        .concat(mv.targetSeconds != null ? [`target-seconds="${mv.targetSeconds}"`] : []);
+      push(4, `<movement ${mvAttrs.join(' ')}>`);
+      if (mv.path?.length) {
+        push(5, '<path>');
+        for (const p of mv.path) push(6, `<point>${vecToStr(p)}</point>`);
+        push(5, '</path>');
+      }
+      if (mv.lookPath?.length) {
+        push(5, '<look-path>');
+        for (const p of mv.lookPath) push(6, `<point>${vecToStr(p)}</point>`);
+        push(5, '</look-path>');
+      }
+      push(4, '</movement>');
+      push(3, '</camera>');
+    }
+    for (const [k, v] of Object.entries(g?.vendor ?? {})) {
+      push(3, `<param name="${escapeXml(k)}" value="${escapeXml(String(v))}" type="${paramTypeOf(v)}"/>`);
+    }
     for (const refId of shot.refBindings) push(3, `<ref>${escapeXml(refId)}</ref>`);
     push(2, '</shot>');
   }
@@ -128,7 +245,10 @@ export const renderStoryFlowXML = (
     if (clip.kind === 'tts') {
       const shot = shotById.get(clip.shotId);
       const isAnchor = !!shot?.dialogue && clip.text === shot.dialogue.text;
-      const attrs = [`id="${escapeXml(clip.id)}"`];
+      const attrs = [
+        `id="${escapeXml(clip.id)}"`,
+        `shot-id="${escapeXml(clip.shotId)}"`,
+      ];
       if (isAnchor) attrs.push(`text="{${scriptId}.selection.${selId(clip.shotId)}.dialogue}"`);
       if (clip.character) attrs.push(`role="${escapeXml(clip.character)}"`);
       attrs.push(`voice="${escapeXml(clip.voice)}"`);
@@ -136,9 +256,11 @@ export const renderStoryFlowXML = (
       if (clip.volume != null) attrs.push(`volume="${clip.volume}"`);
       if (clip.watermark != null) attrs.push(`watermark="${clip.watermark}"`);
       if (clip.gain != null) attrs.push(`gain="${clip.gain}"`);
+      if (clip.measuredSeconds != null) attrs.push(`measured-seconds="${clip.measuredSeconds}"`);
+      if (isAnchor && shot?.dialogue) attrs.push(`tts-floor="${shot.dialogue.ttsFloor}"`);
       push(2, isAnchor
         ? `<tts ${attrs.join(' ')}/>`
-        : `<tts ${attrs.join(' ')}>${escapeXml(clip.text)}</tts>`);
+        : `<tts ${attrs.join(' ')}>${escapeXml((clip as TtsClip).text)}</tts>`);
       continue;
     }
     if (clip.kind === 'bgm') {
@@ -181,10 +303,9 @@ export const renderStoryFlowXML = (
   for (const t of ir.transitions) {
     const target = shotById.get(t.target);
     if (!target) continue;
-    const idx = orderedShots.indexOf(target);
-    const fromId = t.from ?? (idx > 0 ? orderedShots[idx - 1].id : undefined);
+    // from 仅显式存在时发射——「缺省 = 前一镜」的省略语义必须原样保留(round-trip)
     const attrs: string[] = [];
-    if (fromId) attrs.push(`from="{${scriptId}.selection.${selId(fromId)}}"`);
+    if (t.from) attrs.push(`from="{${scriptId}.selection.${selId(t.from)}}"`);
     attrs.push(`to="{${scriptId}.selection.${selId(t.target)}}"`);
     if (t.durationSeconds != null) attrs.push(`seconds="${t.durationSeconds}"`);
     push(2, `<${t.type} ${attrs.join(' ')}/>`);
