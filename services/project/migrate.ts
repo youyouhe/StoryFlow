@@ -29,6 +29,7 @@ export const buildDefaultRun = (name: string = DEFAULT_RUN_NAME): RunFileData =>
   createdAt: Date.now(),
   selection: { kind: 'all' },
   candidates: [],
+  satisfactions: [],
 });
 
 /** name → file content, ready for projectStore to write. */

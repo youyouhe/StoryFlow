@@ -108,6 +108,7 @@ describe('runs/<name>.sfrun', () => {
       selection: { kind: 'blocks', blockIds: ['b1', 'b2'] },
       productionMode: 'simple',
       candidates: [],
+      satisfactions: [],
     };
     expect(parseRunFile(serializeRunFile(run))).toEqual(run);
   });

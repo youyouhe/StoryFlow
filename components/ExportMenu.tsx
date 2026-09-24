@@ -25,13 +25,25 @@ interface ExportMenuProps {
   onExportAssetPack: () => void;
   /** Import a library asset pack (identity-aware re-upload). */
   onImportAssetPack: (file: File) => void;
+  /** P3 results repository: list `(runId, output)` addresses and export one. */
+  onListOutputs?: () => Promise<{ runId: string; runName: string; outputs: { name: string; kind: string }[] }[]>;
+  onExportOutput?: (runId: string, name: string) => Promise<boolean>;
   t: any;
 }
 
-export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, t }) => {
+export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, onListOutputs, onExportOutput, t }) => {
   const [format, setFormat] = useState<ExportFormat>('json');
   const [opts, setOpts] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [resultRuns, setResultRuns] = useState<{ runId: string; runName: string; outputs: { name: string; kind: string }[] }[]>([]);
+
+  // P3: load the results repository when the menu opens
+  useEffect(() => {
+    if (!open || !onListOutputs) return;
+    let cancelled = false;
+    void onListOutputs().then(runs => { if (!cancelled) setResultRuns(runs); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, onListOutputs]);
 
   // close on outside click / escape
   useEffect(() => {
@@ -194,6 +206,37 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
             </label>
           </div>
         </div>
+
+        {/* P3 results repository — export one (runId, output) address */}
+        {onExportOutput && (
+          <div className="px-4 pt-3">
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+              {t.resultsSection || 'Results (runId + output)'}
+            </p>
+            {resultRuns.length === 0 && (
+              <p className="text-[11px] text-gray-400">{t.resultsEmpty || 'No recorded outputs yet — generation results land here after a confirmed run.'}</p>
+            )}
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {resultRuns.map(run => (
+                <div key={run.runId} className="rounded-lg border border-gray-200 dark:border-zinc-700 p-1.5">
+                  <p className="text-[10px] font-mono text-gray-400 truncate">{run.runId} · {run.runName}</p>
+                  {run.outputs.map(o => (
+                    <div key={o.name} className="flex items-center justify-between gap-2 pl-2">
+                      <span className="text-[11px] font-mono text-gray-600 dark:text-gray-300 truncate">{o.name} <span className="opacity-50">({o.kind})</span></span>
+                      <button
+                        type="button"
+                        onClick={() => void onExportOutput(run.runId, o.name)}
+                        className="px-1.5 py-0.5 text-[10px] rounded border border-gray-200 dark:border-zinc-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 inline-flex items-center gap-1 shrink-0"
+                      >
+                        <Download className="w-3 h-3" /> {t.resultsExport || 'export'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* footer */}
         <div className="px-4 py-3 border-t border-gray-100 dark:border-zinc-800 flex justify-end gap-2 bg-gray-50/60 dark:bg-zinc-900/60">

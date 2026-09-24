@@ -521,6 +521,11 @@ export interface H3Task {
   segmentCount?: number;
   /** Which video backend owns this task — decides the poll implementation. */
   backend?: 'api' | 'comfy';
+  /** P3 results address: which frozen-plan run this output belongs to and
+   *  its logical output name (e.g. "video.b1") — completion bytes land at
+   *  `(runId, outputName)` in the results repository. */
+  runId?: string;
+  outputName?: string;
   /** Identifies tasks that belong to one planned generation chain (the shot's
    *  blockId + plan fingerprint). Chains poll independently; when a segment
    *  succeeds its URL is offered for manual concat — H3 does not deliver

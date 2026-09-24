@@ -38,7 +38,12 @@ import {
 import {
   isProjectStoreAvailable, pickProjectDir, persistProjectDir, loadPersistedProjectDir,
   forgetProjectDir, openProject, loadStoryFile, saveStoryFile, saveStyleBundle,
+  listRunFiles, loadRunFile,
 } from './services/project/projectStore';
+import { PlanPreviewModal } from './components/PlanPreviewModal';
+import { freezePlan, type PlanDemand, type PlanConfirmResult, type SatisfiedBy } from './utils/plan/freeze';
+import { resultsStoreFor } from './services/project/results';
+import type { RunFileData } from './services/project/files';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { GalleryModal } from './components/GalleryModal';
 import { AIModal } from './components/AIModal';
@@ -270,7 +275,7 @@ function App() {
     } catch { return []; }
   });
   useEffect(() => {
-    try { localStorage.setItem('h3_tasks', JSON.stringify(h3Tasks.slice(0, 50))); } catch { /* ignore */ }
+    try { localStorage.setItem('h3_tasks', JSON.stringify(h3Tasks)); } catch { /* ignore */ } // P3: unbounded history
   }, [h3Tasks]);
   // Per-segment H3 submission progress for the VIDEO_PLAN batch button.
   const [planH3Progress, setPlanH3Progress] = useState<{ current: number; total: number } | null>(null);
@@ -344,6 +349,138 @@ function App() {
     setPanelTab('timing');
     setPromptPanelBlockId(id);
   }, []);
+
+  // ---- P3 frozen-plan gate (docs/storyflow-adoption-plan.md) ----------------
+  // Every paid request passes through one read-only preview: exact params,
+  // price (or explicit unknown), and candidate-satisfied rows that will send
+  // NO request. Nothing submits until 确认.
+  const [pendingPlan, setPendingPlan] = useState<{
+    demands: PlanDemand[];
+    resolve: (r: PlanConfirmResult | null) => void;
+  } | null>(null);
+  const [planRuns, setPlanRuns] = useState<string[]>([]);
+  const [planRunName, setPlanRunName] = useState<string | null>(null);
+  const [planRunData, setPlanRunData] = useState<RunFileData | null>(null);
+
+  const confirmPlan = useCallback((demands: PlanDemand[]): Promise<PlanConfirmResult | null> => {
+    return new Promise(resolve => {
+      void (async () => {
+        let names: string[] = [];
+        if (projectDir) {
+          try { names = await listRunFiles(projectDir); } catch { /* no runs yet */ }
+        }
+        setPlanRuns(names);
+        setPlanRunName(prev => (prev && names.includes(prev) ? prev : names.includes('main') ? 'main' : names[0] ?? null));
+        setPendingPlan({ demands, resolve });
+      })();
+    });
+  }, [projectDir]);
+
+  // load the selected run file's Candidates (the A/B mechanism: two run files
+  // with different satisfactions diff in git)
+  useEffect(() => {
+    if (!pendingPlan || !projectDir || !planRunName) { setPlanRunData(null); return; }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await loadRunFile(projectDir, planRunName);
+        if (!cancelled) setPlanRunData(data);
+      } catch { if (!cancelled) setPlanRunData(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [pendingPlan, projectDir, planRunName]);
+
+  const frozenPlan = useMemo(() => (pendingPlan
+    ? freezePlan(planRunName ?? '—', planRunData?.candidates, planRunData?.satisfactions, pendingPlan.demands)
+    : null), [pendingPlan, planRunName, planRunData]);
+
+  const resolvePendingPlan = useCallback(async (approved: boolean) => {
+    const pending = pendingPlan;
+    if (!pending) return;
+    setPendingPlan(null);
+    if (!approved) { pending.resolve(null); return; }
+    const frozen = frozenPlan
+      ?? freezePlan(planRunName ?? '—', planRunData?.candidates, planRunData?.satisfactions, pending.demands);
+    const store = resultsStoreFor(projectDir);
+    const runId = store.beginRun(planRunName ?? 'adhoc', frozen);
+    const satisfied: Record<string, SatisfiedBy> = {};
+    for (const row of frozen.rows) {
+      if (!row.satisfiedBy) continue;
+      satisfied[row.demand.name] = row.satisfiedBy;
+      if (row.satisfiedBy.fromRun && row.satisfiedBy.output) {
+        await store.writeForward(runId, planRunName ?? 'adhoc', row.demand.name, {
+          runId: row.satisfiedBy.fromRun, output: row.satisfiedBy.output,
+        });
+      } else if (row.satisfiedBy.file) {
+        await store.writeExternal(runId, planRunName ?? 'adhoc', row.demand.name, row.satisfiedBy.file);
+      }
+    }
+    pending.resolve({ runId, runName: planRunName ?? 'adhoc', satisfied });
+  }, [pendingPlan, frozenPlan, planRunName, planRunData, projectDir]);
+
+  /** Results-repo readers/recorders for children (PromptPanel image path). */
+  const readResultOutput = useCallback((runId: string, name: string) =>
+    resultsStoreFor(projectDir).readOutput(runId, name), [projectDir]);
+  const recordResultOutput = useCallback((runId: string, name: string, blob: Blob, meta?: {
+    blockId?: string; service?: string; prompt?: string; params?: Record<string, string | number | boolean>;
+  }) => resultsStoreFor(projectDir).writeOutput(runId, runId, name, 'image', blob, meta), [projectDir]);
+  const listResultOutputs = useCallback(async () => {
+    const store = resultsStoreFor(projectDir);
+    const runs = await store.list();
+    const out: { runId: string; runName: string; outputs: { name: string; kind: string }[] }[] = [];
+    for (const summary of runs.slice(0, 20)) {
+      const rec = await store.get(summary.runId);
+      if (rec?.outputs.length) {
+        out.push({ runId: rec.runId, runName: rec.runName, outputs: rec.outputs.map(o => ({ name: o.name, kind: o.kind })) });
+      }
+    }
+    return out;
+  }, [projectDir]);
+  const exportResultOutput = useCallback((runId: string, name: string) =>
+    resultsStoreFor(projectDir).exportOutput(runId, name), [projectDir]);
+
+  // Durable receipts + output bytes for terminal tasks (the history the old
+  // h3_tasks 50-cap kept losing). Bytes land at (runId, outputName).
+  const persistedTaskIds = useRef(new Set<string>());
+  useEffect(() => {
+    for (const task of h3Tasks) {
+      const terminal = task.status === 'succeeded' || task.status === 'failed';
+      if (!terminal || !task.runId || persistedTaskIds.current.has(task.id)) continue;
+      persistedTaskIds.current.add(task.id);
+      void (async () => {
+        const store = resultsStoreFor(projectDir);
+        await store.addTaskReceipt(task.runId!, task.runId!, {
+          id: task.id,
+          blockId: task.blockId,
+          blockContent: task.blockContent,
+          status: task.status,
+          taskId: task.taskId,
+          backend: task.backend,
+          resolution: task.resolution,
+          videoSeconds: task.videoSeconds,
+          outputSeconds: task.outputSeconds,
+          estimatedCost: task.estimatedCost,
+          error: task.error,
+          outputName: task.outputName,
+          createdAt: task.createdAt,
+          completedAt: Date.now(),
+        });
+        if (task.status === 'succeeded' && task.resultUrl && task.outputName) {
+          try {
+            const blob = await (await fetch(task.resultUrl)).blob();
+            await store.writeOutput(task.runId!, task.runId!, task.outputName, 'video', blob, {
+              blockId: task.blockId,
+              taskId: task.taskId,
+              service: task.backend === 'comfy' ? 'comfy:local' : 'minimax-h3',
+              prompt: task.prompt,
+            });
+          } catch (e) {
+            shipLog('flow', 'warn', `结果字节落盘失败: ${String(e)}`);
+          }
+        }
+      })();
+    }
+  }, [h3Tasks, projectDir]);
 
   /** P2b mark gesture (editor path): Selection/Moment from a text selection. */
   const handleCreateMark = useCallback((kind: 'selection' | 'moment', name: string, blockId: string, startGap: number, endGap: number) => {
@@ -616,6 +753,8 @@ function App() {
     segmentIndex?: number;
     segmentCount?: number;
     chainId?: string;
+    runId?: string;
+    outputName?: string;
   }): Promise<{ ok: true; taskId: string } | { ok: false; error: string }> => {
     if (!appSettings.minimaxApiKey.trim()) {
       return { ok: false, error: '未配置 MiniMax API Key——请在 Settings → 视频生成中填写。' };
@@ -673,6 +812,8 @@ function App() {
           segmentIndex: payload.segmentIndex,
           segmentCount: payload.segmentCount,
           chainId: payload.chainId,
+          runId: payload.runId,
+          outputName: payload.outputName,
           backend: 'comfy',
           createdAt: Date.now(),
         }, ...prev]);
@@ -716,10 +857,12 @@ function App() {
       ...(payload.segmentIndex != null ? { segmentIndex: payload.segmentIndex } : {}),
       ...(payload.segmentCount != null ? { segmentCount: payload.segmentCount } : {}),
       ...(payload.chainId ? { chainId: payload.chainId } : {}),
+      ...(payload.runId ? { runId: payload.runId } : {}),
+      ...(payload.outputName ? { outputName: payload.outputName } : {}),
       estimatedCost,
       createdAt: Date.now(),
     };
-    setH3Tasks(prev => [baseTask, ...prev].slice(0, 50));
+    setH3Tasks(prev => [baseTask, ...prev]); // P3: history is unbounded (results repo is the durable store)
 
     const cfg = { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl };
     try {
@@ -758,6 +901,28 @@ function App() {
       return;
     }
     const plan = videoPlan;
+    // ---- P3 frozen-plan gate: freeze every demand first, confirm, submit ----
+    const comfyBackend = appSettings.videoBackend === 'comfy' && appSettings.comfyServerUrl.trim();
+    const demands: PlanDemand[] = plan.segments.map(seg => {
+      const outputSeconds = clampSegmentSeconds(seg.duration, videoPlanModel.min, videoPlanDuration);
+      const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
+      return {
+        name: `video.${seg.blockIds[0]}`,
+        kind: 'video' as const,
+        blockId: seg.blockIds[0],
+        service: comfyBackend ? 'comfy:t2v' : 'minimax-h3',
+        params: comfyBackend
+          ? { outputSeconds, beats: seg.beats.length }
+          : { model: videoPlanModel.id, resolution: planResolution, outputSeconds },
+        outputSeconds,
+        videoSeconds: 0,
+        imageCount: refs.urls.length,
+        resolution: planResolution,
+        model: videoPlanModel.id,
+      };
+    });
+    const confirm = await confirmPlan(demands);
+    if (!confirm) return; // 未确认不提交
     setPlanH3Progress({ current: 0, total: plan.segments.length });
     shipLog('flow', 'info', `H3 plan submission start: ${plan.segments.length} segments`);
     let okCount = 0;
@@ -765,6 +930,13 @@ function App() {
     const chainId = `videoplan-${plan.segments[0].blockIds[0]}`;
     for (let si = 0; si < plan.segments.length; si++) {
       const seg = plan.segments[si];
+      const outputName = `video.${seg.blockIds[0]}`;
+      if (confirm.satisfied[outputName]) {
+        // P3: explicit reuse — the candidate's bytes stand in, no request
+        shipLog('flow', 'info', `H3 segment ${si + 1}: 由候选满足（${confirm.satisfied[outputName].source}）——不发请求`);
+        okCount++;
+        continue;
+      }
       setPlanH3Progress({ current: si + 1, total: plan.segments.length });
       const refs = resolveSegmentRefs(seg, screenplay.blocks, refBindings, refImages);
       const prompt = buildSegmentVideoPrompt(seg, si + 1, plan.segments.length);
@@ -820,6 +992,8 @@ function App() {
             segmentIndex: si + 1,
             segmentCount: plan.segments.length,
             chainId,
+            runId: confirm.runId,
+            outputName,
             backend: 'comfy',
             createdAt: Date.now(),
           }, ...prev]);
@@ -849,6 +1023,8 @@ function App() {
         segmentIndex: si + 1,
         segmentCount: plan.segments.length,
         chainId,
+        runId: confirm.runId,
+        outputName,
       });
       // `in`-narrowing: this project runs without strictNullChecks, which
       // widens the `ok: true|false` literal discriminant and breaks boolean
@@ -867,7 +1043,7 @@ function App() {
     } else {
       shipLog('flow', 'info', `H3 plan submission done: ${okCount}/${plan.segments.length} tasks created`);
     }
-  }, [videoPlan, videoPlanModel, videoPlanDuration, planResolution, screenplay.blocks, refBindings, refImages, handleSubmitH3]);
+  }, [videoPlan, videoPlanModel, videoPlanDuration, planResolution, screenplay.blocks, refBindings, refImages, handleSubmitH3, confirmPlan, appSettings.videoBackend, appSettings.comfyServerUrl]);
 
   // Poll active tasks every 10s while the app is open (official cadence).
   const h3PollInFlight = useRef(false);
@@ -2773,6 +2949,9 @@ function App() {
                 setPanelTab={setPanelTab}
                 setPromptPanelBlockId={setPromptPanelBlockId}
                 onJumpToEditor={(start, end) => setEditorJump({ blockId: panelBlock.id, start, end })}
+                onConfirmPlan={confirmPlan}
+                onReadOutput={readResultOutput}
+                onRecordOutput={recordResultOutput}
                 screenplay={screenplay}
                 theme={theme}
                 lang={lang}
@@ -2889,6 +3068,19 @@ function App() {
             />
         )}
 
+        {/* P3 frozen-plan gate — the read-only preview before any paid request */}
+        {pendingPlan && frozenPlan && (
+            <PlanPreviewModal
+                plan={frozenPlan}
+                runs={planRuns}
+                selectedRun={planRunName}
+                onSelectRun={setPlanRunName}
+                onConfirm={() => void resolvePendingPlan(true)}
+                onCancel={() => void resolvePendingPlan(false)}
+                t={t}
+            />
+        )}
+
         {/* Settings Modal */}
         {showSettingsModal && (
             <SettingsModal
@@ -2939,6 +3131,8 @@ function App() {
             onImportJson={(f) => { void handleImportScript(f); }}
             onExportAssetPack={() => { void handleExportAssetPack(); }}
             onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
+            onListOutputs={listResultOutputs}
+            onExportOutput={exportResultOutput}
             t={t}
         />
 

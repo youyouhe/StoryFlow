@@ -10,6 +10,8 @@ import { blockTokenWindows, blockWindow as timelineBlockWindow, buildTimeline } 
 import { applyReflow } from '../utils/timing/reflow';
 import { clearTokenTiming, upsertTokenTiming, applyAsrToBlock } from '../utils/timing/overlay';
 import { AlignmentError, parseAsrResult, transcribeAudio, type AsrResult } from '../services/alignment';
+import type { PlanDemand, PlanConfirmResult } from '../utils/plan/freeze';
+import { FAL_SIZE_FOR_ASPECT } from '../services/falService';
 import { resolveActionRef, resolveFrameRefs, resolveCharacterSheet, resolveBeatRefs, normIdentity } from '../utils/refBindings';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { copyToClipboard } from '../utils/clipboard';
@@ -27,6 +29,13 @@ interface PromptPanelProps {
   setPromptPanelBlockId: React.Dispatch<React.SetStateAction<string | null>>;
   /** P2b: jump the editor caret onto a raw character range (strip → editor). */
   onJumpToEditor?: (rawStart: number, rawEnd: number) => void;
+  /** P3 frozen-plan gate: preview/confirm before any paid image/video call. */
+  onConfirmPlan?: (demands: PlanDemand[]) => Promise<PlanConfirmResult | null>;
+  /** P3 results repository: read/record one (runId, output) address. */
+  onReadOutput?: (runId: string, name: string) => Promise<{ record: unknown; blob: Blob | null } | null>;
+  onRecordOutput?: (runId: string, name: string, blob: Blob, meta?: {
+    blockId?: string; service?: string; prompt?: string; params?: Record<string, string | number | boolean>;
+  }) => Promise<unknown>;
   screenplay: Screenplay;
   theme: 'light' | 'dark';
   lang: Language;
@@ -79,6 +88,9 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   panelTab,
   setPanelTab,
   onJumpToEditor,
+  onConfirmPlan,
+  onReadOutput,
+  onRecordOutput,
   setPromptPanelBlockId,
   screenplay,
   theme,
@@ -434,6 +446,8 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                 onSubmitH3={onSubmitH3}
                 h3Tasks={h3Tasks}
                 h3Ready={h3Ready}
+                onConfirmPlan={onConfirmPlan}
+                videoBackend={appSettings.videoBackend}
               />
             </div>
           );
@@ -661,17 +675,48 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   if (panelBlock.type !== 'CHARACTER' && frameRefs.environment) {
                     envRefB = await (await fetch(frameRefs.environment.url)).blob().catch(() => undefined);
                   }
-                  const imgs = await generateImages(
-                    { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
-                      ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
-                    panelBlock.imagePrompt!,
-                    { n: 1, aspectRatio: '16:9',
-                      subjectReference: subjectRef,
-                      references: {
-                        ...(charRefs.length ? { characters: charRefs } : {}),
-                        ...(panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
-                      } },
-                  );
+                  // ---- P3 frozen-plan gate: preview/confirm, reuse on candidate ----
+                  const imageDemand: PlanDemand = {
+                    name: `image.${panelBlock.id}`,
+                    kind: 'image',
+                    blockId: panelBlock.id,
+                    service: effectiveImageProvider === 'fal' ? 'fal:gpt-image' : 'minimax:image-01',
+                    params: effectiveImageProvider === 'fal'
+                      ? { size: FAL_SIZE_FOR_ASPECT['16:9'], quality: appSettings.falQuality }
+                      : { n: 1, aspectRatio: '16:9' },
+                    imageSize: 'landscape_16_9',
+                    imageQuality: appSettings.falQuality,
+                  };
+                  const confirm = await onConfirmPlan?.([imageDemand]);
+                  if (onConfirmPlan && !confirm) return; // 未确认不提交
+                  let imgs: { blob: Blob }[];
+                  if (confirm?.satisfied[imageDemand.name]) {
+                    const src = confirm.satisfied[imageDemand.name];
+                    const reused = src.fromRun && src.output ? await onReadOutput?.(src.fromRun, src.output) : null;
+                    if (!reused?.blob) {
+                      setImageGenError(`由候选满足（${src.source}）但字节不可用——请手动引用该文件。`);
+                      return;
+                    }
+                    imgs = [{ blob: reused.blob }];
+                  } else {
+                    imgs = await generateImages(
+                      { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
+                        ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
+                      panelBlock.imagePrompt!,
+                      { n: 1, aspectRatio: '16:9',
+                        subjectReference: subjectRef,
+                        references: {
+                          ...(charRefs.length ? { characters: charRefs } : {}),
+                          ...(panelBlock.type !== 'CHARACTER' && envRefB ? { landscape: envRefB } : {}),
+                        } },
+                    );
+                    if (confirm?.runId) {
+                      void onRecordOutput?.(confirm.runId, imageDemand.name, imgs[0].blob, {
+                        blockId: panelBlock.id, service: imageDemand.service,
+                        prompt: panelBlock.imagePrompt, params: imageDemand.params,
+                      });
+                    }
+                  }
                   const stamp = Date.now().toString(36);
                   const name = panelBlock.type === 'CHARACTER'
                     ? `${subject}-gen-${stamp}.png`
