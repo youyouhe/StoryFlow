@@ -6,10 +6,31 @@ export type BlockType =
   | 'PARENTHETICAL'
   | 'TRANSITION';
 
-export interface ScriptBlock {
+/** Optional director-level shot fields (schemaVersion 2, docs/script-structure-design.md).
+ *  Every field has a deterministic default — AI output missing them is legal;
+ *  utils/blockDirectorFill.fillDirectorDefaults backfills on parse. */
+interface DirectorFields {
+  /** What MOVES inside the frame — the I2V motion cue (≠ imagePrompt, which
+   *  describes composition/style). Default: derived from content. */
+  motionPrompt?: string;
+  /** Shot length in seconds (decimals allowed; fitted 4–15 at submission).
+   *  Default: beat-timestamp width, else 5. In Pro, TTS lower bound may lift it. */
+  shotDuration?: number;
+  /** The first readable instant of the shot (poses, positions, light). */
+  firstFrameDesc?: string;
+  /** The settling instant. Empty is legal — plain motion needs no last frame. */
+  lastFrameDesc?: string;
+}
+
+export interface ScriptBlock extends DirectorFields {
   id: string;
   type: BlockType;
   content: string;
+  /** DIALOGUE (Pro): the speaker's base name; 画外 lines use 名（画外）.
+   *  Backfilled from the nearest CHARACTER cue at parse time. */
+  speaker?: string;
+  /** TRANSITION: optional target ("夜 – 次日" / "CUT TO: 内. 浴室"). */
+  transitionTo?: string;
   /** Optional text-to-image prompt attached to ACTION blocks (storyboard). */
   imagePrompt?: string;
   /** AI-inferred dubbing metadata for a DIALOGUE block — emotion + delivery
@@ -183,6 +204,9 @@ export interface Screenplay {
   metadata: ScriptMetadata;
   blocks: ScriptBlock[];
   lastModified: number;
+  /** 1 (legacy, absent) | 2 (blocks carry director fields). Written on new
+   *  generations/saves; legacy scripts are lazily backfilled by consumers. */
+  schemaVersion?: number;
   /** White-model reference bindings (capsule → asset id). Lives INSIDE the
    *  screenplay so exports/imports carry it — assets stay in the shared
    *  library (folder or IndexedDB), bindings travel with the script. */
