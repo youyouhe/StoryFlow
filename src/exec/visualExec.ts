@@ -18,7 +18,9 @@ import type { ImageCallRuntime, ResolvedRef } from '../bridge/types';
 import type {
   ExecOptions, JobRunResult, VisualExecDeps, VisualRunResult,
 } from './types';
+import type { CallStep } from '../bridge/types';
 import { pollUntil, errMsg, type Terminal } from './poll';
+import { checkBudgetGate, BudgetExceededError } from './budget';
 
 /** Terminal(url/error) → JobRunResult(resultUrl/error) 字段名对齐。 */
 const toRunResult = (t: Terminal): Omit<JobRunResult, 'jobId' | 'shotId'> => ({
@@ -132,12 +134,33 @@ const runH3VideoJob = async (
   return toRunResult(await pollUntil(() => deps.ports.queryH3Task(call.cfg, taskId), opts, { jobId: job.jobId, shotId: job.shotId }));
 };
 
-/** 顺序执行整个计划(needs 恒被先行满足;依赖失败 → skipped)。 */
+/** needs 依赖波次(level = 1+max(needs);同波互不依赖 = chain 链元/不同镜头)。 */
+const waveLevels = (steps: CallStep[]): CallStep[][] => {
+  const levelOf = new Map<string, number>();
+  const levels: CallStep[][] = [];
+  for (const step of steps) {
+    const needLevels = step.needs.map(n => levelOf.get(n) ?? 0);
+    const level = needLevels.length ? Math.max(...needLevels) + 1 : 0;
+    levelOf.set(step.jobId, level);
+    (levels[level] ??= []).push(step);
+  }
+  return levels.filter(l => l != null);
+};
+
+/** 执行整个计划:预算闸门先发(超限零提交);concurrency 缺省 1 = 严格顺序
+ *  (live 同口径,逐字节回归锁),>1 按依赖波次并发(needs 恒先满足;
+ *  依赖失败 → skipped)。 */
 export const executeVisualPlan = async (
   plan: VisualCallPlan,
   deps: VisualExecDeps,
   opts: ExecOptions = {},
 ): Promise<VisualRunResult> => {
+  // P6 预算闸门:任何 port 调用之前(连 upload 都不发生)
+  if (opts.budgetFen != null) {
+    const gate = checkBudgetGate(plan, opts.budgetFen);
+    if (!gate.ok) throw new BudgetExceededError(gate.totalCostFen, gate.budgetFen!);
+  }
+
   const steps = planCallSequence(plan);
   const jobById = new Map<string, ImageJob | VideoJob>();
   for (const shot of plan.shots) {
@@ -151,17 +174,17 @@ export const executeVisualPlan = async (
     opts.onProgress?.({ jobId, shotId, phase: r.status, detail: r.error });
   };
 
-  for (const step of steps) {
+  const runStep = async (step: CallStep): Promise<void> => {
     const job = jobById.get(step.jobId);
-    if (!job) continue;
+    if (!job) return;
     const unmet = step.needs.find(n => results.get(n)?.status !== 'succeeded');
     if (unmet) {
       settle(step.jobId, job.shotId, { status: 'skipped', error: `依赖任务未完成: ${unmet}` });
-      continue;
+      return;
     }
     if (step.call === 'unsupported') {
       settle(step.jobId, job.shotId, { status: 'skipped', error: step.reason ?? '无映射后端' });
-      continue;
+      return;
     }
     opts.onProgress?.({ jobId: step.jobId, shotId: job.shotId, phase: 'submitting' });
     try {
@@ -176,6 +199,17 @@ export const executeVisualPlan = async (
       }
     } catch (e) {
       settle(step.jobId, job.shotId, { status: 'failed', error: errMsg(e) });
+    }
+  };
+
+  const limit = Math.max(1, Math.floor(opts.concurrency ?? 1));
+  if (limit === 1) {
+    for (const step of steps) await runStep(step);
+  } else {
+    for (const wave of waveLevels(steps)) {
+      for (let i = 0; i < wave.length; i += limit) {
+        await Promise.all(wave.slice(i, i + limit).map(runStep));
+      }
     }
   }
 

@@ -8,6 +8,7 @@
  */
 import type { SfxResolution } from '../../services/sfxService';
 import type { ResolvedRef } from '../bridge/types';
+import type { VisualCallPlan } from '../ir/visual/types';
 import type { AlignmentTake } from '../ir/audio/types';
 
 // ── 服务签名推导源 ─────────────────────────────────────────────────────────
@@ -79,6 +80,10 @@ export interface ExecOptions {
   sleep?: (ms: number) => Promise<void>;
   signal?: AbortSignal;
   onProgress?: (e: ExecEvent) => void;
+  /** P6 预算闸门(分):非空 = 提交前判限,超限零提交抛 BudgetExceededError。 */
+  budgetFen?: number;
+  /** P6 并行提交 opt-in(缺省 1 = 严格顺序,live 同口径);>1 按 needs 依赖波次并发。 */
+  concurrency?: number;
 }
 
 // ── 运行结果 ───────────────────────────────────────────────────────────────
@@ -147,4 +152,39 @@ export interface AudioRunResult {
 
 export interface ExportExecDeps {
   ports: ExportExecPorts;
+}
+
+// ── P6 批量编排 ─────────────────────────────────────────────────────────────
+
+export interface BatchRequest {
+  /** 进度/结果对账标识。 */
+  id: string;
+  plan: VisualCallPlan;
+  deps: VisualExecDeps;
+  opts?: ExecOptions;
+}
+
+export type BatchItemStatus = 'succeeded' | 'failed' | 'rejected';
+
+export interface BatchItemResult {
+  id: string;
+  status: BatchItemStatus;
+  /** 发起即计的记账额(分);rejected(未发起)= 0。 */
+  chargedCostFen: number;
+  result?: VisualRunResult;
+  error?: string;
+}
+
+export interface BatchResult {
+  items: BatchItemResult[];
+  /** 发起即计累计(分)。 */
+  totalChargedFen: number;
+}
+
+export interface BatchOptions {
+  /** 批级总预算(分);缺省无上限。 */
+  budgetFen?: number;
+  /** 首个 failed 后中止余项(缺省 false = 继续)。 */
+  stopOnError?: boolean;
+  onProgress?: (e: { id: string; phase: 'checking' | 'running' | 'done' | 'rejected' | 'failed' }) => void;
 }

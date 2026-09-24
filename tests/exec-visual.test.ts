@@ -179,3 +179,39 @@ describe('executeVisualPlan — Pro 路(H3 submit→poll→collect)', () => {
     expect(run.error).toMatch(/轮询超时/);
   });
 });
+
+describe('executeVisualPlan — P6 并行提交 opt-in', () => {
+  it('concurrency=1 回归锁:严格顺序(一对 image→其 i2v 完整走完才开下一对)', async () => {
+    const plan = expressPlan();
+    const { ports, calls } = mockVisualPorts();
+    await executeVisualPlan(plan, baseDeps(ports), FAST);
+    // 顺序语义:vj-001/002 一对完整相邻——vj-002 的全部上传都在第二对 image 之前
+    const gIdx = calls.map((c, i) => (c === 'generateImages' ? i : -1)).filter(i => i >= 0);
+    const pair1 = calls.map((c, i) => (c.startsWith('upload:sf-vj-002') ? i : -1)).filter(i => i >= 0);
+    expect(gIdx[0]).toBe(0);
+    expect(Math.max(...pair1)).toBeLessThan(gIdx[1]);
+  });
+
+  it('concurrency=2: 同波并发(maxInFlight=2)+ 波间先后(image 波先于 i2v 波)', async () => {
+    const plan = expressPlan();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const { ports, calls } = mockVisualPorts({
+      generateImages: async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(r => setTimeout(r, 5));
+        inFlight -= 1;
+        return [{ url: 'img://1', blob: new Blob(['frame']) }];
+      },
+    });
+    const result = await executeVisualPlan(plan, baseDeps(ports), { ...FAST, concurrency: 2 });
+    expect(maxInFlight).toBe(2); // 波内并发上限生效
+    // 泃0(全部 image)先于波1(i2v 上传)——needs 恒先满足
+    expect(calls.lastIndexOf('generateImages')).toBeLessThan(calls.findIndex(c => c.startsWith('upload:')));
+    expect(result.results).toHaveLength(10);
+    // grok 镜(SHOT_004)按设计 skipped;其余全成功
+    expect(result.results.every(r => r.status === 'succeeded' || r.status === 'skipped')).toBe(true);
+    expect(result.results.filter(r => r.status === 'skipped')).toHaveLength(1);
+  });
+});
