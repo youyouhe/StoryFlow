@@ -8,7 +8,8 @@
 import type { SfxAnchor } from '../types';
 import type { ShotDurationFit } from '../shared';
 
-export const AUDIO_MIX_PLAN_VERSION = '0.1.0';
+/** 0.2.0(P5):新增 alignments 输入 + ALIGNMENT_UNUSABLE 警告码(additive minor)。 */
+export const AUDIO_MIX_PLAN_VERSION = '0.2.0';
 export type AudioMixPlanVersion = typeof AUDIO_MIX_PLAN_VERSION;
 
 /** 混音增益常量 —— 与 services/videoExport.ts:230-238 (muxSegment 的
@@ -91,7 +92,8 @@ export type AudioWarningCode =
   | 'TTS_ANCHOR_UNMATCHED'
   | 'AUDIO_TOO_LONG'
   | 'SFX_MISSING'
-  | 'SFX_ANCHOR_OUT_OF_RANGE';
+  | 'SFX_ANCHOR_OUT_OF_RANGE'
+  | 'ALIGNMENT_UNUSABLE';
 
 export interface AudioWarning {
   code: AudioWarningCode;
@@ -114,8 +116,36 @@ export interface AudioMixPlan {
   warnings: AudioWarning[];
 }
 
-/** ②入口输入:探活秒数由 IO 边缘传入(纯编译层不碰 Blob/网络)。 */
+/** 逐词对齐的一枚 token 窗(P5,hypit SemanticTake.tokens 映射)。 */
+export interface AlignedToken {
+  /** 作者身份 = 词锚基文本的 token 下标(splitAnchorWords 同款,0 起)。 */
+  tokenIndex: number;
+  /** 声学证据上的词形(N:M 分组时多 token 共享窗)。 */
+  text?: string;
+  /** clip 内时间窗(毫秒)。 */
+  startMs: number;
+  endMs: number;
+  /** 对齐置信 0–1;低置信词允许手动校时(hypit「标注低置信词」)。 */
+  confidence?: number;
+}
+
+/** 对齐件(SemanticTake 形状,docs/storyflow-ir-p5.md §2)——IO 边缘(对齐
+ *  服务)对已合成音频的测量产物,**不进 IR**(锚是作者身份,毫秒是编译产物)。
+ *  自含:杆长与文本指纹随件走。 */
+export interface AlignmentTake {
+  /** 新鲜度指纹 = 对齐所依据的锚基文本全文;不匹配即 stale → 回退字素比例。 */
+  text: string;
+  /** 对齐的音频 clip(TtsClip id)。 */
+  clipId: string;
+  /** 归一化杆长(毫秒;与 measured 双源互证,不一致以 measured 为准)。 */
+  durationMs: number;
+  tokens: AlignedToken[];
+}
+
+/** ②入口输入:探活秒数/对齐件由 IO 边缘传入(纯编译层不碰 Blob/网络)。 */
 export interface AudioCompileOptions {
   /** clipId → 已探活 wav 秒数(①⇄② 缝合:缺项的 clip 不进时间轴,警告)。 */
   measured?: Record<string, number>;
+  /** clipId → 逐词对齐件(P5)。word→ms 优先对齐窗,无/失效回退字素比例。 */
+  alignments?: Record<string, AlignmentTake>;
 }
