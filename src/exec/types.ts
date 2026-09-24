@@ -1,0 +1,146 @@
+/**
+ * P3 真执行器 —— ports(IO 接缝)+ 运行结果形状(docs/storyflow-ir-p3.md §2)。
+ *
+ * ports 覆盖执行器触碰的**每一个** services 函数(含纯侧,如
+ * comfyPatchWorkflow/wavDuration)——单一接缝 ⇒ 全时序可 mock。签名自
+ * services 推导(`Parameters<typeof import(…)>`),services 变则编译红,
+ * 修执行器不修 services(不碰生产)。
+ */
+import type { SfxResolution } from '../../services/sfxService';
+import type { ResolvedRef } from '../bridge/types';
+
+// ── 服务签名推导源 ─────────────────────────────────────────────────────────
+
+type GenerateImagesFn = typeof import('../../services/minimaxService').generateImages;
+type UploadH3VideoFn = typeof import('../../services/minimaxService').uploadH3Video;
+type CreateH3TaskFn = typeof import('../../services/minimaxService').createH3Task;
+type QueryH3TaskFn = typeof import('../../services/minimaxService').queryH3Task;
+type ComfyUploadImageFn = typeof import('../../services/comfyService').comfyUploadImage;
+type ComfyPatchFn = typeof import('../../services/comfyService').comfyPatchWorkflow;
+type ComfyQueuePromptFn = typeof import('../../services/comfyService').comfyQueuePrompt;
+type ComfyQueryTaskFn = typeof import('../../services/comfyService').comfyQueryTask;
+type SynthesizeSpeechFn = typeof import('../../services/glmTtsService').synthesizeSpeech;
+type ConcatWavsFn = typeof import('../../services/glmTtsService').concatWavs;
+type WavDurationFn = typeof import('../../services/glmTtsService').wavDuration;
+type ResolveSfxFn = typeof import('../../services/sfxService').resolveSfx;
+type RequestMusicFn = typeof import('../../services/falMusicService').requestMusic;
+type PollMusicFn = typeof import('../../services/falMusicService').pollMusic;
+type ExportProCutFn = typeof import('../../services/videoExport').exportProCut;
+type ConcatClipsFn = typeof import('../../services/videoExport').concatClipsToMp4;
+
+// ── ports ──────────────────────────────────────────────────────────────────
+
+export interface VisualExecPorts {
+  generateImages: GenerateImagesFn;
+  uploadH3Video: UploadH3VideoFn;
+  createH3Task: CreateH3TaskFn;
+  queryH3Task: QueryH3TaskFn;
+  comfyUploadImage: ComfyUploadImageFn;
+  comfyPatchWorkflow: ComfyPatchFn;
+  comfyQueuePrompt: ComfyQueuePromptFn;
+  comfyQueryTask: ComfyQueryTaskFn;
+}
+
+export interface AudioExecPorts {
+  synthesizeSpeech: SynthesizeSpeechFn;
+  concatWavs: ConcatWavsFn;
+  wavDuration: WavDurationFn;
+  resolveSfx: ResolveSfxFn;
+  requestMusic: RequestMusicFn;
+  pollMusic: PollMusicFn;
+}
+
+export interface ExportExecPorts {
+  exportProCut: ExportProCutFn;
+  concatClipsToMp4: ConcatClipsFn;
+}
+
+// ── 执行选项/事件 ──────────────────────────────────────────────────────────
+
+export interface ExecEvent {
+  jobId?: string;
+  shotId?: string;
+  phase: 'submitting' | 'queued' | 'running' | 'succeeded' | 'failed' | 'timeout' | 'skipped';
+  detail?: string;
+}
+
+export interface ExecOptions {
+  /** 轮询间隔(缺省 10_000 = live H3 口径)。 */
+  pollIntervalMs?: number;
+  /** 单任务总时限(缺省 30 分钟 = live stale guard 口径)。 */
+  timeoutMs?: number;
+  /** 测试注入假时钟。 */
+  now?: () => number;
+  /** 测试注入假睡眠。 */
+  sleep?: (ms: number) => Promise<void>;
+  signal?: AbortSignal;
+  onProgress?: (e: ExecEvent) => void;
+}
+
+// ── 运行结果 ───────────────────────────────────────────────────────────────
+
+export type JobRunStatus = 'succeeded' | 'failed' | 'timeout' | 'skipped';
+
+export interface JobRunResult {
+  jobId: string;
+  shotId: string;
+  status: JobRunStatus;
+  /** 视频产物(H3 signed URL / comfy /view URL)。 */
+  resultUrl?: string;
+  /** 首帧产物(image job;供 i2v 交接)。 */
+  resultBlob?: Blob;
+  error?: string;
+}
+
+export interface VisualRunResult {
+  results: JobRunResult[];
+}
+
+/** 视觉执行注入物:P2 运行时口径 + 资产解算(纯函数注入,零 IO 于解算处)。 */
+export interface VisualExecDeps {
+  ports: VisualExecPorts;
+  /** refId → 图 Blob(资产库解算);undefined = 无资产槽(映射层过滤)。 */
+  refBlob: (refId: string) => Blob | undefined;
+  /** firstFrame.assetId → 已生成首帧 blob(i2v 回退源)。 */
+  firstFrameBlob?: (assetId: string) => Blob | undefined;
+  minimax: { apiKey: string; baseUrl: string };
+  image?: {
+    provider: NonNullable<Parameters<GenerateImagesFn>[0]['provider']>;
+    aspectRatio?: string;
+    falKey?: string;
+    falModel?: string;
+    falQuality?: 'high' | 'low';
+  };
+  comfy?: {
+    serverUrl: string;
+    /** 按 i2v/t2v/r2v 取 API-format 工作流 JSON。 */
+    graphJsonOf: (path: 'i2v' | 't2v' | 'r2v') => string;
+  };
+  /** r2v 白模(Pro)。 */
+  whiteModel?: { blob: Blob; seconds: number };
+  resolution?: Parameters<CreateH3TaskFn>[1]['resolution'];
+  model?: string;
+}
+
+export interface AudioExecDeps {
+  ports: AudioExecPorts;
+  ttsApiKey: string;
+  falKey: string;
+}
+
+export interface AudioRunResult {
+  /** clipId → 拼杆后的成 clip wav。 */
+  clipBlobs: Record<string, Blob>;
+  /** clipId → 探活秒数(供② reflow 回填 IR measuredSeconds)。 */
+  measurements: Record<string, number>;
+  /** clipId → SFX 解算(missing 如实保留)。 */
+  sfxResolutions: Record<string, SfxResolution>;
+  /** clipId → BGM 音频 URL。 */
+  bgmUrls: Record<string, string>;
+  /** 单 clip 失败不中断其余(P2「失败=新调用」)。 */
+  failures: { clipId: string; error: string }[];
+}
+
+export interface ExportExecDeps {
+  ports: ExportExecPorts;
+}
