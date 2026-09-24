@@ -80,7 +80,7 @@ const segmentMixSchema = z.strictObject({
 });
 
 const audioWarningSchema = z.strictObject({
-  code: z.enum(['TTS_ANCHOR_UNMATCHED', 'AUDIO_TOO_LONG', 'SFX_MISSING', 'SFX_ANCHOR_OUT_OF_RANGE', 'ALIGNMENT_UNUSABLE']),
+  code: z.enum(['TTS_ANCHOR_UNMATCHED', 'AUDIO_TOO_LONG', 'SFX_MISSING', 'SFX_ANCHOR_OUT_OF_RANGE', 'ALIGNMENT_UNUSABLE', 'TIMING_INVALID']),
   shotId: z.string().regex(/^SHOT_\d{3,}$/).optional(),
   message: z.string().min(1),
 });

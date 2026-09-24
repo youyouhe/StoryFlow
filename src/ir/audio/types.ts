@@ -7,6 +7,8 @@
  */
 import type { SfxAnchor } from '../types';
 import type { ShotDurationFit } from '../shared';
+import type { WordTimingCorrection } from './timing';
+export type { WordTimingCorrection };
 
 /** 0.2.0(P5):新增 alignments 输入 + ALIGNMENT_UNUSABLE 警告码(additive minor)。 */
 export const AUDIO_MIX_PLAN_VERSION = '0.2.0';
@@ -93,7 +95,8 @@ export type AudioWarningCode =
   | 'AUDIO_TOO_LONG'
   | 'SFX_MISSING'
   | 'SFX_ANCHOR_OUT_OF_RANGE'
-  | 'ALIGNMENT_UNUSABLE';
+  | 'ALIGNMENT_UNUSABLE'
+  | 'TIMING_INVALID';
 
 export interface AudioWarning {
   code: AudioWarningCode;
@@ -148,4 +151,7 @@ export interface AudioCompileOptions {
   measured?: Record<string, number>;
   /** clipId → 逐词对齐件(P5)。word→ms 优先对齐窗,无/失效回退字素比例。 */
   alignments?: Record<string, AlignmentTake>;
+  /** P10 注释校时(随稿持久化形态):clipId → 作者窗,自动套在对齐件上
+   *  (applyTimingCorrections;非法 clip 逐条隔离 → TIMING_INVALID 警告)。 */
+  timing?: Record<string, WordTimingCorrection[]>;
 }

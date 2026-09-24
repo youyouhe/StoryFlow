@@ -6,7 +6,8 @@
  * (P2「失败=新调用」);`measurements` 即②编译 `opts.measured` 的回填输入——
  * 合成→探活→回填→重编时间轴,闭合 P1 缝合不变量(锚是作者身份,毫秒是编译产物)。
  */
-import type { AlignmentTake, AudioMixPlan } from '../ir/audio/types';
+import type { AlignmentTake, AudioMixPlan, WordTimingCorrection } from '../ir/audio/types';
+import { applyManualTiming } from '../ir/audio/timing';
 import {
   mapAudioPlanToBgmQueue, mapAudioPlanToSfxQueue, mapAudioPlanToTtsQueue,
 } from '../bridge/audio';
@@ -84,6 +85,7 @@ export const alignAudioClips = async (
   clipBlobs: Record<string, Blob>,
   plan: AudioMixPlan,
   deps: AudioExecDeps,
+  opts: { corrections?: Record<string, WordTimingCorrection[]> } = {},
 ): Promise<{
   takes: Record<string, AlignmentTake>;
   failures: { clipId: string; error: string }[];
@@ -100,7 +102,11 @@ export const alignAudioClips = async (
     if (!blob) continue;
     try {
       // clipId 由 runner 权威盖章(对齐服务只见 wav+text)
-      takes[job.clipId] = { ...(await alignTake(blob, job.text)), clipId: job.clipId };
+      let take: AlignmentTake = { ...(await alignTake(blob, job.text)), clipId: job.clipId };
+      // P10:随稿校时自动套用(作者窗覆盖;非法进 failures 不中断)
+      const fixes = opts.corrections?.[job.clipId];
+      if (fixes?.length) take = applyManualTiming(take, fixes);
+      takes[job.clipId] = take;
     } catch (e) {
       failures.push({ clipId: job.clipId, error: errMsg(e) });
     }

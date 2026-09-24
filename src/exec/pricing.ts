@@ -10,15 +10,9 @@ import type { ImageJob, VisualCallPlan } from '../ir/visual/types';
 import type { AudioMixPlan, TtsJob, BgmJob, SfxJob } from '../ir/audio/types';
 import type { AudioRunResult, VisualRunResult } from './types';
 
-/** 价目表(provider 刊例声明,分整数;缺任一价目 = 该类条目回退 unpriced)。 */
-export interface PriceBooks {
-  /** 生图:每张(每 image job 一张,① opts.n=1 口径)。 */
-  image?: { perImageFen: number };
-  /** TTS:每字符(实际合成文本用量,TtsJob.text 的 UTF-16 码元数)。 */
-  tts?: { perCharFen: number };
-  /** BGM:每次请求(每床一条)。 */
-  bgm?: { perRequestFen: number };
-}
+/** 价目表契约(P10 上浮至 src/ir/annotations.ts;此处 re-export 兼容)。 */
+export type { PriceBooks } from '../ir/annotations';
+import type { PriceBooks } from '../ir/annotations';
 
 // ── 逐条目计价(纯;null = 无价目 → unpriced) ───────────────────────────────
 

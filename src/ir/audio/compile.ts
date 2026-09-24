@@ -32,6 +32,7 @@ import {
   AUDIO_MIX_PLAN_VERSION, MIX_BGM_LOOP, MIX_GAIN_BGM, MIX_GAIN_SFX, MIX_GAIN_TTS,
 } from './types';
 import { anchorTextOf, fitShotDuration, splitAnchorWords, wordStartMs } from '../shared';
+import { applyTimingCorrections } from './timing';
 
 /** GLM-TTS 单请求上限(字符),提取源:services/glmTtsService.ts:21。 */
 export const GLM_TTS_MAX_INPUT = 1024;
@@ -85,7 +86,13 @@ export const compileAudioPlan = (
   ir: StoryFlowIR,
   opts: AudioCompileOptions = {},
 ): AudioMixPlan => {
+  // P10:注释校时自动套用(对齐件先过作者窗再推导;非法 clip 逐条隔离)
+  const { alignments: fixedAlignments, invalid: invalidFixes } =
+    applyTimingCorrections(opts.alignments, opts.timing);
   const warnings: AudioWarning[] = [];
+  for (const bad of invalidFixes) {
+    warnings.push({ code: 'TIMING_INVALID', shotId: undefined, message: `校时未套用(${bad.clipId}):${bad.error}` });
+  }
   const jobs: AudioJob[] = [];
   const timeline: TimelineEntry[] = [];
   const mix: SegmentMix[] = [];
@@ -211,7 +218,7 @@ export const compileAudioPlan = (
       // P5:对齐窗优先(对白锚 + 新鲜对齐件),失效/缺 token 显式回退字素比例
       let atMs: number | null = null;
       if (clip.anchor.kind === 'word' && anchorBase.source === 'dialogue' && anchorClip) {
-        const take = opts.alignments?.[anchorClip.id];
+        const take = fixedAlignments[anchorClip.id];
         if (take) {
           const wordIndex = clip.anchor.wordIndex;
           const tok = take.text === anchorBase.text
