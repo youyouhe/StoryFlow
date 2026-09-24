@@ -39,7 +39,8 @@ export const pickCaptureMime = (): string | null => {
   return MIME_CANDIDATES.find(m => MediaRecorder.isTypeSupported(m)) ?? null;
 };
 
-const loadBaseVideo = (src: Blob | string): Promise<HTMLVideoElement> =>
+/** Shared by the MediaRecorder path and the WebCodecs path (webcodecs.ts). */
+export const loadBaseVideo = (src: Blob | string): Promise<HTMLVideoElement> =>
   new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.muted = false;

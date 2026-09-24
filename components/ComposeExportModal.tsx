@@ -10,6 +10,7 @@ import {
   type StickerTrackSpec,
 } from '../utils/compositor/scene';
 import { exportComposite, pickCaptureMime } from '../utils/compositor/capture';
+import { pickCompositeExport, exportCompositeMp4 } from '../utils/compositor/webcodecs';
 
 /**
  * Composite export (P5a) — bake captions/titles/stickers into a finished
@@ -107,14 +108,26 @@ export const ComposeExportModal: React.FC<ComposeExportModalProps> = ({
     abortRef.current = new AbortController();
     try {
       const scene = await buildScene();
-      const result = await exportComposite(scene, {
-        signal: abortRef.current.signal,
-        onProgress: p => setProgress(p.durationSec ? Math.round((p.t / p.durationSec) * 100) : 0),
-      });
+      // Hypit 尾声 ①:WebCodecs/MP4 帧精确路径优先,MediaRecorder/.webm 兜底
+      const progressPct = (p: { t: number; durationSec: number }): number =>
+        p.durationSec ? Math.round((p.t / p.durationSec) * 100) : 0;
+      let result: { blob: Blob; mime: string };
+      if (pickCompositeExport() === 'webcodecs-mp4') {
+        result = await exportCompositeMp4(scene, {
+          signal: abortRef.current.signal,
+          onProgress: p => setProgress(progressPct(p)),
+        });
+      } else {
+        result = await exportComposite(scene, {
+          signal: abortRef.current.signal,
+          onProgress: p => setProgress(progressPct(p)),
+        });
+      }
+      const ext = result.mime.includes('mp4') ? 'mp4' : 'webm';
       const url = URL.createObjectURL(result.blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${screenplay.metadata.title.replace(/[^a-z0-9一-龥]+/gi, '_') || 'composite'}.webm`;
+      a.download = `${screenplay.metadata.title.replace(/[^a-z0-9一-龥]+/gi, '_') || 'composite'}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -139,7 +152,7 @@ export const ComposeExportModal: React.FC<ComposeExportModalProps> = ({
     }]);
   };
 
-  const captureOk = pickCaptureMime() !== null;
+  const captureOk = pickCompositeExport() !== null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">

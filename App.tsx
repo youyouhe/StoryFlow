@@ -57,6 +57,7 @@ import {
   FEEDBACK_FILE, type FeedbackFile, type FeedbackComment,
 } from './services/project/feedback';
 import { ReviewPanel } from './components/ReviewPanel';
+import { CandidatesPanel } from './components/CandidatesPanel';
 import { ComposeExportModal } from './components/ComposeExportModal';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { GalleryModal } from './components/GalleryModal';
@@ -463,6 +464,7 @@ function App() {
   });
   const [showCompose, setShowCompose] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const [showCandidates, setShowCandidates] = useState(false);
   const [reviewPreviewUrl, setReviewPreviewUrl] = useState<string | undefined>(undefined);
   // writes hold until the project file has been read (don't clobber FEEDBACK.json)
   const feedbackReady = useRef(false);
@@ -3165,6 +3167,14 @@ function App() {
             onClose={() => setShowReview(false)}
         />
 
+        {/* Candidate editor (Hypit 尾声 ②):runs/*.sfrun build-record/satisfy 展示编辑面 */}
+        <CandidatesPanel
+            open={showCandidates}
+            dir={projectDir}
+            t={t}
+            onClose={() => setShowCandidates(false)}
+        />
+
         {/* Settings Modal */}
         {showSettingsModal && (
             <SettingsModal
@@ -3227,6 +3237,7 @@ function App() {
             onExportOutput={exportResultOutput}
             onOpenCompose={() => setShowCompose(true)}
             onOpenReview={() => setShowReview(true)}
+            onOpenCandidates={() => setShowCandidates(true)}
             t={t}
         />
 

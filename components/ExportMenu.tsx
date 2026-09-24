@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, FileJson, FileCode, ChevronDown, Check, X, Download, Upload, Film, MessageSquare } from 'lucide-react';
+import { FileText, FileJson, FileCode, ChevronDown, Check, X, Download, Upload, Film, MessageSquare, Link2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ExportFormat, ExportOptions } from '../types';
 import { DEFAULT_EXPORT_OPTIONS } from '../utils/exportData';
@@ -31,10 +31,11 @@ interface ExportMenuProps {
   /** P5 entries: composite export + review loop. */
   onOpenCompose?: () => void;
   onOpenReview?: () => void;
+  onOpenCandidates?: () => void;
   t: any;
 }
 
-export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, onListOutputs, onExportOutput, onOpenCompose, onOpenReview, t }) => {
+export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, onListOutputs, onExportOutput, onOpenCompose, onOpenReview, onOpenCandidates, t }) => {
   const [format, setFormat] = useState<ExportFormat>('json');
   const [opts, setOpts] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -211,7 +212,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
         </div>
 
         {/* P5: composite export + review loop entries */}
-        {(onOpenCompose || onOpenReview) && (
+        {(onOpenCompose || onOpenReview || onOpenCandidates) && (
           <div className="px-4 pt-3 flex gap-2">
             {onOpenCompose && (
               <button
@@ -231,6 +232,16 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>{t.reviewOpen || 'Review notes'}</span>
+              </button>
+            )}
+            {onOpenCandidates && (
+              <button
+                type="button"
+                onClick={() => { onOpenCandidates(); onClose(); }}
+                className="flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg border border-violet-200 dark:border-violet-900/50 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 text-xs font-semibold"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>{t.candidatesOpen || 'Candidates'}</span>
               </button>
             )}
           </div>
