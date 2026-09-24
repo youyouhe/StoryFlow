@@ -50,7 +50,12 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
   const comfyCfg = { serverUrl: appSettings.comfyServerUrl };
 
   const shots = useMemo(() => {
-    const list: { blockId: string; index: number; prompt: string; excerpt: string; shot: ExpressShot | undefined }[] = [];
+    const list: {
+      blockId: string; index: number; prompt: string; excerpt: string;
+      shot: ExpressShot | undefined;
+      /** schema-v2 director fields (motion drives I2V; frames shape the ends) */
+      motionPrompt?: string; shotDuration?: number; firstFrameDesc?: string; lastFrameDesc?: string;
+    }[] = [];
     let i = 0;
     for (const b of screenplay.blocks) {
       if (!b.imagePrompt?.trim()) continue;
@@ -61,6 +66,10 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
         prompt: b.imagePrompt,
         excerpt: b.content.trim().slice(0, 60) || b.imagePrompt.slice(0, 60),
         shot: screenplay.expressShots?.[b.id],
+        motionPrompt: b.motionPrompt,
+        shotDuration: b.shotDuration,
+        firstFrameDesc: b.firstFrameDesc,
+        lastFrameDesc: b.lastFrameDesc,
       });
     }
     return list;
@@ -129,11 +138,14 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
     });
   };
 
-  const genFrame = async (blockId: string, prompt: string) => {
+  const genFrame = async (blockId: string, prompt: string, firstFrameDesc?: string) => {
     setShotBusy(blockId, true);
     patchShot(blockId, { status: 'imaging', error: undefined });
     try {
-      const { blob, url } = await generateFirstFrame(imageCfg, prompt);
+      // imagePrompt carries composition/style; the director field pins the
+      // exact first instant when authored.
+      const composed = firstFrameDesc ? `${prompt} — first frame: ${firstFrameDesc}` : prompt;
+      const { blob, url } = await generateFirstFrame(imageCfg, composed);
       const assetId = await onUploadFrame(blob, `express-${blockId}`);
       patchShot(blockId, { imageAssetId: assetId ?? undefined, imageUrl: url, status: 'image-ready' });
     } catch (e) {
@@ -143,7 +155,7 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
     }
   };
 
-  const genVideo = async (blockId: string, prompt: string, shot: ExpressShot | undefined) => {
+  const genVideo = async (blockId: string, motionPrompt: string, shot: ExpressShot | undefined, shotDuration?: number) => {
     if (!shot?.imageUrl) return;
     setShotBusy(blockId, true);
     patchShot(blockId, { status: 'generating', error: undefined });
@@ -154,7 +166,9 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
       const { videoUrl, promptId } = await generateI2V(
         comfyCfg,
         appSettings.comfyWorkflowI2V,
-        { prompt, firstFrameBlob: blob, durationSeconds: duration },
+        // schema v2: the block's motionPrompt is the I2V cue; its
+        // shotDuration (when authored) beats the global knob.
+        { prompt: motionPrompt, firstFrameBlob: blob, durationSeconds: shotDuration ?? duration },
       );
       patchShot(blockId, { videoUrl, videoPromptId: promptId, status: 'video-ready' });
     } catch (e) {
@@ -213,7 +227,7 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
           {shots.length === 0 && (
             <div className="text-xs text-gray-400 py-10 text-center">{t.expressNoShots}</div>
           )}
-          {shots.map(({ blockId, index, prompt, excerpt, shot }) => {
+          {shots.map(({ blockId, index, prompt, excerpt, shot, motionPrompt, shotDuration, firstFrameDesc }) => {
             const isBusy = busy.has(blockId);
             const locked = !!shot?.locked;
             const thumbUrl = shot?.imageUrl ?? refImages.find(r => r.id === shot?.imageAssetId)?.url;
@@ -243,7 +257,7 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
                       <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => void genFrame(blockId, prompt)}
+                        onClick={() => void genFrame(blockId, prompt, firstFrameDesc)}
                         title={t.expressGenFrame}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-50"
                       >
@@ -254,7 +268,7 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
                       <button
                         type="button"
                         disabled={isBusy || !comfyReady || locked}
-                        onClick={() => void genVideo(blockId, prompt, shot)}
+                        onClick={() => void genVideo(blockId, motionPrompt ?? prompt, shot, shotDuration)}
                         title={locked ? t.expressLockedHint : (shot.videoUrl ? t.expressReroll : t.expressGenVideo)}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
                       >

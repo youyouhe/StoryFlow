@@ -12,6 +12,7 @@ import { putAudio, getAudio, audioKeys } from '../services/proAudioStore';
 import { audioLowerBoundSeconds, fitSegmentSeconds } from '../utils/proAudio';
 import { baseCharName } from '../utils/beatCast';
 import { exportProCut } from '../services/videoExport';
+import { deriveShotList, dialoguesWithoutSpeaker } from '../utils/shotList';
 
 /**
  * ProAudioPanel — Pro mode's audio workbench inside the VIDEO_PLAN modal
@@ -28,16 +29,23 @@ interface ProAudioPanelProps {
   t: typeof TRANSLATIONS['en'];
   lang: 'en' | 'zh';
   onToast?: (msg: string) => void;
+  refBindings: import('../types').RefBindings;
+  refImagesForShots: import('../types').RefImage[];
   /** Newest finished task per plan segment (index → result url). */
   planTasks?: { segmentIndex?: number; status: string; resultUrl?: string }[];
 }
 
 export const ProAudioPanel: React.FC<ProAudioPanelProps> = ({
-  videoPlan, screenplay, setScreenplay, appSettings, t, lang, onToast, planTasks,
+  videoPlan, screenplay, setScreenplay, appSettings, t, lang, onToast, refBindings, refImagesForShots, planTasks,
 }) => {
   const isZh = lang === 'zh';
   const [busy, setBusy] = useState<string | null>(null);
   const characters = useMemo(() => collectCharacterNames(screenplay.blocks), [screenplay.blocks]);
+  const shotList = useMemo(
+    () => deriveShotList(screenplay, refImagesForShots, refBindings),
+    [screenplay, refImagesForShots, refBindings],
+  );
+  const missingSpeakers = useMemo(() => dialoguesWithoutSpeaker(screenplay.blocks), [screenplay.blocks]);
   const glmKey = getGlmTtsKey();
   const falKey = (getFalToken() || appSettings.falKey).trim();
   const stylePreset = screenplay.metadata.styleHead?.scenePreset;
@@ -207,6 +215,25 @@ export const ProAudioPanel: React.FC<ProAudioPanelProps> = ({
           )}
         </div>
       )}
+
+      {/* SHOT_LIST (derived read-only view) + speaker validation */}
+      <div className="rounded-lg border border-violet-200 dark:border-violet-800 p-2.5 space-y-1.5">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t.proShotListTitle} ({shotList.length})</div>
+        <div className="max-h-40 overflow-y-auto space-y-1">
+          {shotList.map(e => (
+            <div key={e.blockIds[0]} className="text-[10px] text-gray-600 dark:text-gray-400 flex gap-2">
+              <span className="font-mono text-gray-400">#{e.shot}</span>
+              <span className="truncate flex-1" title={e.motionPrompt}>{e.sceneHeading || '—'} · {e.cast.length ? e.cast.join('、') : '—'} · {e.duration}s</span>
+              <span className="text-gray-400">{e.refs.bound.length} ref</span>
+            </div>
+          ))}
+        </div>
+        {missingSpeakers.length > 0 && (
+          <div className="text-[10px] text-amber-600 dark:text-amber-400">
+            {t.proMissingSpeakers.replace('{n}', String(missingSpeakers.length))}: {missingSpeakers.map(m => m.line).join(' / ')}
+          </div>
+        )}
+      </div>
 
       {/* per-segment tracks */}
       <div className="space-y-2">

@@ -146,4 +146,17 @@ parseTypedLines(扩展:[MOTION]/[DURATION]/[FIRST]/[LAST] 附着最近可生成�
 4. speaker 是否需要编辑器 UI(对白行徽章显示说话人)?(建议:先数据层+校验列表,行内 UI 后置)
 
 ---
-*设计:Claude Code agent · 2026-09-24 · 等站长审后动代码*
+*设计:Claude Code agent · 2026-09-24*
+
+---
+
+## 实施状态(2026-09-24,站长批准后执行)
+
+| 阶段 | 状态 | 内容 |
+|---|---|---|
+| §5-1 数据+解析层 | ✅ | types 四字段+speaker/transitionTo/schemaVersion;parseLabeledLine/attachDirectorTag/parseLabeledScript;blockDirectorFill(台词自动拆分[站长指定项]/speaker 回填/defaultFiller);20 个新单测。顺带修复继承缺陷:ALL-CAPS cue 启发式要求拉丁字母(CJK 对 toUpperCase 恒等,短中文动作行被误判) |
+| §5-2 生成侧 | ✅ | DIRECTOR_SCHEMA_RULES 共享契约注入四入口;FROM_PROMPT 规则 2 扩展四标签(缺省省略);Alt+S ACTION 输出九行 + splitImagePromptParts 分离四字段写回(schemaVersion 2);Alt+G durationHint 钉住块 shotDuration |
+| §5-3 消费侧 | ✅ | ExpressWorkbench:I2V 用 motionPrompt、时长用 shotDuration、首帧组合 firstFrameDesc;deriveShotList + ProAudioPanel SHOT_LIST 分区;speaker 缺失校验列表 |
+| §6 开放问题 | 按建议口径 | DURATION 允许小数;lastFrameDesc v1 仅存;旧稿纯默认值;speaker 先数据层 |
+
+**遗留**:lastFrameDesc 双图一致性校验(v2)、「AI 补全导演字段」按钮(v2)、speaker 行内 UI(v2)。

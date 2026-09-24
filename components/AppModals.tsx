@@ -75,6 +75,8 @@ export function AppModals(props: AppModalsProps) {
           syncConsent, enableCloudSync, disableCloudSync,
           pullPolicy, setCloudPullPolicy,
           cloudBusy, exportCloudScripts, deleteCloudData } = sync;
+  // refBindings lives on the screenplay — derive the effective view locally
+  const refBindings = (screenplay.referenceBindings ?? { characters: {} }) as import('../types').RefBindings;
   const { refImages, handleUpdateRefImageMeta, handleRemoveRefImage,
           assetDir, handleOpenAssetDir, handleSwitchAssetDir, reloadAssets } = assets;
   const { executeAI, runContinuation, acceptAISuggestion } = ai;
@@ -172,6 +174,8 @@ export function AppModals(props: AppModalsProps) {
                     lang={lang}
                     onToast={onToast}
                     planTasks={planTasks}
+                    refBindings={refBindings}
+                    refImagesForShots={refImages}
                   />
                 ) : undefined}
                 videoPlanDuration={videoPlanDuration}
