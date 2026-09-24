@@ -34,6 +34,10 @@ import {
   queryDirPermission, requestDirPermission, listDirAssets, addAssetToDir,
   updateAssetMetaInDir, removeAssetFromDir, mergeIdbIntoDir,
 } from './services/assetDirStore';
+import {
+  isProjectStoreAvailable, pickProjectDir, persistProjectDir, loadPersistedProjectDir,
+  forgetProjectDir, openProject, loadStoryFile, saveStoryFile, saveStyleBundle,
+} from './services/project/projectStore';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { GalleryModal } from './components/GalleryModal';
 import { AIModal } from './components/AIModal';
@@ -197,6 +201,11 @@ function App() {
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+  // ---- P1 project directory (docs/storyflow-adoption-plan.md) ---------------
+  // When set, story.sfstory / style.sfstyle in this folder are the truth and
+  // localStorage stays a cache. Absent = pre-P1 behavior (localStorage only).
+  const [projectDir, setProjectDir] = useState<FileSystemDirectoryHandle | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
   // Gallery cloud sync (P1): signed-in user, per-script badge statuses, last error.
   // 4A SSO first: recover the sso_token (URL ?sso_token= → localStorage →
   // shared cookie) so the exchange effect below can establish the session.
@@ -893,6 +902,33 @@ function App() {
     }
   }, [theme]);
 
+  // P1: restore the last project directory on startup. The directory is the
+  // truth only when its story file exists; a persisted handle without one is
+  // forgotten rather than silently scaffolding at boot (scaffolding is an
+  // explicit open-time action).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isProjectStoreAvailable()) return;
+      const h = await loadPersistedProjectDir();
+      if (!h || cancelled) return;
+      if (await queryDirPermission(h) !== 'granted') return;
+      try {
+        const story = await loadStoryFile(h);
+        if (cancelled) return;
+        if (story) {
+          setProjectDir(h);
+          setScreenplay(story);
+        } else {
+          await forgetProjectDir();
+        }
+      } catch (e) {
+        console.warn('Project restore failed', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Migration & Autosave Logic
   useEffect(() => {
     setSaveStatus('saving');
@@ -907,7 +943,7 @@ function App() {
         } catch(e) { console.error("Migration cleanup failed", e); }
     }
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       try {
         // 1. Save Content
         localStorage.setItem(STORAGE_KEYS.SCRIPT_PREFIX + screenplay.id, JSON.stringify(screenplay));
@@ -933,13 +969,20 @@ function App() {
         // never-synced ('local') scripts are intentionally left alone — the
         // first push is always the explicit one-click sync.
         syncEngine.markDirty(screenplay);
+
+        // P1: the project directory is the truth when open — mirror the save
+        // into story.sfstory so the edit shows up in `git diff` without a
+        // refresh. localStorage above stays as the off-project cache.
+        if (projectDir) {
+          await saveStoryFile(projectDir, screenplay);
+        }
       } catch (e) {
         console.error("Autosave failed", e); shipLog("autosave", "error", "Autosave failed", e);
       }
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [screenplay]);
+  }, [screenplay, projectDir]);
 
   // Gallery sync engine subscription: keep badge statuses + script index fresh.
   const refreshSavedScripts = useCallback(() => {
@@ -974,6 +1017,16 @@ function App() {
   useEffect(() => {
       localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(appSettings));
   }, [appSettings]);
+
+  // P1: style.sfstyle tracks the visual DNA + palette whenever a project is open.
+  useEffect(() => {
+    if (!projectDir) return;
+    const timer = setTimeout(() => {
+      saveStyleBundle(projectDir, screenplay.metadata.styleHead, appSettings.colorSettings)
+        .catch(e => { console.error('Style save failed', e); shipLog('autosave', 'error', 'Style save failed', e); });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [projectDir, screenplay.metadata.styleHead, appSettings.colorSettings]);
 
   const handleBlockChange = useCallback((id: string, content: string) => {
     if (isReadOnly) return;
@@ -1313,6 +1366,35 @@ function App() {
           } catch(e) { console.error(e); }
       }
   };
+
+  // ---- P1 project directory open/close (user gesture) -----------------------
+  const handleOpenProject = useCallback(async () => {
+    if (!isProjectStoreAvailable()) {
+      setProjectError(t.projectUnavailable);
+      return;
+    }
+    try {
+      setProjectError(null);
+      const h = await pickProjectDir();
+      if (!(await requestDirPermission(h))) {
+        setProjectError('Permission denied for the project folder');
+        return;
+      }
+      const opened = await openProject(h, screenplay, screenplay.metadata.styleHead, appSettings.colorSettings);
+      await persistProjectDir(h);
+      setProjectDir(h);
+      if (!opened.created) setScreenplay(opened.screenplay);
+    } catch (e) {
+      setProjectError(e instanceof Error ? e.message : String(e));
+      shipLog('project', 'error', 'Open project failed', e);
+    }
+  }, [screenplay, appSettings.colorSettings, t]);
+
+  const handleCloseProject = useCallback(async () => {
+    await forgetProjectDir();
+    setProjectDir(null);
+    setProjectError(null);
+  }, []);
 
   const handleUpdateSettings = (newMetadata: ScriptMetadata, newAppSettings: AppSettings) => {
       setScreenplay(prev => ({
@@ -2766,6 +2848,11 @@ function App() {
                 onSave={handleUpdateSettings}
                 onClose={() => setShowSettingsModal(false)}
                 t={t}
+                projectName={projectDir?.name ?? null}
+                projectAvailable={isProjectStoreAvailable()}
+                projectError={projectError}
+                onOpenProject={handleOpenProject}
+                onCloseProject={handleCloseProject}
                 galleryUser={galleryUser}
                 syncError={syncError}
                 creditBalance={creditBalance}

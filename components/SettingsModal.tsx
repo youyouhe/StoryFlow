@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScriptMetadata, ScriptLanguage, AppSettings, LLMProvider, BlockType, ColorSettings, KeyboardShortcuts, GeminiThinkingLevel, GalleryUser } from '../types';
 import { TRANSLATIONS, COLOR_PRESETS } from '../constants';
-import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check } from 'lucide-react';
+import { X, Settings as SettingsIcon, Database, Cpu, Palette, LayoutGrid, Keyboard, User, Cloud, Loader2, Copy, Check, FolderOpen } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
 import { GALLERY_BACKEND } from '../services/gallery';
 import { generateImages } from '../services/minimaxService';
@@ -23,6 +23,12 @@ interface SettingsModalProps {
   onSyncAll?: () => Promise<void>;
   /** P5: milli-credit balance for the signed-in 4A identity. */
   creditBalance?: number | null;
+  // ---- P1 project directory (docs/storyflow-adoption-plan.md) ----
+  projectName?: string | null;
+  projectAvailable?: boolean;
+  projectError?: string | null;
+  onOpenProject?: () => void;
+  onCloseProject?: () => void;
 }
 /** Copy-to-clipboard button for API key fields: keys don't sync across
  *  origins/devices (BYOK), so migrating means re-pasting — this makes that a
@@ -52,7 +58,7 @@ const CopyKeyButton: React.FC<{ value: string }> = ({ value }) => {
     );
 };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSettings, onSave, onClose, t, galleryUser, syncError, onSsoLogin, onSsoLogoutEverywhere, onGalleryLogout, onSyncAll, creditBalance, projectName, projectAvailable, projectError, onOpenProject, onCloseProject }) => {
 
   const [metaDataForm, setMetaDataForm] = useState<ScriptMetadata>(metadata);
   const [appSettingsForm, setAppSettingsForm] = useState<AppSettings>(appSettings);
@@ -228,6 +234,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ metadata, appSetti
             {/* Script Metadata Tab */}
             {activeTab === 'script' && (
               <div className="space-y-4">
+                {/* Project directory — P1 file-backed project (story/style/runs) */}
+                <div className="p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 space-y-2">
+                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {t.projectSection}
+                    </div>
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                        {projectName ? `${t.projectCurrent}: ${projectName}` : t.projectNone}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500">{t.projectHint}</div>
+                    {projectError && (
+                        <div className="text-xs text-red-500" role="alert">{projectError}</div>
+                    )}
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={onOpenProject}
+                            disabled={!projectAvailable}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            {projectName ? t.projectReopen : t.projectOpen}
+                        </button>
+                        {projectName && (
+                            <button
+                                type="button"
+                                onClick={onCloseProject}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-zinc-700 text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                                {t.projectClose}
+                            </button>
+                        )}
+                    </div>
+                    {!projectAvailable && (
+                        <div className="text-xs text-amber-600 dark:text-amber-400">{t.projectUnavailable}</div>
+                    )}
+                </div>
+
                 <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         {t.titleLabel}

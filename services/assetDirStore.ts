@@ -66,33 +66,34 @@ const HANDLE_DB = 'storyflow-refs';
 const HANDLE_STORE = 'meta';
 const HANDLE_KEY = 'assetDir';
 
-export const persistDirHandle = async (h: FileSystemDirectoryHandle): Promise<void> => {
+/** `key` distinguishes concurrently persisted directories (asset dir vs project dir). */
+export const persistDirHandle = async (h: FileSystemDirectoryHandle, key: string = HANDLE_KEY): Promise<void> => {
   const db = await openRefsDB();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(HANDLE_STORE, 'readwrite');
-    tx.objectStore(HANDLE_STORE).put(h, HANDLE_KEY);
+    tx.objectStore(HANDLE_STORE).put(h, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 };
 
-export const loadPersistedDirHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
+export const loadPersistedDirHandle = async (key: string = HANDLE_KEY): Promise<FileSystemDirectoryHandle | null> => {
   try {
     const db = await openRefsDB();
     return await new Promise((resolve) => {
-      const get = db.transaction(HANDLE_STORE, 'readonly').objectStore(HANDLE_STORE).get(HANDLE_KEY);
+      const get = db.transaction(HANDLE_STORE, 'readonly').objectStore(HANDLE_STORE).get(key);
       get.onsuccess = () => resolve((get.result as FileSystemDirectoryHandle) ?? null);
       get.onerror = () => resolve(null);
     });
   } catch { return null; }
 };
 
-export const forgetDirHandle = async (): Promise<void> => {
+export const forgetDirHandle = async (key: string = HANDLE_KEY): Promise<void> => {
   try {
     const db = await openRefsDB();
     await new Promise<void>((resolve) => {
       const tx = db.transaction(HANDLE_STORE, 'readwrite');
-      tx.objectStore(HANDLE_STORE).delete(HANDLE_KEY);
+      tx.objectStore(HANDLE_STORE).delete(key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });
