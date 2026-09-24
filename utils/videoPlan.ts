@@ -38,7 +38,25 @@ export interface PlannedBeat {
   /** spoken lines inside the beat: speaker cue + line */
   dialogues: { cue?: string; line: string }[];
   sceneHeading: string;
+  /** P2 word-level projection: where this beat's window came from — an
+   *  authored timestamp prefix or a deterministic word estimate. */
+  source?: 'authored' | 'estimated';
 }
+
+/** P2 projected windows per block (from utils/timing/timeline). When supplied
+ *  they are the timing authority — authored prefixes are already folded in —
+ *  and beat-less blocks extend their beat's end. Without them this module
+ *  keeps its original second-prefix-only behavior. */
+export type BlockWindows = Map<string, {
+  start: number;
+  end: number;
+  range?: string;
+  source: 'authored' | 'estimated';
+  /** True for beat openers (timestamped or estimated actions). Continuation
+   *  blocks carry windows too — they stretch their beat's end instead of
+   *  opening a new beat. */
+  opensBeat: boolean;
+}>;
 
 export interface VideoSegment {
   index: number;
@@ -89,7 +107,7 @@ const fmt = (s: number): string => {
  *  - A single beat longer than the window becomes its own oversize segment
  *    (warned, not split — splitting one continuous action across two videos
  *    would put a hard cut inside a continuous motion). */
-export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number): VideoPlan => {
+export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number, windows?: BlockWindows): VideoPlan => {
   const warnings: string[] = [];
   const segments: VideoSegment[] = [];
   const target = Math.max(1, targetSeconds);
@@ -97,6 +115,7 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
   // ---- 1. collect beats (timed actions) with their spans --------------------
   const beats: PlannedBeat[] = [];
   let untimedActions = 0;
+  let estimatedBeats = 0;
   let current: PlannedBeat | null = null;
   let sceneHeading = '';
 
@@ -120,9 +139,16 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
       } as PlannedBeat & { __scene: boolean });
       continue;
     }
-    const timing = b.type === 'ACTION' ? parseBeatTiming(b.content) : null;
+    const win = windows?.get(b.id);
+    const prefixed = b.type === 'ACTION' ? parseBeatTiming(b.content) : null;
+    const isOpener = b.type === 'ACTION' && (windows ? !!win?.opensBeat : !!prefixed);
+    const timing = isOpener
+      ? (win ? { start: win.start, end: win.end, range: win.range ?? '' } : prefixed!)
+      : null;
     if (timing) {
       if (current) beats.push(current);
+      const source = win ? win.source : 'authored';
+      if (source === 'estimated') estimatedBeats++;
       current = {
         startBlockId: b.id, endBlockId: b.id, blockIds: [b.id],
         start: timing.start, end: timing.end, range: timing.range,
@@ -133,6 +159,7 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
         // doubling the range in every display and H3 prompt.
         text: b.content.replace(/^\s*\d{1,2}:\d{2}(?:\.\d+)?\s*-\s*\d{1,2}:\d{2}(?:\.\d+)?\s*[。.，,]?\s*/, '').trim() || b.content,
         dialogues: [], sceneHeading,
+        source,
       };
       continue;
     }
@@ -140,6 +167,10 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
     if (current) {
       current.blockIds.push(b.id);
       current.endBlockId = b.id;
+      // P2: a projected window on an attached block stretches the beat's end —
+      // editing a dialogue line reflows the whole beat's screen time.
+      const attached = windows?.get(b.id);
+      if (attached) current.end = Math.max(current.end, attached.end);
       if (b.type === 'DIALOGUE') {
         // attribute the line to the nearest preceding CHARACTER cue
         let cue: string | undefined;
@@ -155,6 +186,7 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number):
   }
   if (current) beats.push(current);
   if (untimedActions) warnings.push(`${untimedActions} 个动作没有时间戳——已并入前一段，但时长未知。`);
+  if (estimatedBeats) warnings.push(`${estimatedBeats} 拍无时间戳，按词级估算排时（改词即改时长）。`);
 
   // ---- 2. group beats into segments -----------------------------------------
   const flush = (start: number, end: number, span: PlannedBeat[], boundary: boolean): VideoSegment => {

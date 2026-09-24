@@ -178,6 +178,8 @@ export interface Screenplay {
    *  sections (camera rules, subtitle UI, audio, NEGATIVE) — they live here so
    *  the final video-generation prompt can reuse them verbatim. */
   sourcePrompt?: string;
+  /** Word-level Selections/Moments (P2). Absent = no marks yet. */
+  marks?: ScriptMarks;
   /** Pipeline complexity level. 'simple' = fixed-camera / single-scene scripts
    *  where graybox (spatial blocking + camera choreography) adds no value —
    *  the pipeline is: character sheets + variant images + segment video prompts.
@@ -207,6 +209,67 @@ export interface ScriptSequence {
   wardrobe: Record<string, CharacterWardrobe>;
   /** A short label, e.g. the representative scene heading. */
   label?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Word-level time model (P2 of docs/storyflow-adoption-plan.md)
+//
+// Time is anchored to WORDS, never to seconds: tokens carry identity, marks
+// (Selections/Moments) bind to token gaps, and seconds are DERIVED by
+// projecting those anchors over authored beat prefixes or estimated speech
+// durations. Reflow = rebuild the projection after an edit; everything
+// downstream (captions, generation windows, white-model shot lengths)
+// re-arranges without anyone dragging a timeline.
+// ---------------------------------------------------------------------------
+
+/** One lexical unit of a block: an English word, a CJK character, or
+ *  punctuation. Dual Text (`<BCC | B C C>`) collapses to one token whose
+ *  display and spoken surfaces differ (N:M grouping is the P2b refinement). */
+export interface ScriptToken {
+  /** `t_<blockId>_<index>` — stable within one tokenization. */
+  id: string;
+  blockId: string;
+  /** 0-based index within the block. */
+  index: number;
+  /** What the caption shows (Dual Text left side). */
+  text: string;
+  /** What is spoken (Dual Text right side) — owns duration estimation. */
+  spokenText: string;
+  kind: 'word' | 'char' | 'punct';
+  /** True when source whitespace precedes this token (display spacing is
+   *  preserved exactly — "3 D" and "3D" stay distinct). */
+  spaceBefore: boolean;
+}
+
+/** A named bound in the token stream. `gap` is a position BETWEEN tokens
+ *  (0 = before the first, tokenCount = after the last) — the same gap can
+ *  hold two identities (`snap`), mirroring Hypit's left/right absorption so
+ *  coincident cuts keep distinct author identity. */
+export interface MarkRef {
+  blockId: string;
+  gap: number;
+  snap: 'left' | 'right';
+}
+
+/** Named semantic RANGE (a problem, a joke beat, a reveal). May cross other
+ *  selections and span block boundaries — it is not an XML tag. */
+export interface ScriptSelection {
+  id: string;
+  start: MarkRef;
+  end: MarkRef;
+}
+
+/** Named semantic POINT (a punchline lands, a card appears). */
+export interface ScriptMoment {
+  id: string;
+  at: MarkRef;
+}
+
+/** Marks live on the screenplay (not in block text) so the plain editor stays
+ *  plain and prompts never carry marker syntax. Gaps clamp on re-tokenize. */
+export interface ScriptMarks {
+  selections: ScriptSelection[];
+  moments: ScriptMoment[];
 }
 
 export interface ScriptTemplate {

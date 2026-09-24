@@ -27,6 +27,7 @@ import type { VideoPlan } from './utils/videoPlan';
 shipLog('boot', 'info', `app loaded @ ${new Date().toISOString()} · UA=${navigator.userAgent.slice(0, 60)} · ${screen.width}x${screen.height}`);
 import { copyToClipboard } from './utils/clipboard';
 import { planVideoSegments, formatVideoPlan } from './utils/videoPlan';
+import { applyReflow, videoPlanWindowsFromScreenplay } from './utils/timing/reflow';
 import { sanitizeParsedBlocks } from './utils/scriptParse';
 import { listRefImages, addRefImage, updateRefImageMeta, removeRefImage as removeStoredRefImage, computeVersionGroup, promoteVersion, RefImageMetaPatch } from './services/refImageStore';
 import {
@@ -945,18 +946,23 @@ function App() {
 
     const timer = setTimeout(async () => {
       try {
+        // P2: words own time — re-derive white-model shot lengths from the
+        // current word spans before saving, so the stored project always
+        // reflects reflowed timing. Idempotent; converges below when needed.
+        const reflowed = applyReflow(screenplay);
+
         // 1. Save Content
-        localStorage.setItem(STORAGE_KEYS.SCRIPT_PREFIX + screenplay.id, JSON.stringify(screenplay));
+        localStorage.setItem(STORAGE_KEYS.SCRIPT_PREFIX + reflowed.id, JSON.stringify(reflowed));
 
         // 2. Update Index
         const newSummary: ScriptSummary = {
-            id: screenplay.id,
-            title: screenplay.metadata.title,
+            id: reflowed.id,
+            title: reflowed.metadata.title,
             lastModified: Date.now()
         };
 
         setSavedScripts(prev => {
-            const filtered = prev.filter(s => s.id !== screenplay.id);
+            const filtered = prev.filter(s => s.id !== reflowed.id);
             const newList = [...filtered, newSummary];
             localStorage.setItem(STORAGE_KEYS.SCRIPT_INDEX, JSON.stringify(newList));
             return newList;
@@ -968,14 +974,19 @@ function App() {
         // scripts flip to 'dirty' and flush on the engine's own debounce;
         // never-synced ('local') scripts are intentionally left alone — the
         // first push is always the explicit one-click sync.
-        syncEngine.markDirty(screenplay);
+        syncEngine.markDirty(reflowed);
 
         // P1: the project directory is the truth when open — mirror the save
         // into story.sfstory so the edit shows up in `git diff` without a
         // refresh. localStorage above stays as the off-project cache.
         if (projectDir) {
-          await saveStoryFile(projectDir, screenplay);
+          await saveStoryFile(projectDir, reflowed);
         }
+
+        // P2 settle: mutations that skipped handleBlockChange's reflow (AI
+        // inserts) adopt the retimed state once; applyReflow is idempotent so
+        // the re-triggered effect converges without a loop.
+        if (reflowed !== screenplay) setScreenplay(reflowed);
       } catch (e) {
         console.error("Autosave failed", e); shipLog("autosave", "error", "Autosave failed", e);
       }
@@ -1030,7 +1041,7 @@ function App() {
 
   const handleBlockChange = useCallback((id: string, content: string) => {
     if (isReadOnly) return;
-    setScreenplay(prev => ({
+    setScreenplay(prev => applyReflow({
       ...prev,
       blocks: prev.blocks.map(b => b.id === id ? { ...b, content } : b),
       lastModified: Date.now()
@@ -1039,7 +1050,7 @@ function App() {
 
   const handleTypeChange = useCallback((id: string, type: BlockType) => {
     if (isReadOnly) return;
-    setScreenplay(prev => ({
+    setScreenplay(prev => applyReflow({
       ...prev,
       blocks: prev.blocks.map(b => b.id === id ? { ...b, type } : b)
     }));
@@ -2059,7 +2070,7 @@ function App() {
         // (scene changes force a boundary; beats are atomic, never split).
         shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks, mode=${screenplay.productionMode ?? '?'}`);
         const target = videoPlanDuration; // per-segment window (user-selected)
-        const plan = planVideoSegments(screenplay.blocks, target);
+        const plan = planVideoSegments(screenplay.blocks, target, videoPlanWindowsFromScreenplay(screenplay));
         shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
         // Per-beat breakdown so span/compression questions can be answered
         // from the server log alone (beat ranges are the ground truth).
