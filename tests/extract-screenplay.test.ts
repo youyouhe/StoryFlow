@@ -22,7 +22,7 @@ describe('extractStoryFlowIR — 生产侧闭合(银盐晨光 Screenplay 形态)
     if (!v.ok) throw new Error(`extracted IR must validate:\n${(v as { issues: string[] }).issues.join('\n')}`);
     expect(ir.title).toBe('银盐晨光');
     expect(ir.mode).toBe('pro');
-    expect(ir.version).toBe('0.1.0');
+    expect(ir.version).toBe('0.2.0'); // IR_VERSION(P7 升版)
   });
 
   it('5 镜推导:编号/时长/motion 去前缀/对白+ttsFloor=ceil(measured+0.3)', () => {

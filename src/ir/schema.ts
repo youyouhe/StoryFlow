@@ -23,6 +23,7 @@ import type {
   ShotDialogue, SfxAnchor, SfxClip, SpatialCharacter, SpatialLayout,
   SpatialObject, StyleRef, TtsClip, Transition, StoryFlowIR,
 } from './types';
+import type { IRVersion } from './types';
 import { IR_VERSION } from './types';
 
 // ── primitives ──────────────────────────────────────────────────────────────
@@ -141,6 +142,11 @@ export const shotDialogueSchema = z.strictObject({
   ttsFloor: z.number().min(0),
 });
 
+export const whiteModelSchema = z.strictObject({
+  assetId: z.string().min(1).optional(),
+  durationSeconds: z.number().positive(),
+});
+
 export const shotSchema = z.strictObject({
   id: shotIdSchema,
   sequence: z.number().int().min(1),
@@ -153,6 +159,7 @@ export const shotSchema = z.strictObject({
   refBindings: z.array(refIdSchema),
   character: z.string().min(1).optional(),
   dialogue: shotDialogueSchema.optional(),
+  whiteModel: whiteModelSchema.optional(),
   generation: generationParamsSchema.optional(),
   status: z.enum(['draft', 'generated', 'locked', 'exported']),
 });
@@ -243,8 +250,9 @@ export const spatialLayoutSchema = z.strictObject({
 // ── the document + cross-field invariants ───────────────────────────────────
 
 const baseDocSchema = z.strictObject({
-  version: z.literal(IR_VERSION, {
-    message: `version 必须是 "${IR_VERSION}"(契约按 extension policy 升版)`,
+  // 版本并集:旧档照常通过(extension policy);当前 IR_VERSION = 0.2.0
+  version: z.union([z.literal('0.1.0'), z.literal('0.2.0')], {
+    message: `version 必须是 "0.1.0" 或 "${IR_VERSION}"(契约按 extension policy 升版)`,
   }),
   mode: z.enum(['express', 'pro']),
   title: z.string().min(1),
@@ -418,6 +426,7 @@ const _assertShot: Guard<Equal<Shot, InferOf<typeof shotSchema>>> = true;
 const _assertCamera: Guard<Equal<CameraMove, InferOf<typeof cameraMoveSchema>>> = true;
 const _assertGeneration: Guard<Equal<GenerationParams, InferOf<typeof generationParamsSchema>>> = true;
 const _assertDialogue: Guard<Equal<ShotDialogue, InferOf<typeof shotDialogueSchema>>> = true;
+const _assertWhiteModel: Guard<Equal<NonNullable<Shot['whiteModel']>, InferOf<typeof whiteModelSchema>>> = true;
 const _assertFrame: Guard<Equal<FrameDesc, InferOf<typeof frameDescSchema>>> = true;
 const _assertStyle: Guard<Equal<StyleRef, InferOf<typeof styleRefSchema>>> = true;
 const _assertRegistry: Guard<Equal<RefRegistry, InferOf<typeof refRegistrySchema>>> = true;

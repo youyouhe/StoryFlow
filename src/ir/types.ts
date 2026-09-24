@@ -44,8 +44,10 @@
  * by the zod schema, so a stale document fails validation loudly.
  */
 
-/** Current contract version. Bump per the extension policy in the header. */
-export const IR_VERSION = '0.1.0';
+/** 契约版本并集(extension policy「旧文档照常通过」):旧档 0.1.0 原样通过,
+ *  当前版 0.2.0(P7 additive:Shot.whiteModel 等)。 */
+export type IRVersion = '0.1.0' | '0.2.0';
+export const IR_VERSION: IRVersion = '0.2.0';
 
 /** Compile profile. Maps 1:1 to Screenplay.productionMode:
  *  'express' = 简易抽卡流水线(无 graybox/白模/音轨必需项);
@@ -269,6 +271,9 @@ export interface Shot {
   character?: string;
   /** 对白 (如有). Presence REQUIRES `character`. */
   dialogue?: ShotDialogue;
+  /** R2V 白模参考视频(P7 additive):资产只存库 id(P0 惯例),Blob 在 IO
+   *  边缘解算;durationSeconds = 白模时长(r2v 计费/校验口径)。 */
+  whiteModel?: { assetId?: string; durationSeconds: number };
   /** 生成参数 (Pro); absent = compiler default. */
   generation?: GenerationParams;
   status: ShotStatus;
@@ -439,9 +444,8 @@ export interface SpatialLayout {
 /** StoryFlowIR — the full compiler-input document. Exactly the P0 top-level
  *  contract; every field above is reachable from here. */
 export interface StoryFlowIR {
-  /** Schema version — the literal IR_VERSION (pinned by the validator; a
-   *  stale document fails loudly instead of silently mis-compiling). */
-  version: typeof IR_VERSION;
+  /** Schema version — IRVersion 并集(0.1.0 旧档照常通过;当前 IR_VERSION)。 */
+  version: IRVersion;
   /** 编译 profile: 'express' | 'pro'. */
   mode: IRMode;
   title: string;
