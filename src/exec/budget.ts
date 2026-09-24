@@ -6,6 +6,7 @@
  * 不降规格、不截断)。花钱仪式感(hypit 可借鉴 ⑥)在执行器层闭环。
  */
 import type { VisualCallPlan } from '../ir/visual/types';
+import { imageJobCostFen, type PriceBooks } from './pricing';
 
 export interface PlanCostReport {
   /** 计划总成本(分,int整数)。 */
@@ -16,13 +17,16 @@ export interface PlanCostReport {
   unpricedJobIds: string[];
 }
 
-export const planCostReport = (plan: VisualCallPlan): PlanCostReport => {
+/** P9:books 可选——给定图价目时 image job 入价,unpriced 收窄
+ *  (只剩无刊例的 comfy/grok 视频);旧调用(无 books)行为不变。 */
+export const planCostReport = (plan: VisualCallPlan, books?: PriceBooks): PlanCostReport => {
   const byJob: PlanCostReport['byJob'] = [];
   const unpricedJobIds: string[] = [];
   let totalCostFen = 0;
   for (const shot of plan.shots) {
     for (const job of shot.jobs) {
-      const cost = job.estimatedCostFen;
+      const baked = job.kind === 'video' ? job.estimatedCostFen : undefined;
+      const cost = baked ?? (job.kind === 'image' ? imageJobCostFen(job, books) : null);
       byJob.push({ jobId: job.jobId, shotId: job.shotId, estimatedCostFen: cost ?? 0 });
       if (cost == null) unpricedJobIds.push(job.jobId);
       else totalCostFen += cost;

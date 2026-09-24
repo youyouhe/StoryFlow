@@ -87,7 +87,8 @@ describe('executeBatch — 总预算与发起即计', () => {
       { stopOnError: true },
     );
     expect(batch.items[0].status).toBe('failed');
-    expect(batch.items[0].chargedCostFen).toBe(0); // express 无 minimax 刊例(unpriced)
+    // attempt 模式按计划估算计费(P9 起 express 的 minimax i2v 也烘 300)
+    expect(batch.items[0].chargedCostFen).toBe(300);
     expect(batch.items[1].status).toBe('failed');
     expect(batch.items[1].error).toMatch(/批量中止/);
     expect(batch.items[1].chargedCostFen).toBe(0);
@@ -109,5 +110,39 @@ describe('executeBatch — 成功判据', () => {
     const batch = await executeBatch([req('p', proPlan(), depsOf(ports))]);
     expect(batch.items[0].status).toBe('succeeded');
     expect(batch.items[0].result!.results.some(r => r.status === 'skipped')).toBe(true); // grok 细节在 result
+  });
+});
+
+describe('executeBatch — P9 精确结算(settlement 选项)', () => {
+  it("attempt(缺省)发起即计回归锁:失败计划仍计 300", async () => {
+    const { ports } = mockPorts({
+      queryH3Task: async () => ({ status: 'failed' as const, errorMessage: '远端失败' }),
+    });
+    const batch = await executeBatch([req('a', proPlan(), depsOf(ports))]);
+    expect(batch.items[0].status).toBe('failed');
+    expect(batch.items[0].chargedCostFen).toBe(300); // P6 发起即计
+  });
+
+  it("precise 按实际产出:唯一计价任务失败 → 计 0", async () => {
+    const { ports } = mockPorts({
+      queryH3Task: async () => ({ status: 'failed' as const, errorMessage: '远端失败' }),
+    });
+    const batch = await executeBatch([req('a', proPlan(), depsOf(ports))], {
+      settlement: 'precise',
+    });
+    expect(batch.items[0].status).toBe('failed');
+    expect(batch.items[0].chargedCostFen).toBe(0); // SHOT_003 失败 → 不计
+    expect(batch.totalChargedFen).toBe(0);
+  });
+
+  it('precise 部分成功:只计 succeeded 任务', async () => {
+    // SHOT_001/002 comfy 成功(无刊例 0 分)、SHOT_003 minimax 成功(300)
+    const { ports } = mockPorts();
+    const batch = await executeBatch([req('a', proPlan(), depsOf(ports))], {
+      settlement: 'precise',
+    });
+    expect(batch.items[0].status).toBe('succeeded');
+    expect(batch.items[0].chargedCostFen).toBe(300);
+    expect(batch.totalChargedFen).toBe(300);
   });
 });

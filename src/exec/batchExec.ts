@@ -10,6 +10,7 @@
 import type { BatchItemResult, BatchOptions, BatchRequest, BatchResult } from './types';
 import { executeVisualPlan } from './visualExec';
 import { planCostReport, BudgetExceededError } from './budget';
+import { settleVisualRun, type PriceBooks } from './pricing';
 
 export const executeBatch = async (
   requests: BatchRequest[],
@@ -47,14 +48,19 @@ export const executeBatch = async (
     opts.onProgress?.({ id: req.id, phase: 'running' });
     try {
       const result = await executeVisualPlan(req.plan, req.deps, req.opts);
-      spent += cost; // 发起即计
+      // P9 结算:'attempt'(缺省,P6 发起即计)| 'precise'(按实际产出,
+      // succeeded 才计);批级预算闸门仍按计划估算判限(提交前语义不变)。
+      const charged = opts.settlement === 'precise'
+        ? settleVisualRun(req.plan, result, opts.books).chargedCostFen
+        : cost;
+      spent += charged;
       // failed/timeout 判失败;skipped(无映射后端/依赖)归 succeeded——细节在 result
       const anyBad = result.results.some(r => r.status === 'failed' || r.status === 'timeout');
       opts.onProgress?.({ id: req.id, phase: anyBad ? 'failed' : 'done' });
       items.push({
         id: req.id,
         status: anyBad ? 'failed' : 'succeeded',
-        chargedCostFen: cost,
+        chargedCostFen: charged,
         result,
         ...(anyBad ? { error: '部分任务未成功(见 result.results)' } : {}),
       });

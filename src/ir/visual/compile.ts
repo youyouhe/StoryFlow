@@ -264,6 +264,18 @@ export const compileVisualPlan = (
             ...(shot.firstFrame.assetId ? { assetId: shot.firstFrame.assetId } : {}),
           },
         };
+        // P9 补齐:express 的 minimax 视频同样按刊例镜像计价(P1 文档口径
+        // 「仅 minimax 视频任务计价」本就该覆盖 express 路,此处为遗漏修补)
+        if (backend === 'minimax') {
+          const resolution = String(vendor?.resolution ?? opts.priceResolution ?? '768P');
+          const model = vendor?.model != null ? String(vendor.model) : opts.priceModel;
+          videoJob.estimatedCostFen = estimateVideoCostFen({
+            outputSeconds: link.outputSeconds,
+            imageCount: materials.slots.length,
+            resolution,
+            model,
+          });
+        }
         jobs.push(videoJob);
       }
       shots.push({ shotId: shot.id, durationFit: fit, jobs });

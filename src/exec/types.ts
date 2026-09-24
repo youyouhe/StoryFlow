@@ -184,6 +184,11 @@ export interface BatchResult {
 export interface BatchOptions {
   /** 批级总预算(分);缺省无上限。 */
   budgetFen?: number;
+  /** P9 结算口径:'attempt'(缺省,P6 发起即计)| 'precise'(按实际产出)。
+   *  批级预算闸门仍按计划估算判限。 */
+  settlement?: 'attempt' | 'precise';
+  /** P9 价目表(精确结算/图条目计价用)。 */
+  books?: import('./pricing').PriceBooks;
   /** 首个 failed 后中止余项(缺省 false = 继续)。 */
   stopOnError?: boolean;
   onProgress?: (e: { id: string; phase: 'checking' | 'running' | 'done' | 'rejected' | 'failed' }) => void;
