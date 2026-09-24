@@ -38,7 +38,7 @@ import {
 import {
   isProjectStoreAvailable, pickProjectDir, persistProjectDir, loadPersistedProjectDir,
   forgetProjectDir, openProject, loadStoryFile, saveStoryFile, saveStyleBundle,
-  listRunFiles, loadRunFile, loadRuntimeProfile,
+  listRunFiles, loadRunFile, loadRuntimeProfile, readProjectText, writeProjectText,
 } from './services/project/projectStore';
 import {
   defaultRegistry, defaultProfile, createServiceHub, type ServiceHub, type VideoSubmitRequest,
@@ -52,6 +52,12 @@ import { PlanPreviewModal } from './components/PlanPreviewModal';
 import { freezePlan, type PlanDemand, type PlanConfirmResult, type SatisfiedBy } from './utils/plan/freeze';
 import { resultsStoreFor } from './services/project/results';
 import type { RunFileData } from './services/project/files';
+import {
+  newFeedbackFile, parseFeedback, serializeFeedback, addComment, setCommentStatus, removeComment,
+  FEEDBACK_FILE, type FeedbackFile, type FeedbackComment,
+} from './services/project/feedback';
+import { ReviewPanel } from './components/ReviewPanel';
+import { ComposeExportModal } from './components/ComposeExportModal';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './components/RefAssetLibraryModal';
 import { GalleryModal } from './components/GalleryModal';
 import { AIModal } from './components/AIModal';
@@ -447,6 +453,55 @@ function App() {
     }
     pending.resolve({ runId, runName: planRunName ?? 'adhoc', satisfied });
   }, [pendingPlan, frozenPlan, planRunName, planRunData, projectDir]);
+
+  // ---- P5: review loop memory (FEEDBACK.json) + composite/review UI --------
+  const [feedback, setFeedback] = useState<FeedbackFile>(() => {
+    try {
+      const raw = localStorage.getItem('storyflow_feedback');
+      return raw ? parseFeedback(raw) : newFeedbackFile();
+    } catch { return newFeedbackFile(); }
+  });
+  const [showCompose, setShowCompose] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [reviewPreviewUrl, setReviewPreviewUrl] = useState<string | undefined>(undefined);
+  // writes hold until the project file has been read (don't clobber FEEDBACK.json)
+  const feedbackReady = useRef(false);
+
+  useEffect(() => {
+    feedbackReady.current = false;
+    if (!projectDir) { feedbackReady.current = true; return; }
+    let cancelled = false;
+    void readProjectText(projectDir, FEEDBACK_FILE).then(text => {
+      if (cancelled) return;
+      if (text) {
+        try { setFeedback(parseFeedback(text)); } catch { /* keep current */ }
+      }
+      feedbackReady.current = true;
+    }).catch(() => { if (!cancelled) feedbackReady.current = true; });
+    return () => { cancelled = true; };
+  }, [projectDir]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!feedbackReady.current) return;
+      if (projectDir) {
+        void writeProjectText(projectDir, FEEDBACK_FILE, serializeFeedback(feedback)).catch(() => {});
+      } else {
+        try { localStorage.setItem('storyflow_feedback', serializeFeedback(feedback)); } catch { /* ignore */ }
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [feedback, projectDir]);
+
+  const handleAddFeedback = useCallback((text: string, atSec: number) => {
+    setFeedback(prev => addComment(prev, { text, atSec }));
+  }, []);
+  const handleFeedbackStatus = useCallback((id: string, status: FeedbackComment['status']) => {
+    setFeedback(prev => setCommentStatus(prev, id, status));
+  }, []);
+  const handleDeleteFeedback = useCallback((id: string) => {
+    setFeedback(prev => removeComment(prev, id));
+  }, []);
 
   // ---- P4 credential library: session memory + explicit encrypted file ----
   const handleExportCredentials = useCallback(async () => {
@@ -2271,7 +2326,7 @@ function App() {
         // Deterministic planner — no AI call. Reads each beat's timestamp
         // prefix, groups consecutive beats into ≤target generation windows
         // (scene changes force a boundary; beats are atomic, never split).
-        shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks, mode=${screenplay.productionMode ?? '?'}`);
+        shipLog('flow', 'info', `VIDEO_PLAN start: ${screenplay.blocks.length} blocks`);
         const target = videoPlanDuration; // per-segment window (user-selected)
         const plan = planVideoSegments(screenplay.blocks, target, videoPlanWindowsFromScreenplay(screenplay));
         shipLog('flow', 'info', `VIDEO_PLAN planned: ${plan.segments.length} segments [${plan.segments.map(s => `${s.beats.length}b/${Math.round(s.duration)}s`).join(', ')}]`);
@@ -2292,9 +2347,14 @@ function App() {
         // continuous camera per segment (LLM reads all beats + scene blocking).
         // Results land in screenplay.segmentGrayboxes keyed by the segment's
         // first block id — the white-model render / H3 flow reads them.
-        // SKIPPED in simple production mode (no spatial blocking needed).
-        if (screenplay.productionMode === 'simple') {
-          shipLog('flow', 'info', 'VIDEO_PLAN: simple mode — skipping segment graybox batch');
+        // P5: unified pipeline — this enrichment runs when the graph already
+        // has spatial/white-model nodes (any graybox), not per "mode". A
+        // simple production never grows grayboxes and never pays for them;
+        // the explicit Alt+G hotkey is the first node and needs no mode.
+        const usesSpatial = screenplay.blocks.some(b => !!b.graybox)
+          || Object.keys(screenplay.segmentGrayboxes ?? {}).length > 0;
+        if (!usesSpatial) {
+          shipLog('flow', 'info', 'VIDEO_PLAN: no spatial blocking in the graph — skipping segment graybox batch');
           setAIState({ isLoading: false, suggestion: result, error: null, decision: null, grayboxDraft: null, batchProgress: null });
           return;
         }
@@ -2409,8 +2469,8 @@ function App() {
             // Trigger on SCENE_HEADING (layout + blocking), ACTION, or DIALOGUE
             // (camera/运镜). CHARACTER is excluded — it owns the image-prompt
             // design sheet, graybox is about space + camera.
-            // Skipped in simple production mode (no spatial blocking needed).
-            if (screenplay.productionMode === 'simple') return;
+            // P5: no mode gate — an explicit hotkey IS the spatial request;
+            // the unified pipeline branches on data (graybox nodes), not modes.
             const currentBlock = screenplay.blocks.find(b => b.id === id);
             if (currentBlock?.type === 'SCENE_HEADING' || currentBlock?.type === 'ACTION' || currentBlock?.type === 'DIALOGUE') {
                 e.preventDefault();
@@ -3078,6 +3138,33 @@ function App() {
             />
         )}
 
+        {/* P5 composite export + review loop */}
+        {showCompose && (
+            <ComposeExportModal
+                open={showCompose}
+                screenplay={screenplay}
+                t={t}
+                onClose={() => setShowCompose(false)}
+                onListVideoOutputs={listResultOutputs}
+                onReadOutput={readResultOutput}
+                onExported={(url) => {
+                  setReviewPreviewUrl(url);
+                  setShowCompose(false);
+                  setShowReview(true);
+                }}
+            />
+        )}
+        <ReviewPanel
+            open={showReview}
+            feedback={feedback}
+            previewUrl={reviewPreviewUrl}
+            t={t}
+            onAdd={handleAddFeedback}
+            onSetStatus={handleFeedbackStatus}
+            onDelete={handleDeleteFeedback}
+            onClose={() => setShowReview(false)}
+        />
+
         {/* Settings Modal */}
         {showSettingsModal && (
             <SettingsModal
@@ -3138,6 +3225,8 @@ function App() {
             onImportAssetPack={(f) => { void handleImportAssetPack(f); }}
             onListOutputs={listResultOutputs}
             onExportOutput={exportResultOutput}
+            onOpenCompose={() => setShowCompose(true)}
+            onOpenReview={() => setShowReview(true)}
             t={t}
         />
 

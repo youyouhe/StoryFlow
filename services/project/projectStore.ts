@@ -146,6 +146,14 @@ export const saveRunFile = async (dir: FileSystemDirectoryHandle, run: RunFileDa
   await writeText(runs, runFileName(run.name), serializeRunFile(run));
 };
 
+/** P5: plain project docs (BRIEF.md / TREATMENT.md / PROGRESS.md / FEEDBACK.json
+ *  — files ARE the memory for the agent loop). */
+export const readProjectText = (dir: FileSystemDirectoryHandle, name: string): Promise<string | null> =>
+  readText(dir, name);
+
+export const writeProjectText = (dir: FileSystemDirectoryHandle, name: string, content: string): Promise<void> =>
+  writeText(dir, name, content);
+
 export const RUNTIME_FILE_NAME = 'storyflow.runtime.json';
 
 /** P4: the project's service selection (endpoints + credential refs + bindings). */

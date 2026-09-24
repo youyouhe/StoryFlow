@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, FileJson, FileCode, ChevronDown, Check, X, Download, Upload } from 'lucide-react';
+import { FileText, FileJson, FileCode, ChevronDown, Check, X, Download, Upload, Film, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ExportFormat, ExportOptions } from '../types';
 import { DEFAULT_EXPORT_OPTIONS } from '../utils/exportData';
@@ -28,10 +28,13 @@ interface ExportMenuProps {
   /** P3 results repository: list `(runId, output)` addresses and export one. */
   onListOutputs?: () => Promise<{ runId: string; runName: string; outputs: { name: string; kind: string }[] }[]>;
   onExportOutput?: (runId: string, name: string) => Promise<boolean>;
+  /** P5 entries: composite export + review loop. */
+  onOpenCompose?: () => void;
+  onOpenReview?: () => void;
   t: any;
 }
 
-export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, onListOutputs, onExportOutput, t }) => {
+export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport, onImportJson, onExportAssetPack, onImportAssetPack, onListOutputs, onExportOutput, onOpenCompose, onOpenReview, t }) => {
   const [format, setFormat] = useState<ExportFormat>('json');
   const [opts, setOpts] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -206,6 +209,32 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ open, onClose, onExport,
             </label>
           </div>
         </div>
+
+        {/* P5: composite export + review loop entries */}
+        {(onOpenCompose || onOpenReview) && (
+          <div className="px-4 pt-3 flex gap-2">
+            {onOpenCompose && (
+              <button
+                type="button"
+                onClick={() => { onOpenCompose(); onClose(); }}
+                className="flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg border border-teal-200 dark:border-teal-900/50 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 text-xs font-semibold"
+              >
+                <Film className="w-3.5 h-3.5" />
+                <span>{t.composeOpen || 'Composite export'}</span>
+              </button>
+            )}
+            {onOpenReview && (
+              <button
+                type="button"
+                onClick={() => { onOpenReview(); onClose(); }}
+                className="flex-1 flex items-center gap-2 px-2.5 py-2 rounded-lg border border-indigo-200 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-xs font-semibold"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>{t.reviewOpen || 'Review notes'}</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* P3 results repository — export one (runId, output) address */}
         {onExportOutput && (
