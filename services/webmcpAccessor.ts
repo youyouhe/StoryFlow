@@ -8,6 +8,7 @@ import type {
   GrayboxData,
   RefImage,
 } from '../types';
+import { composeBlockImagePrompt, characterSheetOf } from '../utils/promptStyle';
 import { TEMPLATES } from '../constants';
 import type { StoryflowWebMcpAccessor } from './webmcp';
 import { generateContinuation, generateImagePrompt, generateGraybox } from './geminiService';
@@ -100,7 +101,7 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
           content: b.content,
           hasGraybox: !!b.graybox,
           grayboxKind: b.graybox?.kind,
-          hasImagePrompt: !!b.imagePrompt?.trim(),
+          hasImagePrompt: !!characterSheetOf(b, screenplay),
         }));
       return { total, returned: slice.length, blocks: slice };
     },
@@ -375,9 +376,12 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         // defined in an earlier scene.
         const globalCharDesigns = new Map<string, string>();
         for (const sb of screenplay.blocks) {
-          if (sb.type === 'CHARACTER' && sb.imagePrompt?.trim()) {
+          if (sb.type !== 'CHARACTER') continue;
+          // schemaVersion 3 (issue #8): registry first, inline fallback
+          const sheet = sb.imagePrompt?.trim() || screenplay.characterSheets?.[sb.content.trim()];
+          if (sheet) {
             const n = baseCharName(sb.content.trim());
-            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sb.imagePrompt!.trim());
+            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sheet);
           }
         }
         const pc = b.type === 'CHARACTER' ? parseCharacterName(b.content.trim()) : { base: '' };
@@ -393,9 +397,14 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         const charVariantOut = isCharacter ? pc.variant : undefined;
         setScreenplay(prev => ({
           ...prev,
+          schemaVersion: 3,
+          // schemaVersion 3 (issue #8): CHARACTER sheet lands once in the
+          // registry — same-content blocks read it by reference
+          ...(isCharacter
+            ? { characterSheets: { ...(prev.characterSheets ?? {}), [b.content.trim()]: prompt } }
+            : {}),
           blocks: prev.blocks.map(x => {
-            if (x.id === b.id) return { ...x, imagePrompt: prompt };
-            if (isCharacter && x.type === 'CHARACTER' && baseCharName(x.content.trim()) === charNameOut && parseCharacterName(x.content.trim()).variant === charVariantOut) return { ...x, imagePrompt: prompt };
+            if (x.id === b.id) return isCharacter ? x : { ...x, imagePrompt: prompt };
             return x;
           }),
           lastModified: Date.now(),
@@ -409,7 +418,7 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
       const idx = blockIndex != null ? blockIndex : screenplay.blocks.findIndex(b => b.id === blockId);
       const b = idx != null && idx >= 0 ? screenplay.blocks[idx] : undefined;
       if (!b) return { ok: false, error: 'Block not found.' };
-      if (!b.imagePrompt?.trim()) return { ok: false, error: `Block ${idx} has no imagePrompt — run storyflow_generate_image_prompt first.` };
+      if (!characterSheetOf(b, screenplay)) return { ok: false, error: `Block ${idx} has no imagePrompt — run storyflow_generate_image_prompt first.` };
       if (!imageReady) return { ok: false, error: effectiveImageProvider === 'fal' ? '未配置 FAL API Key（Settings → AI）。' : '未配置 MiniMax API Key（Settings → 视频生成）。' };
       try {
         const subject = b.type === 'CHARACTER' ? b.content.trim().slice(0, 40) : '环境';
@@ -476,7 +485,7 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         const imgs = await generateImages(
           { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
             ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
-          b.imagePrompt,
+          composeBlockImagePrompt(b, screenplay),
           { n: 1, aspectRatio: '16:9', subjectReference: subjectRef,
             references: {
               ...(charRefs.length ? { characters: charRefs } : {}),
@@ -490,7 +499,7 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
         const stored = await handleUploadRefImage(
           new File([imgs[0].blob], name, { type: imgs[0].blob.type || 'image/png' }),
           subject || '环境',
-          b.imagePrompt,
+          composeBlockImagePrompt(b, screenplay),
           'ai-generate',
           b.type === 'CHARACTER'
             ? { kind: 'character', charName: subject }

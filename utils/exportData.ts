@@ -1,4 +1,5 @@
 import { Screenplay, ScriptBlock, ExportOptions, GrayboxData, GrayboxCamera } from '../types';
+import { composeBlockImagePrompt, characterSheetOf } from './promptStyle';
 
 /**
  * Batch export helpers for a screenplay — Markdown and JSON. PDF export lives
@@ -105,11 +106,14 @@ const BLOCK_TYPE_LABEL: Record<string, string> = {
   TRANSITION: 'TRANSITION',
 };
 
-/** Render a block's AI payloads as Markdown, gated by options. Returns empty
- *  string when nothing is included. */
-const renderPayloadsMarkdown = (block: ScriptBlock, opts: ExportOptions, index: number): string => {
+/** Render a block's AI payloads as Markdown, gated by options. `sp` feeds the
+ *  schemaVersion 3 resolution (registry sheets + styleHead prefix composition
+ *  — issue #8): exported markdown shows the prompt as SENT to image models,
+ *  not the stored increment. */
+const renderPayloadsMarkdown = (block: ScriptBlock, opts: ExportOptions, index: number, sp: Screenplay): string => {
   const lines: string[] = [];
-  const wantPrompt = opts.includeImagePrompts && block.imagePrompt?.trim();
+  const composedPrompt = opts.includeImagePrompts ? composeBlockImagePrompt(block, sp) : '';
+  const wantPrompt = !!composedPrompt;
   const wantGraybox = opts.includeGraybox && block.graybox;
   const wantDub = opts.includeDubbing && !!block.dubEmotion;
   if (!wantPrompt && !wantGraybox && !wantDub) return '';
@@ -121,7 +125,7 @@ const renderPayloadsMarkdown = (block: ScriptBlock, opts: ExportOptions, index: 
     lines.push(`**Storyboard prompt:**`);
     lines.push('');
     lines.push('```');
-    lines.push(block.imagePrompt!.trim());
+    lines.push(composedPrompt);
     lines.push('```');
   }
   if (wantGraybox) {
@@ -195,7 +199,7 @@ export const screenplayToMarkdown = (sp: Screenplay, opts: ExportOptions): strin
         lines.push(content || '');
         lines.push('');
     }
-    const payload = renderPayloadsMarkdown(block, opts, i);
+    const payload = renderPayloadsMarkdown(block, opts, i, sp);
     if (payload) lines.push(payload);
   });
 
@@ -212,20 +216,31 @@ export const exportMarkdown = (sp: Screenplay, opts: ExportOptions): void => {
 // JSON export
 // ---------------------------------------------------------------------------
 
-/** Full screenplay as pretty-printed JSON. Every block carries its
- *  `imagePrompt` + `graybox` as stored, so this is a lossless dump — ideal for
- *  backup or for handing the whole AI-payload set to an evaluator. */
+/** Full screenplay as pretty-printed JSON. Blocks carry their AI payloads as
+ *  stored (the v3 INCREMENT — style prefix composed on import/read), plus the
+ *  schemaVersion stamp and the character-sheet registry (issue #8) so the IR
+ *  bridge can read the structural generation. */
 export const screenplayToJSON = (sp: Screenplay, opts: ExportOptions): string => {
   // Always strip to honor the per-format gates — the source screenplay can carry
   // imagePrompt/graybox/dubEmotion, so returning `sp` raw would leak any payload
   // the user chose to exclude. Copy only the included ones.
   const stripped: Screenplay = {
     ...sp,
+    schemaVersion: Math.max(sp.schemaVersion ?? 1, 3),
+    ...(opts.includeImagePrompts && sp.characterSheets ? { characterSheets: sp.characterSheets } : {}),
     blocks: sp.blocks.map(b => {
       const nb: ScriptBlock = { id: b.id, type: b.type, content: b.content };
       if (opts.includeImagePrompts && b.imagePrompt) nb.imagePrompt = b.imagePrompt;
       if (opts.includeGraybox && b.graybox) nb.graybox = b.graybox;
       if (opts.includeDubbing && b.dubEmotion) nb.dubEmotion = b.dubEmotion;
+      // v2 director fields + v3 markers ride along (lossless dump)
+      if (b.motionPrompt) nb.motionPrompt = b.motionPrompt;
+      if (b.shotDuration != null) nb.shotDuration = b.shotDuration;
+      if (b.firstFrameDesc) nb.firstFrameDesc = b.firstFrameDesc;
+      if (b.lastFrameDesc) nb.lastFrameDesc = b.lastFrameDesc;
+      if (b.speaker) nb.speaker = b.speaker;
+      if (b.transitionTo) nb.transitionTo = b.transitionTo;
+      if (b.characterMarker) nb.characterMarker = b.characterMarker;
       return nb;
     }),
   };

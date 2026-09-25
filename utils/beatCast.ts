@@ -43,6 +43,19 @@ export const baseCharName = (raw: string): string => parseCharacterName(raw).bas
 export const isOffScreen = (raw: string): boolean =>
   /画外|旁白|(?:^|[^a-z])vo(?:$|[^a-z])|v\.o\.|o\.s\.(?:$|[^a-z])|voice.?over|off.?screen/i.test(raw);
 
+/** Structured off-screen marker (issue #8, schemaVersion 3) — the cue's
+ *  delivery channel as an extension FIELD instead of paren-guessing:
+ *  `空椅子里的声音（画外）` → 'vo', `NARRATOR (O.S.)` → 'os'.
+ *  The cue TEXT keeps the marker (editor display + isOffScreen name-matching
+ *  both read it); the field is the machine-readable view the IR bridge and
+ *  exports consume. */
+export const parseCharacterMarker = (raw: string): 'vo' | 'os' | undefined => {
+  if (/画外|旁白|voice.?over|off.?screen/i.test(raw)) return 'vo';
+  if (/v\.o\.|(?:^|[^a-z])vo(?:$|[^a-z])/i.test(raw)) return 'vo';
+  if (/o\.s\.(?:$|[^a-z])/i.test(raw)) return 'os';
+  return undefined;
+};
+
 export const collectCharacterNames = (blocks: ScriptBlock[]): string[] => {
   const names: string[] = [];
   for (const b of blocks) {

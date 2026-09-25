@@ -9,6 +9,7 @@ import { sequenceAt, wardrobeIn } from '../utils/sequence';
 import { copyToClipboard } from '../utils/clipboard';
 import { computeBeatCast, parseCharacterName, resolveBeatVariant } from '../utils/beatCast';
 import { grayboxOverviewLine } from '../utils/exportData';
+import { composeBlockImagePrompt } from '../utils/promptStyle';
 import { buildBlenderScript, downloadBlenderScript, blenderScriptFilename } from '../utils/grayboxToBlender';
 import { generateImages } from '../services/minimaxService';
 
@@ -98,7 +99,10 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   onDeleteGraybox,
   onDeleteImagePrompt,
 }) => {
-  const hasPrompt = !!panelBlock.imagePrompt?.trim();
+  // schemaVersion 3 (issue #8): prompt = registry/inline resolve + styleHead
+  // prefix composed from the CURRENT styleHead (编辑风格头,所有块即时跟随)
+  const resolvedImagePrompt = composeBlockImagePrompt(panelBlock, screenplay);
+  const hasPrompt = !!resolvedImagePrompt;
   const hasGraybox = !!panelBlock.graybox;
   if (!hasPrompt && !hasGraybox) return null;
 
@@ -119,7 +123,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
 
   const copyText = showingGraybox
     ? JSON.stringify(panelBlock.graybox, null, 2)
-    : (panelBlock.imagePrompt || '');
+    : resolvedImagePrompt;
 
   // Owning-scene context, lifted so the 3D view AND the footer
   // Blender exporter share one lookup: the nearest SCENE_HEADING
@@ -175,7 +179,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
   // BEFORE spending a generation, instead of silently degrading to text-to-image
   // and producing 穿帮.
   const refPreview = (() => {
-    if (showingGraybox || !panelBlock.imagePrompt) return null;
+    if (showingGraybox || !resolvedImagePrompt) return null;
     const seq = sequenceAt(screenplay.sequences, panelIdx);
     if (panelBlock.type === 'CHARACTER') {
       const pc = parseCharacterName(panelBlock.content);
@@ -338,7 +342,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
             </p>
           )}
           <pre className={`text-xs leading-relaxed font-mono whitespace-pre-wrap select-text ${showingGrayboxJSON ? 'text-emerald-900/80 dark:text-emerald-200/70' : 'text-indigo-900/80 dark:text-indigo-200/70'}`}>
-            {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : panelBlock.imagePrompt}
+            {showingGrayboxJSON ? JSON.stringify(panelBlock.graybox, null, 2) : resolvedImagePrompt}
           </pre>
         </div>
       )}
@@ -376,7 +380,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
         </div>
       )}
       <div className="relative p-4 border-t border-gray-100 dark:border-zinc-800 flex flex-wrap items-center gap-2">
-        {!showingGraybox && panelBlock.imagePrompt && (
+        {!showingGraybox && resolvedImagePrompt && (
           <>
             {/* Generated-result thumbnail. Sources the LIVE persisted link
                 (block.imageResult → library asset) so the thumbnail survives
@@ -443,7 +447,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                 const subject = panelBlock.type === 'CHARACTER'
                   ? panelBlock.content.trim().slice(0, 40)
                   : '环境';
-                onUploadRefImage(f, subject || '环境', panelBlock.imagePrompt);
+                onUploadRefImage(f, subject || '环境', resolvedImagePrompt || undefined);
               }}
             />
             <button
@@ -533,7 +537,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                   const imgs = await generateImages(
                     { apiKey: appSettings.minimaxApiKey.trim(), baseUrl: appSettings.minimaxBaseUrl,
                       ...(effectiveImageProvider === 'fal' ? { provider: 'fal' as const, falKey: appSettings.falKey, falModel: appSettings.falModel, falQuality: appSettings.falQuality } : {}) },
-                    panelBlock.imagePrompt!,
+                    resolvedImagePrompt!,
                     { n: 1, aspectRatio: '16:9',
                       subjectReference: subjectRef,
                       references: {
@@ -563,7 +567,7 @@ export const PromptPanel: React.FC<PromptPanelProps> = ({
                     const assetId = await onUploadRefImage(
                       new File([im.blob], name, { type: im.blob.type || 'image/png' }),
                       subject || '环境',
-                      panelBlock.imagePrompt,
+                      resolvedImagePrompt,
                       'ai-generate',
                       panelBlock.type === 'CHARACTER'
                         ? parseIntCtxChar(panelBlock, subject)

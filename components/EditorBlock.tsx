@@ -16,6 +16,10 @@ interface EditorBlockProps {
   readOnly?: boolean;
   customColor?: string;
   theme?: Theme;
+  /** schemaVersion 3 (issue #8): CHARACTER sheets live in the registry —
+   *  presence is resolved by the parent (inline OR registry), not from the
+   *  block's own field. Defaults to the inline check for other callers. */
+  hasImagePayload?: boolean;
   imagePromptLabel?: string;
   imagePromptOpenLabel?: string;
   onOpenImagePrompt?: (id: string) => void;
@@ -65,6 +69,7 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
   readOnly = false,
   customColor,
   theme = 'light',
+  hasImagePayload,
   imagePromptLabel = 'Image Prompt',
   imagePromptOpenLabel = 'View',
   onOpenImagePrompt,
@@ -156,7 +161,7 @@ export const EditorBlock: React.FC<EditorBlockProps> = ({
       {/* Storyboard image prompt chip (ACTION / CHARACTER blocks).
           Clicking it opens the prompt in a right-side drawer (handled in App)
           instead of expanding inline, so it costs only one line of editor space. */}
-      {block.imagePrompt && block.imagePrompt.trim() && (block.type === 'ACTION' || block.type === 'CHARACTER' || block.type === 'SCENE_HEADING') && (
+      {(hasImagePayload ?? !!block.imagePrompt?.trim()) && (block.type === 'ACTION' || block.type === 'CHARACTER' || block.type === 'SCENE_HEADING') && (
         <button
           type="button"
           onClick={() => onOpenImagePrompt?.(block.id)}

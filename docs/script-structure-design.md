@@ -171,3 +171,14 @@ parseTypedLines(扩展:[MOTION]/[DURATION]/[FIRST]/[LAST] 附着最近可生成�
 | 拆分缺陷修复 | ✅ | `splitInlineDialogue` 两处真 bug:①带括注 cue 正则把括注当台词(`女儿（愣住）：…` 丢台词);②DIALOGUE 塞台词(`母亲（微笑）：…`)不拆。现 ONE regex + 括注 cue 即使不在 universe 也拆 + DIALOGUE 纳入拆分面 |
 | 《银盐晨光》剧本补齐 | ✅ | `docs/examples/yinshan-chenchen.json`:g60az7ygd 拆 CHARACTER+DIALOGUE、补母亲 CHARACTER ref(双 11 模块 sheet)、每 shot 补 motionPrompt/shotDuration/首尾帧、speaker 回填 |
 | CHARACTER 设计图升级 | ✅ | 三视图 turnaround → 工业级 11 模块 Character Sheet,见 `docs/character-sheet.md` |
+
+## 剧本 JSON 去冗余(schemaVersion 3,issue #8,2026-09-26)
+
+手验实测三处冗余,其中前两处造成**风格漂移**。v3 数据契约(utils/promptStyle.ts + utils/screenplayMigrate.ts):
+
+1. **styleHead 前缀不落库**:块 imagePrompt 只存增量(Subject 起);`Global Style:` 行在读时从**当前** styleHead 合成(`composeBlockImagePrompt`)——改 styleHead,全部已有块即时跟随(旧前缀内联是漂移根因)。生成侧(geminiService 两路)不再 unshift;风格锁仍在生成 system prompt。
+2. **角色 sheet 注册表**:`screenplay.characterSheets[cue内容]` 全剧一份;CHARACTER 块引用不复制(Alt+S/批量/WebMCP 写注册表,同名传播成单条注册项)。读侧 `characterSheetOf` 注册表优先、内联兜底(未迁移稿)。
+3. **schemaVersion 显式化**:导出 JSON 恒 ≥3;加载/导入/legacy 读入经 `migrateScreenplay`(纯、幂等、无损:前缀剥离、sheet 入注册表、画外音字段化、导演字段保留)。
+4. **画外音 extension**:`ScriptBlock.characterMarker: 'vo'|'os'`(迁移时从 cue 括号解析;**cue 原文保留**——编辑器显示与 beat-cast 名字匹配依赖原文,字段是给 IR/导出的机器视图)。
+
+兼容:旧稿读入即迁移(无损),未迁移稿读侧双形态兼容(内联兜底 + 不重复加前缀);E2E 锚点 `/tmp/mode-verify/structure-e2e.mjs` 的 schemaVersion=2 断言需同步为 3(脚本在 /tmp,不进仓)。

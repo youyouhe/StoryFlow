@@ -29,18 +29,21 @@ export function useBlockEditing({ setScreenplay, isReadOnly }: {
     }));
   }, [isReadOnly]);
 
-  // Delete a block's storyboard image prompt. For CHARACTER blocks, the same
-  // character may appear in multiple blocks sharing one prompt — deleting on
-  // one occurrence clears the prompt from ALL same-name CHARACTER blocks, so
-  // "one prompt per character" stays consistent (mirrors the save propagation).
+  // Delete a block's storyboard image prompt. For CHARACTER blocks the sheet
+  // lives ONCE in the registry (issue #8, schemaVersion 3) — deleting on any
+  // occurrence of the cue removes that single shared entry (plus any inline
+  // pre-migration copies), so "one prompt per character" stays consistent.
   const handleDeleteImagePrompt = useCallback((id: string) => {
     if (isReadOnly) return;
     setScreenplay(prev => {
       const target = prev.blocks.find(b => b.id === id);
       const isCharacter = target?.type === 'CHARACTER';
       const charName = isCharacter ? target!.content.trim() : '';
+      const sheets = { ...(prev.characterSheets ?? {}) };
+      if (isCharacter) delete sheets[charName];
       return {
         ...prev,
+        ...(isCharacter ? { characterSheets: sheets } : {}),
         blocks: prev.blocks.map(b => {
           if (b.id === id) {
             const { imagePrompt, ...rest } = b;

@@ -8,6 +8,7 @@ import {
   applyDirectorPipeline,
 } from '../utils/blockDirectorFill';
 import { auditCharacterSheet } from '../utils/characterSheet';
+import { composeBlockImagePrompt } from '../utils/promptStyle';
 import { dialoguesWithoutSpeaker } from '../utils/shotList';
 import type { Screenplay, ScriptBlock } from '../types';
 
@@ -26,14 +27,33 @@ const sp = JSON.parse(
 const GENERATABLE = new Set(['SCENE_HEADING', 'ACTION', 'CHARACTER']);
 
 describe('《银盐晨光》example document', () => {
-  it('is schemaVersion 2 with both CHARACTER design sheets present', () => {
-    expect(sp.schemaVersion).toBe(2);
+  it('is schemaVersion 3 with both CHARACTER design sheets in the registry', () => {
+    expect(sp.schemaVersion).toBe(3);
     expect(sp.metadata.styleHead?.name).toBe('银盐晨光');
     const cues = sp.blocks.filter(b => b.type === 'CHARACTER');
     expect(cues.map(b => b.content.trim()).sort()).toEqual(['女儿（愣住）', '母亲（微笑）']);
-    // 补母亲 CHARACTER ref — the mother cue must carry a design sheet
-    const mother = cues.find(b => b.content.includes('母亲'))!;
-    expect(mother.imagePrompt).toBeTruthy();
+    // 补母亲 CHARACTER ref — the mother's sheet lives ONCE in the registry
+    // (issue #8: blocks reference, they no longer copy)
+    const sheets = sp.characterSheets ?? {};
+    expect(Object.keys(sheets).sort()).toEqual(['女儿（愣住）', '母亲（微笑）']);
+    for (const cue of cues) {
+      expect(sheets[cue.content.trim()], `${cue.id} sheet`).toBeTruthy();
+      expect(cue.imagePrompt, `${cue.id} must NOT inline a sheet copy`).toBeUndefined();
+    }
+  });
+
+  it('stored prompts are bare increments (no Global Style line) — compose adds the CURRENT prefix', () => {
+    const prefix = sp.metadata.styleHead!.promptPrefix;
+    for (const b of sp.blocks) {
+      if (b.imagePrompt) {
+        expect(b.imagePrompt.startsWith('Global Style:'), `${b.id}`).toBe(false);
+        // compose resolves + prepends the CURRENT styleHead
+        expect(composeBlockImagePrompt(b, sp).startsWith(`Global Style: ${prefix}`)).toBe(true);
+      }
+      if (b.type === 'CHARACTER') {
+        expect(composeBlockImagePrompt(b, sp).startsWith(`Global Style: ${prefix}`)).toBe(true);
+      }
+    }
   });
 
   it('g60az7ygd is split into CHARACTER + DIALOGUE (不再是 mashed 台词)', () => {
@@ -65,22 +85,14 @@ describe('《银盐晨光》example document', () => {
   });
 
   it('both CHARACTER sheets pass the industrial 11-module audit', () => {
-    for (const b of sp.blocks) {
-      if (b.type !== 'CHARACTER') continue;
-      const a = auditCharacterSheet(b.imagePrompt!);
-      expect(a.missingLabels, `${b.id} labels`).toEqual([]);
-      expect(a.missingSignatures, `${b.id} signatures`).toEqual([]);
+    for (const [cue, sheet] of Object.entries(sp.characterSheets ?? {})) {
+      const a = auditCharacterSheet(sheet);
+      expect(a.missingLabels, `${cue} labels`).toEqual([]);
+      expect(a.missingSignatures, `${cue} signatures`).toEqual([]);
       expect(a.ok).toBe(true);
     }
   });
 
-  it('both CHARACTER sheets are locked to the 银盐晨光 styleHead prefix', () => {
-    const prefix = sp.metadata.styleHead!.promptPrefix;
-    for (const b of sp.blocks) {
-      if (b.type !== 'CHARACTER') continue;
-      expect(b.imagePrompt!.startsWith(`Global Style: ${prefix}`)).toBe(true);
-    }
-  });
 });
 
 describe('《银盐晨光》 pipeline round-trip', () => {

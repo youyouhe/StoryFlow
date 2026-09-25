@@ -31,6 +31,12 @@ export interface ScriptBlock extends DirectorFields {
   speaker?: string;
   /** TRANSITION: optional target ("夜 – 次日" / "CUT TO: 内. 浴室"). */
   transitionTo?: string;
+  /** Off-screen delivery marker as a structured field (schemaVersion 3, issue
+   *  #8): 'vo' = 画外/旁白/V.O., 'os' = O.S. Parsed from the cue text at
+   *  migration/parse time; the TEXT keeps the marker (editor display and
+   *  beat-cast name matching read it) — this field is the machine-readable
+   *  view for exports/IR. */
+  characterMarker?: 'vo' | 'os';
   /** Optional text-to-image prompt attached to ACTION blocks (storyboard). */
   imagePrompt?: string;
   /** AI-inferred dubbing metadata for a DIALOGUE block — emotion + delivery
@@ -204,9 +210,18 @@ export interface Screenplay {
   metadata: ScriptMetadata;
   blocks: ScriptBlock[];
   lastModified: number;
-  /** 1 (legacy, absent) | 2 (blocks carry director fields). Written on new
-   *  generations/saves; legacy scripts are lazily backfilled by consumers. */
+  /** 1 (legacy, absent) | 2 (director fields) | 3 (style prefix de-inlined —
+   *  composed from styleHead at read time; character sheets in the
+   *  `characterSheets` registry; characterMarker field). Written on new
+   *  generations/saves; older scripts migrate lazily on load/import
+   *  (utils/screenplayMigrate.ts — pure, idempotent, lossless). */
   schemaVersion?: number;
+  /** Character design sheets, ONE copy per cue slot (schemaVersion 3, issue
+   *  #8): key = the CHARACTER cue's exact content (张三（浴袍） is its own
+   *  slot), value = the sheet imagePrompt WITHOUT the style prefix (composed
+   *  from the current styleHead at read time — utils/promptStyle.ts). Blocks
+   *  reference; they no longer copy. */
+  characterSheets?: Record<string, string>;
   /** White-model reference bindings (capsule → asset id). Lives INSIDE the
    *  screenplay so exports/imports carry it — assets stay in the shared
    *  library (folder or IndexedDB), bindings travel with the script. */

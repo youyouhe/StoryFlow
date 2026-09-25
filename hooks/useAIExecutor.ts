@@ -8,6 +8,7 @@ import { sanitizeParsedBlocks } from '../utils/scriptParse';
 import { copyToClipboard } from '../utils/clipboard';
 import { parseCharacterName, baseCharName } from '../utils/beatCast';
 import { parseLabeledScript, applyDirectorPipeline } from '../utils/blockDirectorFill';
+import { characterSheetOf } from '../utils/promptStyle';
 import { splitImagePromptParts } from '../services/geminiService';
 import { sequenceAt, wardrobeIn } from '../utils/sequence';
 
@@ -131,9 +132,13 @@ export function useAIExecutor({
           // would forget it.
           const globalCharDesigns = new Map<string, string>();
           for (const b of screenplay.blocks) {
-            if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+            if (b.type !== 'CHARACTER') continue;
+            // schemaVersion 3 (issue #8): sheets live in the registry — inline
+            // imagePrompt is only the pre-migration fallback
+            const sheet = b.imagePrompt?.trim() || screenplay.characterSheets?.[b.content.trim()];
+            if (sheet) {
               const n = baseCharName(b.content.trim());
-              if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
+              if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sheet);
             }
           }
 
@@ -154,7 +159,7 @@ export function useAIExecutor({
               const slotKey = b.content.trim();
               if (!pc.base || seenCharSlots.has(slotKey)) continue;
               seenCharSlots.add(slotKey);
-              if (!b.imagePrompt?.trim()) jobs.push({ blockId: b.id, kind: 'character', charName: pc.base, variant: pc.variant });
+              if (!characterSheetOf(b, screenplay)) jobs.push({ blockId: b.id, kind: 'character', charName: pc.base, variant: pc.variant });
             }
           }
           for (let i = sceneStart + 1; i < sceneEnd; i++) {
@@ -203,23 +208,29 @@ export function useAIExecutor({
               // propagate to the same BASE+variant slot only — so the bathrobe
               // sheet doesn't overwrite the base 张三 sheet.
               const parts = splitImagePromptParts(prompt);
-              setScreenplay(prev => ({
-                ...prev,
-                schemaVersion: 2,
-                blocks: prev.blocks.map(b => {
-                  if (b.id === job.blockId) {
-                    return job.kind === 'action'
-                      ? { ...b, imagePrompt: parts.imagePrompt, motionPrompt: parts.motionPrompt, firstFrameDesc: parts.firstFrameDesc, lastFrameDesc: parts.lastFrameDesc }
-                      : { ...b, imagePrompt: parts.imagePrompt };
-                  }
-                  if (job.kind === 'character' && job.charName && b.type === 'CHARACTER' &&
-                      baseCharName(b.content.trim()) === job.charName && parseCharacterName(b.content.trim()).variant === job.variant) {
-                    return { ...b, imagePrompt: parts.imagePrompt };
-                  }
-                  return b;
-                }),
-                lastModified: Date.now(),
-              }));
+              setScreenplay(prev => {
+                // schemaVersion 3 (issue #8): CHARACTER sheets land ONCE in the
+                // registry (keyed by the target cue's exact content) — no more
+                // verbatim copies across same-name blocks. ACTION keeps its
+                // inline prompt + director fields; env keeps its inline prompt.
+                const target = prev.blocks.find(b => b.id === job.blockId);
+                const isCharacter = job.kind === 'character';
+                return {
+                  ...prev,
+                  schemaVersion: 3,
+                  ...(isCharacter && target
+                    ? { characterSheets: { ...(prev.characterSheets ?? {}), [target.content.trim()]: parts.imagePrompt } }
+                    : {}),
+                  blocks: prev.blocks.map(b => {
+                    if (b.id !== job.blockId) return b;
+                    if (job.kind === 'action') {
+                      return { ...b, imagePrompt: parts.imagePrompt, motionPrompt: parts.motionPrompt, firstFrameDesc: parts.firstFrameDesc, lastFrameDesc: parts.lastFrameDesc };
+                    }
+                    return isCharacter ? b : { ...b, imagePrompt: parts.imagePrompt };
+                  }),
+                  lastModified: Date.now(),
+                };
+              });
             } catch (err: any) {
               failures++;
               if (!firstError) firstError = err?.message || t.aiErrorGeneric;
@@ -258,9 +269,11 @@ export function useAIExecutor({
         // character defined in an earlier scene.
         const globalCharDesigns = new Map<string, string>();
         for (const b of screenplay.blocks) {
-          if (b.type === 'CHARACTER' && b.imagePrompt?.trim()) {
+          if (b.type !== 'CHARACTER') continue;
+          const sheet = b.imagePrompt?.trim() || screenplay.characterSheets?.[b.content.trim()];
+          if (sheet) {
             const n = baseCharName(b.content.trim());
-            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, b.imagePrompt!.trim());
+            if (n && !globalCharDesigns.has(n)) globalCharDesigns.set(n, sheet);
           }
         }
         const pc = kind === 'character' ? parseCharacterName(currentBlock.content.trim()) : { base: '' };
@@ -676,10 +689,9 @@ export function useAIExecutor({
       // STORYBOARD: save the generated image prompt onto the selected block.
       // ACTION outputs carry the director fields too (Motion/First/Last after
       // the six visual lines) — splitImagePromptParts separates them.
-      // For CHARACTER blocks, the same character (matched by name/content) may
-      // appear in multiple blocks: keep ONE prompt per character by writing it
-      // to every CHARACTER block with the same name, so re-running on any
-      // occurrence updates the single shared design sheet.
+      // CHARACTER sheets go ONCE into the registry (issue #8, schemaVersion 3)
+      // keyed by the cue's exact content — every same-content block reads the
+      // same sheet by reference; re-running on any occurrence updates it.
       if (aiMode === 'STORYBOARD') {
           const { imagePrompt, motionPrompt, firstFrameDesc, lastFrameDesc } = splitImagePromptParts(aiState.suggestion);
           const targetBlock = screenplay.blocks.find(b => b.id === selectedBlockId);
@@ -687,16 +699,16 @@ export function useAIExecutor({
           const charName = isCharacter ? targetBlock!.content.trim() : '';
           setScreenplay(prev => ({
               ...prev,
-              schemaVersion: 2,
+              schemaVersion: 3,
+              ...(isCharacter
+                ? { characterSheets: { ...(prev.characterSheets ?? {}), [charName]: imagePrompt } }
+                : {}),
               blocks: prev.blocks.map(b => {
                   if (b.id === selectedBlockId) {
+                      if (isCharacter) return b; // sheet lives in the registry — no inline copy
                       return b.type === 'ACTION'
                           ? { ...b, imagePrompt, motionPrompt, firstFrameDesc, lastFrameDesc }
                           : { ...b, imagePrompt };
-                  }
-                  // Propagate to same-name CHARACTER blocks so there's one prompt per character.
-                  if (isCharacter && b.type === 'CHARACTER' && b.content.trim() === charName) {
-                      return { ...b, imagePrompt };
                   }
                   return b;
               }),
@@ -734,7 +746,7 @@ export function useAIExecutor({
                   draft: 'First Draft',
               },
               blocks: safeBlocks,
-              schemaVersion: 2,
+              schemaVersion: 3,
               sourcePrompt: promptSource,
               productionMode: isFixedCam ? 'simple' : 'cinematic',
               lastModified: Date.now(),

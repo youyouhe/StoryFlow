@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { AppSettings, Screenplay, ExportFormat, ExportOptions, RefImage } from '../types';
+import { migrateScreenplay } from '../utils/screenplayMigrate';
 import { DEFAULT_SCRIPT } from '../constants';
 import { shipLog } from '../services/debugLog';
 import { exportToPDF } from '../utils/pdfExport';
@@ -45,13 +46,13 @@ export function useImportExport({
           if (!parsed || !Array.isArray(parsed.blocks) || parsed.blocks.length === 0) {
               throw new Error('bad-format');
           }
-          const imported: Screenplay = {
+          const imported: Screenplay = migrateScreenplay({
               ...DEFAULT_SCRIPT,
               ...parsed,
               id: generateId(),
               blocks: parsed.blocks.map(b => ({ ...b, id: generateId() })),
               lastModified: Date.now(),
-          };
+          });
           setScreenplay(imported);
           setSelectedBlockId(imported.blocks[0].id);
           setIsReadOnly(false);

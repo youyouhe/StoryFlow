@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Screenplay } from '../types';
+import { migrateScreenplay } from '../utils/screenplayMigrate';
 import { DEFAULT_SCRIPT } from '../constants';
 import { syncEngine } from '../services/gallery';
 import { shipLog } from '../services/debugLog';
@@ -48,7 +49,7 @@ export function useScriptLibrary() {
     try {
         const legacySave = localStorage.getItem(STORAGE_KEYS.LEGACY_AUTOSAVE);
         if (legacySave) {
-            const parsed = JSON.parse(legacySave);
+            const parsed = migrateScreenplay(JSON.parse(legacySave));
             if (parsed && Array.isArray(parsed.blocks)) {
                 // Ensure it has an ID
                 if (!parsed.id) parsed.id = generateId();
@@ -73,7 +74,9 @@ export function useScriptLibrary() {
                 const mostRecentId = index[0].id;
                 const scriptJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_PREFIX + mostRecentId);
                 if (scriptJson) {
-                    return JSON.parse(scriptJson);
+                    // issue #8: lazy lossless migration → schemaVersion 3
+                    // (pure + idempotent; autosave persists the migrated form)
+                    return migrateScreenplay(JSON.parse(scriptJson));
                 }
             }
         }
@@ -154,7 +157,7 @@ export function useScriptLibrary() {
       try {
           const scriptJson = localStorage.getItem(STORAGE_KEYS.SCRIPT_PREFIX + id);
           if (scriptJson) {
-              const loadedScript = JSON.parse(scriptJson);
+              const loadedScript = migrateScreenplay(JSON.parse(scriptJson));
               setScreenplay(loadedScript);
               if (loadedScript.blocks.length > 0) {
                   setSelectedBlockId(loadedScript.blocks[0].id);

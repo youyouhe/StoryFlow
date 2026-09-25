@@ -3,6 +3,7 @@ import { X, Image as ImageIcon, Film, RefreshCw, Lock, Unlock, AlertCircle, Load
 import { clsx } from 'clsx';
 import { Screenplay, AppSettings, RefImage, ExpressShot } from '../types';
 import { TRANSLATIONS } from '../constants';
+import { composeBlockImagePrompt } from '../utils/promptStyle';
 import { generateFirstFrame, generateI2V } from '../services/expressService';
 import { concatClipsToMp4, downloadConcatFallback, ExportProgress } from '../services/videoExport';
 
@@ -58,13 +59,16 @@ export const ExpressWorkbench: React.FC<ExpressWorkbenchProps> = ({
     }[] = [];
     let i = 0;
     for (const b of screenplay.blocks) {
-      if (!b.imagePrompt?.trim()) continue;
+      // schemaVersion 3 (issue #8): CHARACTER sheets resolve from the registry;
+      // the composed prompt carries the CURRENT styleHead prefix
+      const prompt = composeBlockImagePrompt(b, screenplay);
+      if (!prompt) continue;
       i += 1;
       list.push({
         blockId: b.id,
         index: i,
-        prompt: b.imagePrompt,
-        excerpt: b.content.trim().slice(0, 60) || b.imagePrompt.slice(0, 60),
+        prompt,
+        excerpt: b.content.trim().slice(0, 60) || prompt.slice(0, 60),
         shot: screenplay.expressShots?.[b.id],
         motionPrompt: b.motionPrompt,
         shotDuration: b.shotDuration,

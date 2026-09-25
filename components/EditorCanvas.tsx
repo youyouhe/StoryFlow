@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Screenplay, ScriptBlock, AIState, AIMode, AppSettings, RefBindings, RefImage, H3Task } from '../types';
 import { EditorBlock } from './EditorBlock';
+import { hasImagePayload } from '../utils/promptStyle';
 import { PromptPanel } from './PromptPanel';
 import { paginateBlocks } from '../utils/pagination';
 
@@ -108,6 +109,7 @@ export function EditorCanvas({
                         <div id={`block-${block.id}`} key={block.id}>
                             <EditorBlock
                                 block={block}
+                                hasImagePayload={hasImagePayload(block, screenplay)}
                                 isSelected={selectedBlockId === block.id}
                                 onChange={handleBlockChange}
                                 onKeyDown={handleKeyDown}

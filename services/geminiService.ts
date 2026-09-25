@@ -737,12 +737,12 @@ Generate the 11-line industrial character-sheet image prompt for the TARGET CHAR
   const responseText = await callAIProvider(settings, { system: systemPrompt, user: userPrompt }, false, 'character-sheet');
 
   const sheet = normalizeCharacterSheetPrompt(responseText);
-  const lines: string[] = [];
-  if (styleHead?.promptPrefix?.trim()) {
-    lines.push(`Global Style: ${styleHead.promptPrefix.trim()}`);
-  }
-  if (sheet) lines.push(sheet);
-  return applySheetFilterSafety(lines.join('\n'));
+  // schemaVersion 3 (issue #8): store the INCREMENT only — no "Global Style:"
+  // line. The prefix composes from the CURRENT styleHead at every read site
+  // (utils/promptStyle.composeBlockImagePrompt); inlining it here caused the
+  // style-drift + duplication bug 站长 hit (styleHead edits never reached old
+  // blocks). The generation-time lock still lives in the system prompt above.
+  return applySheetFilterSafety(sheet);
 };
 
 /**
@@ -939,12 +939,11 @@ Generate the six-line image prompt for the ${targetNoun}. Remember: exactly six 
       return `${canon}: ${rest}`;
     });
 
-  // Deterministic style consistency: the fixed head is prepended verbatim so
-  // every image for this script shares the exact same style tokens, even if
-  // the model paraphrases them inside the six lines.
-  if (styleHead?.promptPrefix?.trim()) {
-    lines.unshift(`Global Style: ${styleHead.promptPrefix.trim()}`);
-  }
+  // Deterministic style consistency — schemaVersion 3 (issue #8): the fixed
+  // head is NOT inlined into the stored prompt anymore. styleHead stays the
+  // single style authority; the prefix composes from it at read time
+  // (utils/promptStyle.composeBlockImagePrompt), so editing the style head
+  // updates every existing block instead of splitting the film's look.
 
   // Deterministic filter-safety pass: image-model content checkers
   // false-positive on a few words even in fully-clothed, adult, benign scenes
