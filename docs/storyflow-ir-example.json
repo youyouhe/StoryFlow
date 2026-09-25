@@ -1,0 +1,290 @@
+{
+  "version": "0.1.0",
+  "mode": "pro",
+  "title": "银盐晨光",
+  "style": {
+    "name": "银盐晨光",
+    "artStyle": "银盐胶片摄影质感:细腻颗粒、柔和晨光、暖金色调、柯达 Portra 胶片色,轻微暗角与高光光晕",
+    "scenePreset": "1990 年代中国南方小城的国营照相馆,清晨,木质橱窗,尘埃在光柱中漂浮,旧挂钟与褪色样片墙",
+    "promptPrefix": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, "
+  },
+  "refs": {
+    "characters": [
+      {
+        "id": "char:苏晚",
+        "name": "苏晚",
+        "description": "女照相师,28 岁,齐肩黑发别一支素色发卡,米白的确良衬衫袖口挽起,神情安静专注",
+        "asset": { "assetId": "asset_sowan_base_01", "source": "ai-generate", "sourcePrompt": "1990s chinese young woman photographer, white shirt, film photo portrait", "versionGroup": "sowan", "version": 1 }
+      },
+      {
+        "id": "char:苏晚:晨雾围巾",
+        "name": "苏晚",
+        "variant": "晨雾围巾",
+        "description": "苏晚在晨间湿冷时加的一条雾灰色针织围巾,其余形象与主设定一致",
+        "asset": { "assetId": "asset_sowan_scarf_01", "source": "ai-generate", "versionGroup": "sowan", "version": 2 }
+      },
+      {
+        "id": "char:陈默",
+        "name": "陈默",
+        "description": "常客,35 岁上下,火车司机,深绿色旧工装外套,眉眼温和,随身一只人造革提包",
+        "asset": { "assetId": "asset_chenmo_base_01", "source": "upload", "versionGroup": "chenmo", "version": 1 }
+      }
+    ],
+    "props": [
+      {
+        "id": "prop:海鸥相机",
+        "name": "海鸥相机",
+        "description": "海鸥牌 4B 双反相机,银灰机身磨损发亮,皮质快门线垂在侧面,腰平取景器朝上",
+        "asset": { "assetId": "asset_seagull_4b_01", "source": "upload" }
+      }
+    ],
+    "scenes": [
+      {
+        "id": "scene:照相馆",
+        "name": "照相馆",
+        "sceneHeading": "INT. 国营照相馆 - 清晨",
+        "description": "老式照相馆内景:北面木质橱窗透进晨光,光柱里浮尘可见,砖墙挂褪色样片,柜台后是深色背景布",
+        "spatialId": "spatial:照相馆",
+        "asset": { "assetId": "asset_studio_env_01", "source": "ai-generate" }
+      }
+    ],
+    "styles": [
+      {
+        "id": "style:晨光光柱",
+        "name": "晨光光柱",
+        "description": "构图与光照参考:低角度晨光穿过橱窗形成可见光柱,主体半逆光,高光允许过曝半档",
+        "asset": { "assetId": "asset_lightbeam_ref_01", "source": "video-frame" }
+      }
+    ],
+    "actions": [
+      {
+        "id": "action:擦拭相机",
+        "name": "擦拭相机",
+        "description": "双手持软布沿机身画圆擦拭的动作参考,节奏缓慢,不抬腕",
+        "asset": { "assetId": "asset_action_wipe_01", "source": "upload" }
+      }
+    ]
+  },
+  "shots": [
+    {
+      "id": "SHOT_001",
+      "sequence": 1,
+      "imagePrompt": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, wide interior at dawn, sunbeams cutting through the wooden display window, dust motes floating, faded sample prints on the brick wall, empty counter, no people",
+      "motionPrompt": "镜头极缓慢前推,光柱中尘埃缓缓漂浮,样片墙高光微微呼吸;画面内无人物",
+      "shotDuration": 6,
+      "firstFrame": {
+        "description": "照相馆内景清晨全景:北窗光柱斜切过空荡的柜台,样片墙在半逆光中泛黄"
+      },
+      "camera": {
+        "shotType": "wide",
+        "description": "定场:让光柱先于人物出场,建立空间的安静与年代感",
+        "position": [0.0, 1.5, 4.2],
+        "lookAt": [0.0, 1.2, 0.0],
+        "movement": {
+          "type": "dolly",
+          "duration": 6,
+          "targetSeconds": 6,
+          "path": [[0.0, 1.5, 4.2], [0.0, 1.4, 3.4]],
+          "lookPath": [[0.0, 1.2, 0.0], [0.0, 1.2, 0.0]]
+        }
+      },
+      "refBindings": ["scene:照相馆", "style:晨光光柱"],
+      "generation": {
+        "backend": "comfyui",
+        "steps": 28,
+        "seed": 10240001,
+        "vendor": { "workflow": "i2v-v3", "sampler": "euler" }
+      },
+      "status": "exported"
+    },
+    {
+      "id": "SHOT_002",
+      "sequence": 2,
+      "imagePrompt": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, close-up of a young woman's hands polishing a vintage twin-lens reflex camera on the wooden counter, shallow depth of field",
+      "motionPrompt": "苏晚双手沿机身缓慢画圆擦拭,软布起伏,快门线轻微晃动;镜头固定",
+      "shotDuration": 5,
+      "firstFrame": {
+        "description": "特写:苏晚的手与海鸥双反相机,晨光侧逆,金属磨损处反着暖光"
+      },
+      "camera": {
+        "shotType": "close-up",
+        "position": [0.6, 1.1, 1.2],
+        "lookAt": [0.2, 1.0, 0.4],
+        "movement": { "type": "static", "duration": 5 }
+      },
+      "refBindings": ["char:苏晚", "prop:海鸥相机", "scene:照相馆", "action:擦拭相机"],
+      "generation": {
+        "backend": "comfyui",
+        "steps": 28,
+        "seed": 10240002
+      },
+      "status": "generated"
+    },
+    {
+      "id": "SHOT_003",
+      "sequence": 3,
+      "imagePrompt": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium two-shot, a man in a dark green work jacket entering through the studio door, morning light flaring briefly behind him, woman at the counter turning her head",
+      "motionPrompt": "陈默推门进店,门铃轻晃;他抬手示意;苏晚在柜台后抬头;镜头固定中景",
+      "shotDuration": 6,
+      "firstFrame": {
+        "description": "中景双人:陈默跨进门,背后晨光短暂光晕,苏晚在柜台后侧身回头"
+      },
+      "character": "陈默",
+      "dialogue": {
+        "text": "拍一张证件照,要赶九点的火车。",
+        "ttsFloor": 4
+      },
+      "camera": {
+        "shotType": "medium",
+        "position": [-0.4, 1.4, 2.6],
+        "lookAt": [0.1, 1.3, 0.6],
+        "movement": { "type": "static", "duration": 6 },
+        "focus": "陈默"
+      },
+      "refBindings": ["char:陈默", "char:苏晚", "scene:照相馆"],
+      "generation": {
+        "backend": "minimax",
+        "steps": 1,
+        "vendor": { "model": "h3", "resolution": "768P" }
+      },
+      "status": "draft"
+    },
+    {
+      "id": "SHOT_004",
+      "sequence": 4,
+      "imagePrompt": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium close-up of the young woman in a mist-grey knit scarf looking up from the counter with a gentle smile, warm rim light on her hair",
+      "motionPrompt": "苏晚抬头,嘴角渐展微笑,围巾边缘随转身轻动;镜头缓慢推近半档",
+      "shotDuration": 5,
+      "firstFrame": {
+        "description": "中近景:苏晚(晨雾围巾)抬头瞬间,发丝边缘被晨光镶了一道金边"
+      },
+      "character": "苏晚",
+      "dialogue": {
+        "text": "好,坐那边,光正好。",
+        "ttsFloor": 3
+      },
+      "camera": {
+        "shotType": "medium",
+        "position": [0.2, 1.4, 1.8],
+        "lookAt": [-0.6, 1.35, 0.2],
+        "movement": {
+          "type": "dolly",
+          "duration": 5,
+          "path": [[0.2, 1.4, 1.8], [0.0, 1.4, 1.5]],
+          "lookPath": [[-0.6, 1.35, 0.2], [-0.6, 1.35, 0.2]]
+        }
+      },
+      "refBindings": ["char:苏晚:晨雾围巾", "scene:照相馆"],
+      "generation": {
+        "backend": "grok",
+        "steps": 1,
+        "seed": 10240004,
+        "vendor": { "quality": "high" }
+      },
+      "status": "locked"
+    },
+    {
+      "id": "SHOT_005",
+      "sequence": 5,
+      "imagePrompt": "silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, macro still life on the counter, the twin-lens reflex camera viewfinder catching a tiny upside-down image of the window light, dust in the beam, quiet morning",
+      "motionPrompt": "固定镜头微距:腰平取景器里的倒立窗光微微呼吸,尘埃缓浮,画面渐暗收黑",
+      "shotDuration": 4,
+      "firstFrame": {
+        "description": "微距静物:海鸥相机腰平取景器中倒映着橱窗光柱,四下安静"
+      },
+      "lastFrame": {
+        "description": "同机位,画面整体压暗至近黑,仅取景器亮点残留"
+      },
+      "camera": {
+        "shotType": "close-up",
+        "position": [0.3, 1.0, 0.8],
+        "lookAt": [0.25, 0.95, 0.35],
+        "movement": { "type": "static", "duration": 4 }
+      },
+      "refBindings": ["prop:海鸥相机", "scene:照相馆"],
+      "generation": {
+        "backend": "comfyui",
+        "steps": 30,
+        "seed": 10240005
+      },
+      "status": "draft"
+    }
+  ],
+  "audio": [
+    {
+      "id": "aud-tts-001",
+      "kind": "tts",
+      "shotId": "SHOT_003",
+      "character": "陈默",
+      "text": "拍一张证件照,要赶九点的火车。",
+      "voice": "jam",
+      "speed": 1.0,
+      "watermark": false,
+      "measuredSeconds": 3.4,
+      "gain": 1.0
+    },
+    {
+      "id": "aud-tts-002",
+      "kind": "tts",
+      "shotId": "SHOT_004",
+      "character": "苏晚",
+      "text": "好,坐那边,光正好。",
+      "voice": "tongtong",
+      "speed": 0.9,
+      "measuredSeconds": 2.6,
+      "gain": 1.0
+    },
+    {
+      "id": "aud-bgm-001",
+      "kind": "bgm",
+      "fromShotId": "SHOT_001",
+      "prompt": "Nostalgic quiet-morning instrumental bed for a 1990s photo studio at dawn. Warm felt piano with soft tape hiss, no vocals, steady loop, 30 seconds.",
+      "loop": true,
+      "gain": 0.25
+    },
+    {
+      "id": "aud-sfx-001",
+      "kind": "sfx",
+      "shotId": "SHOT_003",
+      "name": "ding",
+      "anchor": { "kind": "shot-start" },
+      "gain": 0.8
+    },
+    {
+      "id": "aud-sfx-002",
+      "kind": "sfx",
+      "shotId": "SHOT_005",
+      "name": "shutter",
+      "anchor": { "kind": "word", "wordIndex": 29 },
+      "missing": true,
+      "gain": 0.8
+    }
+  ],
+  "transitions": [
+    { "id": "tr-001", "type": "cut", "target": "SHOT_002", "from": "SHOT_001" },
+    { "id": "tr-002", "type": "cut", "target": "SHOT_003", "from": "SHOT_002" },
+    { "id": "tr-003", "type": "cut", "target": "SHOT_004", "from": "SHOT_003" },
+    { "id": "tr-004", "type": "dissolve", "target": "SHOT_005", "from": "SHOT_004", "durationSeconds": 1.2 },
+    { "id": "tr-005", "type": "fade-out", "target": "SHOT_005" }
+  ],
+  "spatial": [
+    {
+      "id": "spatial:照相馆",
+      "sceneHeading": "INT. 国营照相馆 - 清晨",
+      "objects": [
+        { "id": "floor", "type": "plane", "role": "floor", "position": [0.0, 0.0, 0.0], "size": [6.0, 5.0, 0.0] },
+        { "id": "wall_north", "type": "plane", "role": "wall", "label": "橱窗墙", "position": [0.0, 1.5, -2.5], "size": [6.0, 3.0, 0.0] },
+        { "id": "window_display", "type": "plane", "role": "window", "label": "木质橱窗", "position": [0.0, 1.5, -2.48], "size": [3.2, 2.2, 0.0], "color": "#d9c9a8" },
+        { "id": "wall_south", "type": "plane", "role": "wall", "position": [0.0, 1.5, 2.5], "size": [6.0, 3.0, 0.0] },
+        { "id": "door", "type": "box", "role": "door", "label": "店门", "position": [1.2, 1.05, 2.5], "size": [1.0, 2.1, 0.1], "color": "#6b4a2f" },
+        { "id": "counter", "type": "box", "role": "furniture", "label": "柜台", "position": [0.0, 0.55, 0.2], "size": [2.4, 1.1, 0.8], "color": "#8b5e3c" },
+        { "id": "backdrop", "type": "plane", "role": "environment", "label": "深色背景布", "position": [0.0, 1.6, 1.8], "size": [2.6, 2.4, 0.0], "color": "#3a3f4a" },
+        { "id": "tripod", "type": "cylinder", "role": "prop", "label": "相机三脚架", "position": [1.2, 0.7, 1.2], "size": [0.08, 1.4, 0.08], "color": "#4a4a4a" }
+      ],
+      "characters": [
+        { "name": "苏晚", "position": [-0.8, 0.2], "facing": 1.57, "pose": "standing" },
+        { "name": "陈默", "position": [0.9, 2.0], "facing": 3.34, "pose": "standing" }
+      ]
+    }
+  ]
+}

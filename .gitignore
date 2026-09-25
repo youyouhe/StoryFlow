@@ -33,3 +33,7 @@ preview-assets/
 src-tauri/target
 
 # dev.sh runtime dir (pids/logs live in /tmp/storyflow-dev)
+
+# python
+__pycache__/
+*.pyc

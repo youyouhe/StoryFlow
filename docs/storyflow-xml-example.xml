@@ -1,0 +1,153 @@
+<?storyflow using="storyflow-ir@0.3"?>
+<storyflow version="0.3.0" mode="pro" ir-version="0.1.0">
+  <style name="银盐晨光" art-style="银盐胶片摄影质感:细腻颗粒、柔和晨光、暖金色调、柯达 Portra 胶片色,轻微暗角与高光光晕" scene-preset="1990 年代中国南方小城的国营照相馆,清晨,木质橱窗,尘埃在光柱中漂浮,旧挂钟与褪色样片墙" prompt-prefix="silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, "/>
+  <script id="story">
+    @{shot-001}
+    镜头极缓慢前推,光柱中尘埃缓缓漂浮,样片墙高光微微呼吸;画面内无人物
+    @{/shot-001}
+    @{shot-002}
+    苏晚双手沿机身缓慢画圆擦拭,软布起伏,快门线轻微晃动;镜头固定
+    @{/shot-002}
+    @{shot-003}
+    陈默推门进店,门铃轻晃;他抬手示意;苏晚在柜台后抬头;镜头固定中景
+    <role name="陈默">拍一张证件照,要赶九点的火车。</role>
+    @{/shot-003}
+    @{shot-004}
+    苏晚抬头,嘴角渐展微笑,围巾边缘随转身轻动;镜头缓慢推近半档
+    <role name="苏晚">好,坐那边,光正好。</role>
+    @{/shot-004}
+    @{shot-005}
+    固定镜头微距:腰平取景器里的倒立窗光微微呼吸,尘埃缓浮,画面渐暗@{sfx-002!}收黑
+    @{/shot-005}
+  </script>
+  <refs>
+    <character id="char:苏晚" name="苏晚" asset-id="asset_sowan_base_01" source="ai-generate" source-prompt="1990s chinese young woman photographer, white shirt, film photo portrait" version-group="sowan" version="1">
+      <description>女照相师,28 岁,齐肩黑发别一支素色发卡,米白的确良衬衫袖口挽起,神情安静专注</description>
+    </character>
+    <character id="char:苏晚:晨雾围巾" name="苏晚" variant="晨雾围巾" asset-id="asset_sowan_scarf_01" source="ai-generate" version-group="sowan" version="2">
+      <description>苏晚在晨间湿冷时加的一条雾灰色针织围巾,其余形象与主设定一致</description>
+    </character>
+    <character id="char:陈默" name="陈默" asset-id="asset_chenmo_base_01" source="upload" version-group="chenmo" version="1">
+      <description>常客,35 岁上下,火车司机,深绿色旧工装外套,眉眼温和,随身一只人造革提包</description>
+    </character>
+    <prop id="prop:海鸥相机" name="海鸥相机" asset-id="asset_seagull_4b_01" source="upload">
+      <description>海鸥牌 4B 双反相机,银灰机身磨损发亮,皮质快门线垂在侧面,腰平取景器朝上</description>
+    </prop>
+    <scene id="scene:照相馆" name="照相馆" scene-heading="INT. 国营照相馆 - 清晨" spatial-id="spatial:照相馆" asset-id="asset_studio_env_01" source="ai-generate">
+      <description>老式照相馆内景:北面木质橱窗透进晨光,光柱里浮尘可见,砖墙挂褪色样片,柜台后是深色背景布</description>
+    </scene>
+    <style-ref id="style:晨光光柱" name="晨光光柱" asset-id="asset_lightbeam_ref_01" source="video-frame">
+      <description>构图与光照参考:低角度晨光穿过橱窗形成可见光柱,主体半逆光,高光允许过曝半档</description>
+    </style-ref>
+    <action id="action:擦拭相机" name="擦拭相机" asset-id="asset_action_wipe_01" source="upload">
+      <description>双手持软布沿机身画圆擦拭的动作参考,节奏缓慢,不抬腕</description>
+    </action>
+  </refs>
+  <spatial>
+    <layout id="spatial:照相馆" scene-heading="INT. 国营照相馆 - 清晨">
+      <object id="floor" type="plane" role="floor" position="0,0,0" size="6,5,0"/>
+      <object id="wall_north" type="plane" role="wall" label="橱窗墙" position="0,1.5,-2.5" size="6,3,0"/>
+      <object id="window_display" type="plane" role="window" label="木质橱窗" position="0,1.5,-2.48" size="3.2,2.2,0" color="#d9c9a8"/>
+      <object id="wall_south" type="plane" role="wall" position="0,1.5,2.5" size="6,3,0"/>
+      <object id="door" type="box" role="door" label="店门" position="1.2,1.05,2.5" size="1,2.1,0.1" color="#6b4a2f"/>
+      <object id="counter" type="box" role="furniture" label="柜台" position="0,0.55,0.2" size="2.4,1.1,0.8" color="#8b5e3c"/>
+      <object id="backdrop" type="plane" role="environment" label="深色背景布" position="0,1.6,1.8" size="2.6,2.4,0" color="#3a3f4a"/>
+      <object id="tripod" type="cylinder" role="prop" label="相机三脚架" position="1.2,0.7,1.2" size="0.08,1.4,0.08" color="#4a4a4a"/>
+      <character name="苏晚" position="-0.8,0.2" facing="1.57" pose="standing"/>
+      <character name="陈默" position="0.9,2" facing="3.34" pose="standing"/>
+    </layout>
+  </spatial>
+  <generation>
+    <shot ref="{story.selection.shot-001}" seconds="6" status="exported" backend="comfyui" seed="10240001" steps="28">
+      <first-frame description="照相馆内景清晨全景:北窗光柱斜切过空荡的柜台,样片墙在半逆光中泛黄">silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, wide interior at dawn, sunbeams cutting through the wooden display window, dust motes floating, faded sample prints on the brick wall, empty counter, no people</first-frame>
+      <camera shot-type="wide" description="定场:让光柱先于人物出场,建立空间的安静与年代感" position="0,1.5,4.2" look-at="0,1.2,0">
+        <movement type="dolly" duration="6" target-seconds="6">
+          <path>
+            <point>0,1.5,4.2</point>
+            <point>0,1.4,3.4</point>
+          </path>
+          <look-path>
+            <point>0,1.2,0</point>
+            <point>0,1.2,0</point>
+          </look-path>
+        </movement>
+      </camera>
+      <param name="workflow" value="i2v-v3" type="string"/>
+      <param name="sampler" value="euler" type="string"/>
+      <ref>scene:照相馆</ref>
+      <ref>style:晨光光柱</ref>
+    </shot>
+    <shot ref="{story.selection.shot-002}" seconds="5" status="generated" backend="comfyui" seed="10240002" steps="28">
+      <first-frame description="特写:苏晚的手与海鸥双反相机,晨光侧逆,金属磨损处反着暖光">silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, close-up of a young woman's hands polishing a vintage twin-lens reflex camera on the wooden counter, shallow depth of field</first-frame>
+      <camera shot-type="close-up" position="0.6,1.1,1.2" look-at="0.2,1,0.4">
+        <movement type="static" duration="5">
+        </movement>
+      </camera>
+      <ref>char:苏晚</ref>
+      <ref>prop:海鸥相机</ref>
+      <ref>scene:照相馆</ref>
+      <ref>action:擦拭相机</ref>
+    </shot>
+    <shot ref="{story.selection.shot-003}" seconds="6" status="draft" backend="minimax" steps="1">
+      <first-frame description="中景双人:陈默跨进门,背后晨光短暂光晕,苏晚在柜台后侧身回头">silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium two-shot, a man in a dark green work jacket entering through the studio door, morning light flaring briefly behind him, woman at the counter turning her head</first-frame>
+      <camera shot-type="medium" position="-0.4,1.4,2.6" look-at="0.1,1.3,0.6" focus="陈默">
+        <movement type="static" duration="6">
+        </movement>
+      </camera>
+      <param name="model" value="h3" type="string"/>
+      <param name="resolution" value="768P" type="string"/>
+      <ref>char:陈默</ref>
+      <ref>char:苏晚</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+    <shot ref="{story.selection.shot-004}" seconds="5" status="locked" backend="grok" seed="10240004" steps="1">
+      <first-frame description="中近景:苏晚(晨雾围巾)抬头瞬间,发丝边缘被晨光镶了一道金边">silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, medium close-up of the young woman in a mist-grey knit scarf looking up from the counter with a gentle smile, warm rim light on her hair</first-frame>
+      <camera shot-type="medium" position="0.2,1.4,1.8" look-at="-0.6,1.35,0.2">
+        <movement type="dolly" duration="5">
+          <path>
+            <point>0.2,1.4,1.8</point>
+            <point>0,1.4,1.5</point>
+          </path>
+          <look-path>
+            <point>-0.6,1.35,0.2</point>
+            <point>-0.6,1.35,0.2</point>
+          </look-path>
+        </movement>
+      </camera>
+      <param name="quality" value="high" type="string"/>
+      <ref>char:苏晚:晨雾围巾</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+    <shot ref="{story.selection.shot-005}" seconds="4" status="draft" backend="comfyui" seed="10240005" steps="30">
+      <first-frame description="微距静物:海鸥相机腰平取景器中倒映着橱窗光柱,四下安静">silver-halide film photograph, soft morning window light, warm golden tones, fine film grain, Kodak Portra palette, subtle vignette, 1990s southern China photo studio, macro still life on the counter, the twin-lens reflex camera viewfinder catching a tiny upside-down image of the window light, dust in the beam, quiet morning</first-frame>
+      <last-frame>同机位,画面整体压暗至近黑,仅取景器亮点残留</last-frame>
+      <camera shot-type="close-up" position="0.3,1,0.8" look-at="0.25,0.95,0.35">
+        <movement type="static" duration="4">
+        </movement>
+      </camera>
+      <ref>prop:海鸥相机</ref>
+      <ref>scene:照相馆</ref>
+    </shot>
+  </generation>
+  <audio>
+    <tts id="aud-tts-001" shot-id="SHOT_003" text="{story.selection.shot-003.dialogue}" role="陈默" voice="jam" speed="1" watermark="false" gain="1" measured-seconds="3.4" tts-floor="4"/>
+    <tts id="aud-tts-002" shot-id="SHOT_004" text="{story.selection.shot-004.dialogue}" role="苏晚" voice="tongtong" speed="0.9" gain="1" measured-seconds="2.6" tts-floor="3"/>
+    <bgm id="aud-bgm-001" from="{story.selection.shot-001}" loop="true" gain="0.25">Nostalgic quiet-morning instrumental bed for a 1990s photo studio at dawn. Warm felt piano with soft tape hiss, no vocals, steady loop, 30 seconds.</bgm>
+    <sfx id="aud-sfx-001" at="{story.selection.shot-003.start}" name="ding" gain="0.8"/>
+    <sfx id="aud-sfx-002" at="{story.moment.sfx-002}" name="shutter" missing="true" gain="0.8"/>
+  </audio>
+  <transition>
+    <cut from="{story.selection.shot-001}" to="{story.selection.shot-002}"/>
+    <cut from="{story.selection.shot-002}" to="{story.selection.shot-003}"/>
+    <cut from="{story.selection.shot-003}" to="{story.selection.shot-004}"/>
+    <dissolve from="{story.selection.shot-004}" to="{story.selection.shot-005}" seconds="1.2"/>
+    <fade-out to="{story.selection.shot-005}"/>
+  </transition>
+  <film id="final" title="银盐晨光">
+    <clip ref="{story.selection.shot-001}"/>
+    <clip ref="{story.selection.shot-002}"/>
+    <clip ref="{story.selection.shot-003}"/>
+    <clip ref="{story.selection.shot-004}"/>
+    <clip ref="{story.selection.shot-005}"/>
+  </film>
+</storyflow>

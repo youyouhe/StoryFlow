@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": [
+    "src/ir/**/*.ts",
+    "src/bridge/**/*.ts",
+    "src/exec/**/*.ts",
+    "tests/ir-*.test.ts",
+    "tests/bridge-*.test.ts",
+    "tests/exec-*.test.ts",
+    "src/extract/**/*.ts",
+    "tests/extract-*.test.ts",
+    "tests/fixtures/**/*.ts",
+    "src/align/**/*.ts",
+    "tests/align-*.test.ts",
+    "src/captions/**/*.ts",
+    "tests/captions-*.test.ts"
+  ]
+}
