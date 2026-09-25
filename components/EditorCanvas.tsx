@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Screenplay, ScriptBlock, AIState, AIMode, AppSettings, RefBindings, RefImage, H3Task } from '../types';
 import { EditorBlock } from './EditorBlock';
 import { hasImagePayload } from '../utils/promptStyle';
+import type { ServiceHub } from '../services/providers';
 import { PromptPanel } from './PromptPanel';
 import { paginateBlocks } from '../utils/pagination';
 
@@ -27,6 +28,8 @@ interface EditorCanvasProps {
   theme: 'light' | 'dark';
   lang: 'en' | 'zh';
   appSettings: AppSettings;
+  /** P4 provider hub (registry + runtime profile) — PromptPanel image/ASR paths. */
+  services: ServiceHub;
   isReadOnly: boolean;
   refImages: RefImage[];
   refBindings: RefBindings;
@@ -55,7 +58,7 @@ export function EditorCanvas({
   selectedBlockId, setSelectedBlockId,
   handleKeyDown, handleBlockChange, handleTypeChange,
   handleDeleteGraybox, handleDeleteImagePrompt,
-  t, theme, lang, appSettings, isReadOnly,
+  t, theme, lang, appSettings, isReadOnly, services,
   refImages, refBindings, onRefBindingsChange, onUploadRefImage, onRemoveRefImage,
   setShowAssetLibrary,
   onSubmitH3, h3Tasks, h3Ready, imageReady, effectiveImageProvider,
@@ -158,6 +161,7 @@ export function EditorCanvas({
                 setPanelTab={setPanelTab}
                 setPromptPanelBlockId={setPromptPanelBlockId}
                 screenplay={screenplay}
+                services={services}
                 theme={theme}
                 lang={lang}
                 t={t}

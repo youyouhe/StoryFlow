@@ -5,6 +5,7 @@ import { StyleHeadModal } from './StyleHeadModal';
 import { GalleryModal } from './GalleryModal';
 import { RefAssetLibraryModal, REF_LIBRARY_LABELS } from './RefAssetLibraryModal';
 import { ExportMenu } from './ExportMenu';
+import type { ServiceHub } from '../services/providers';
 import { AIModal } from './AIModal';
 import { TemplateModal } from './TemplateModal';
 import { OpeningPicker } from './OpeningPicker';
@@ -63,6 +64,21 @@ interface AppModalsProps {
   onProductionModeChange: (mode: 'simple' | 'cinematic') => void;
   // Express gacha workbench (Mode A)
   showExpressWorkbench: boolean;
+  /** P4 provider hub → SettingsModal(runtimeProfile display) */
+  services: ServiceHub;
+  /** P1 project dir + P4 credential file (merged subsystems wiring) */
+  projectName?: string | null;
+  projectAvailable?: boolean;
+  projectError?: string | null;
+  onOpenProject?: () => void;
+  onCloseProject?: () => void;
+  onExportCredentials?: () => void;
+  onImportCredentials?: (file: File) => void;
+  onClearCredentials?: () => void;
+  runtimeProfileInfo?: { source: 'file' | 'default'; bindings: Record<string, string>; endpoints: string[] };
+  onOpenCompose?: () => void;
+  onOpenCandidates?: () => void;
+  onOpenIRPipeline?: () => void;
   setShowExpressWorkbench: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -95,6 +111,9 @@ export function AppModals(props: AppModalsProps) {
     onToast,
     onProductionModeChange,
     showExpressWorkbench, setShowExpressWorkbench,
+    services, projectName, projectAvailable, projectError, onOpenProject, onCloseProject,
+    onExportCredentials, onImportCredentials, onClearCredentials, runtimeProfileInfo,
+    onOpenCompose, onOpenCandidates, onOpenIRPipeline,
   } = props;
   const {
     showTemplateModal, setShowTemplateModal,
@@ -220,6 +239,15 @@ export function AppModals(props: AppModalsProps) {
                 productionMode={screenplay.productionMode ?? 'simple'}
                 hasProData={hasProFeatureData(screenplay)}
                 onProductionModeChange={onProductionModeChange}
+                projectName={projectName}
+                projectAvailable={projectAvailable}
+                projectError={projectError}
+                onOpenProject={onOpenProject}
+                onCloseProject={onCloseProject}
+                onExportCredentials={onExportCredentials}
+                onImportCredentials={onImportCredentials}
+                onClearCredentials={onClearCredentials}
+                runtimeProfileInfo={runtimeProfileInfo}
                 onGalleryLogout={handleGalleryLogout}
                 onSyncAll={handleSyncAll}
                 syncConsent={syncConsent}
@@ -256,6 +284,9 @@ export function AppModals(props: AppModalsProps) {
         <ExportMenu
             open={showExportMenu}
             onClose={() => setShowExportMenu(false)}
+            onOpenCompose={onOpenCompose}
+            onOpenCandidates={onOpenCandidates}
+            onOpenIRPipeline={onOpenIRPipeline}
             onExport={handleExport}
             onImportJson={(f) => { void handleImportScript(f); }}
             onExportAssetPack={() => { void handleExportAssetPack(); }}

@@ -13,6 +13,7 @@ shipLog('boot', 'info', `app loaded @ ${new Date().toISOString()} · UA=${naviga
 import { isDirStoreAvailable } from './services/assetDirStore';
 import { paginateBlocks } from './utils/pagination';
 import { PanelLeft } from 'lucide-react';
+
 import { clsx } from 'clsx';
 import { clearToken, requireLogin, logoutEverywhere } from './services/auth4a';
 import { useScriptLibrary, STORAGE_KEYS, type ScriptSummary } from './hooks/useScriptLibrary';
@@ -32,15 +33,33 @@ import { checkModeSwitch, hasProFeatureData } from './utils/modeSwitch';
 import { AppTopBar } from './components/AppTopBar';
 import { EditorCanvas } from './components/EditorCanvas';
 import { AppModals } from './components/AppModals';
+import { CandidatesPanel } from './components/CandidatesPanel';
+import { ComposeExportModal } from './components/ComposeExportModal';
+import { IRPipelineModal } from './components/IRPipelineModal';
+import {
+  defaultRegistry, defaultProfile, createServiceHub, type ServiceHub,
+} from './services/providers';
+import type { RuntimeProfile } from './services/providers';
+import {
+  isProjectStoreAvailable, pickProjectDir, persistProjectDir, loadPersistedProjectDir,
+  forgetProjectDir, requestDirPermission, openProject, loadRuntimeProfile,
+} from './services/project/projectStore';
+import {
+  getSessionCredential, setSessionCredential, clearSessionCredentials,
+  sessionCredentialSnapshot, SLOT_FOR_FIELD, exportCredentialFile, importCredentialFile,
+} from './services/credentials';
 
 // Helper to generate IDs
 const generateId = () => Math.random().toString(36).substring(2, 11);
+const L_T = (t: Record<string, unknown>, key: string, fallback: string): string =>
+  typeof t?.[key] === 'string' ? (t[key] as string) : fallback;
 
 function App() {
   // ---- App-owned UI state (theme, modals, drafts) — see useStoryFlowApp ----
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<Language>('en');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [aiState, setAIState] = useState<AIState>({ isLoading: false, suggestion: null, error: null, decision: null, grayboxDraft: null, batchProgress: null });
   const [showAIModal, setShowAIModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -59,12 +78,14 @@ function App() {
   const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
   const showToast = useCallback((msg: string) => {
     setToast({ msg, key: Date.now() });
+
   }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 4500);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showExpressWorkbench, setShowExpressWorkbench] = useState(false);
@@ -116,7 +137,110 @@ function App() {
       ? !!appSettings.falKey.trim()
       : !!appSettings.minimaxApiKey.trim();
 
+  // ---- P1/P4 merged subsystems: project dir + provider hub -----------------
+  // (feat/p1-project-files, re-mounted on the split-app hook architecture)
+  const [projectDir, setProjectDir] = useState<FileSystemDirectoryHandle | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [runtimeProfile, setRuntimeProfile] = useState<RuntimeProfile | null>(null);
+  const [showCompose, setShowCompose] = useState(false);
+  const [showCandidates, setShowCandidates] = useState(false);
+  const [showIRPipeline, setShowIRPipeline] = useState(false);
+
+  useEffect(() => {
+    loadPersistedProjectDir().then(h => { if (h) setProjectDir(h); }).catch(() => { /* none persisted */ });
+  }, []);
+  useEffect(() => {
+    if (!projectDir) { setRuntimeProfile(null); return; }
+    let cancelled = false;
+    void loadRuntimeProfile(projectDir)
+      .then(p => { if (!cancelled) setRuntimeProfile(p); })
+      .catch(() => { if (!cancelled) setRuntimeProfile(null); });
+    return () => { cancelled = true; };
+  }, [projectDir]);
+  const services: ServiceHub = useMemo(() => createServiceHub(
+    defaultRegistry(),
+    runtimeProfile ?? defaultProfile(appSettings),
+    getSessionCredential,
+  ), [runtimeProfile, appSettings]);
+
+  const handleOpenProject = useCallback(async () => {
+    if (!isProjectStoreAvailable()) {
+      setProjectError(t.projectUnavailable || '此浏览器不支持项目目录(File System Access API)——请用 Chrome/Edge。');
+      return;
+    }
+    try {
+      setProjectError(null);
+      const h = await pickProjectDir();
+      if (!(await requestDirPermission(h))) {
+        setProjectError('Permission denied for the project folder');
+        return;
+      }
+      const opened = await openProject(h, lib.screenplay, lib.screenplay.metadata.styleHead, appSettings.colorSettings);
+      await persistProjectDir(h);
+      setProjectDir(h);
+      if (!opened.created) lib.setScreenplay(opened.screenplay);
+    } catch (e) {
+      setProjectError(e instanceof Error ? e.message : String(e));
+      shipLog('project', 'error', 'Open project failed', e);
+    }
+  }, [lib, appSettings.colorSettings, t]);
+
+  const handleCloseProject = useCallback(async () => {
+    await forgetProjectDir();
+    setProjectDir(null);
+    setRuntimeProfile(null);
+  }, []);
+
+  // P4 credential file (session memory ⇄ encrypted file, keyring 层见 services/desktop.ts)
+  const handleExportCredentials = useCallback(async () => {
+    const slots: Record<string, string> = {};
+    for (const [field, slot] of Object.entries(SLOT_FOR_FIELD)) {
+      const v = (appSettings as unknown as Record<string, string>)[field];
+      if (v) slots[slot] = v;
+    }
+    for (const [slot, v] of Object.entries(sessionCredentialSnapshot())) if (!slots[slot]) slots[slot] = v;
+    const passphrase = window.prompt(L_T(t, 'credPassphraseSet', '设置凭证文件口令（用于加密导出）'));
+    if (!passphrase) return;
+    const blob = await exportCredentialFile(slots, passphrase);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'storyflow-credentials.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [appSettings, t]);
+
+  const handleImportCredentials = useCallback(async (file: File) => {
+    const passphrase = window.prompt(L_T(t, 'credPassphraseEnter', '输入凭证文件口令'));
+    if (!passphrase) return;
+    try {
+      const slots = await importCredentialFile(file, passphrase);
+      const fieldForSlot: Record<string, string> = Object.fromEntries(
+        Object.entries(SLOT_FOR_FIELD).map(([field, slot]) => [slot, field]),
+      );
+      const patch: Record<string, string> = {};
+      for (const [slot, v] of Object.entries(slots)) {
+        const field = fieldForSlot[slot];
+        if (field) { patch[field] = v; setSessionCredential(slot, v); }
+      }
+      setAppSettings(prev => ({ ...prev, ...patch } as typeof prev));
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e));
+    }
+  }, [setAppSettings, showToast]);
+
+  const handleClearCredentials = useCallback(() => {
+    clearSessionCredentials();
+    setAppSettings(prev => ({
+      ...prev,
+      geminiApiKey: '', deepseekApiKey: '', minimaxApiKey: '', asrApiKey: '', falKey: '',
+    }));
+  }, [setAppSettings]);
+
   // Theme: honor the OS preference once on mount, then reflect state on <html>.
+
   useEffect(() => {
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setTheme('dark');
@@ -134,6 +258,7 @@ function App() {
   // One-time migration: old per-script localStorage bindings → screenplay.
   useEffect(() => {
     const key = `ref_bindings_${lib.screenplay.id}`;
+
     try {
       const raw = localStorage.getItem(key);
       if (raw && !lib.screenplay.referenceBindings) {
@@ -164,6 +289,7 @@ function App() {
     handleUploadRefImage: assets.handleUploadRefImage, effectiveImageProvider, imageReady, setSelectedBlockId: lib.setSelectedBlockId,
   });
   const { handleBlockChange, handleTypeChange, handleDeleteGraybox, handleDeleteImagePrompt } = ed;
+
 
 
 
@@ -249,7 +375,9 @@ function App() {
           h3Ready={h3.h3Ready}
           imageReady={imageReady}
           effectiveImageProvider={effectiveImageProvider}
+          services={services}
         />
+
 
         <Toolbar
             productionMode={lib.screenplay.productionMode ?? 'simple'}
@@ -304,9 +432,45 @@ function App() {
           onProductionModeChange={(mode) => lib.setScreenplay(prev => ({ ...prev, productionMode: mode, lastModified: Date.now() }))}
           showExpressWorkbench={showExpressWorkbench}
           setShowExpressWorkbench={setShowExpressWorkbench}
+          services={services}
+          projectName={projectDir?.name ?? null}
+          projectAvailable={isProjectStoreAvailable()}
+          projectError={projectError}
+          onOpenProject={handleOpenProject}
+          onCloseProject={handleCloseProject}
+          onExportCredentials={handleExportCredentials}
+          onImportCredentials={handleImportCredentials}
+          onClearCredentials={handleClearCredentials}
+          runtimeProfileInfo={runtimeProfile
+            ? { source: 'file' as const, bindings: runtimeProfile.bindings ?? {}, endpoints: Object.keys(runtimeProfile.endpoints ?? {}) }
+            : { source: 'default' as const, bindings: {}, endpoints: Object.keys(defaultProfile(appSettings).endpoints ?? {}) }}
+          onOpenCompose={() => setShowCompose(true)}
+          onOpenCandidates={() => setShowCandidates(true)}
+          onOpenIRPipeline={() => setShowIRPipeline(true)}
         />
 
       {askDialog}
+
+      {/* P1/P4/P5 merged subsystems + IR pipeline entry (三线合并接线) */}
+      <ComposeExportModal
+          open={showCompose}
+          screenplay={lib.screenplay}
+          t={t}
+          onClose={() => setShowCompose(false)}
+      />
+      <CandidatesPanel
+          open={showCandidates}
+          dir={projectDir}
+          t={t}
+          onClose={() => setShowCandidates(false)}
+      />
+      <IRPipelineModal
+          open={showIRPipeline}
+          screenplay={lib.screenplay}
+          t={t}
+          onClose={() => setShowIRPipeline(false)}
+      />
+
       {toast && (
         <div
           key={toast.key}
