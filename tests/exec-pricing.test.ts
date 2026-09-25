@@ -131,3 +131,39 @@ describe('settleAudioRun — 按实际用量(未合成不计)', () => {
     );
   });
 });
+
+describe('P13 多供应商生图差异化费率', () => {
+  it('① 烘 provider 到 image job(声明计价假设)', () => {
+    const plan = compileVisualPlan(mutated(ir => { ir.mode = 'express'; }), { imageProvider: 'fal' });
+    const job = plan.shots[0].jobs[0];
+    expect(job.kind === 'image' && job.provider).toBe('fal');
+  });
+
+  it('分册解析:fal 分册命中 fal job;无分册 provider 落兜底 flat', () => {
+    const falPlan = compileVisualPlan(mutated(ir => { ir.mode = 'express'; }), { imageProvider: 'fal' });
+    const falReport = planCostReport(falPlan, { image: { perImageFen: 20, fal: { perImageFen: 50 } } });
+    expect(falReport.totalCostFen).toBe(300 + 5 * 50); // 5 fal 图 × 50 + minimax i2v 300
+
+    const mmPlan = compileVisualPlan(mutated(ir => { ir.mode = 'express'; }), { imageProvider: 'minimax' });
+    const mmReport = planCostReport(mmPlan, { image: { perImageFen: 20, fal: { perImageFen: 50 } } });
+    expect(mmReport.totalCostFen).toBe(300 + 5 * 20); // minimax 无分册 → 兜底 flat
+  });
+
+  it('无任何命中(flat 缺席)→ unpriced 明示,不猜', () => {
+    const plan = compileVisualPlan(mutated(ir => { ir.mode = 'express'; }), { imageProvider: 'fal' });
+    const report = planCostReport(plan, { image: { minimax: { perImageFen: 15 } } });
+    expect(report.totalCostFen).toBe(300); // 仅 minimax i2v;fal 图无价目
+    expect(report.unpricedJobIds).toHaveLength(9); // 5 fal 图 + 4 comfy 视频
+  });
+
+  it('settleVisualRun 按计划声明 provider 的分册结算', () => {
+    const plan = compileVisualPlan(mutated(ir => { ir.mode = 'express'; }), { imageProvider: 'fal' });
+    const result = {
+      results: plan.shots.flatMap(s => s.jobs.map(j => ({
+        jobId: j.jobId, shotId: j.shotId, status: 'succeeded' as const,
+      }))),
+    };
+    const settled = settleVisualRun(plan, result, { image: { perImageFen: 20, fal: { perImageFen: 50 } } });
+    expect(settled.chargedCostFen).toBe(300 + 5 * 50); // 精确结算同口径
+  });
+});

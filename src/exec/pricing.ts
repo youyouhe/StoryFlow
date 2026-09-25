@@ -16,8 +16,16 @@ import type { PriceBooks } from '../ir/annotations';
 
 // ── 逐条目计价(纯;null = 无价目 → unpriced) ───────────────────────────────
 
-export const imageJobCostFen = (job: ImageJob, books?: PriceBooks): number | null =>
-  books?.image ? books.image.perImageFen : null;
+/** P13 差异化解析:job.provider 分册 > perImageFen 兜底 > unpriced。
+ *  job.provider 缺省按 'minimax'(① 烘培缺省同源)。 */
+export const imageJobCostFen = (job: ImageJob, books?: PriceBooks): number | null => {
+  const image = books?.image;
+  if (!image) return null;
+  const provider = job.provider ?? 'minimax';
+  const differentiated = provider === 'fal' ? image.fal : image.minimax;
+  if (differentiated) return differentiated.perImageFen;
+  return image.perImageFen ?? null;
+};
 
 export const ttsClipCostFen = (job: TtsJob, books?: PriceBooks): number | null =>
   books?.tts ? books.tts.perCharFen * job.text.length : null;

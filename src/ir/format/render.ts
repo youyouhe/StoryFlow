@@ -344,7 +344,12 @@ export const renderStoryFlowXML = (
     const pb = ann.priceBooks;
     if (pb) {
       push(2, '<price-books>');
-      if (pb.image) push(3, `<image per-image-fen="${pb.image.perImageFen}"/>`);
+      if (pb.image) {
+        const imgAttrs = (pb.image.perImageFen != null ? [`per-image-fen="${pb.image.perImageFen}"`] : [])
+          .concat(pb.image.minimax ? [`minimax-per-image-fen="${pb.image.minimax.perImageFen}"`] : [])
+          .concat(pb.image.fal ? [`fal-per-image-fen="${pb.image.fal.perImageFen}"`] : []);
+        push(3, `<image ${imgAttrs.join(' ')}/>`);
+      }
       if (pb.tts) push(3, `<tts per-char-fen="${pb.tts.perCharFen}"/>`);
       if (pb.bgm) push(3, `<bgm per-request-fen="${pb.bgm.perRequestFen}"/>`);
       push(2, '</price-books>');

@@ -492,8 +492,18 @@ export const parseStoryFlowDocument = (xml: string): ParsedDocument => {
       const img = pbNode.children.find(c => c.tag === 'image');
       const tts = pbNode.children.find(c => c.tag === 'tts');
       const bgm = pbNode.children.find(c => c.tag === 'bgm');
+      // P13:image 兜底 + provider 分册属性(在场即重建)
+      let image: PriceBooks['image'] | undefined;
+      if (img) {
+        image = {
+          ...(img.attrs['per-image-fen'] != null ? { perImageFen: num(img.attrs['per-image-fen'], 'per-image-fen') } : {}),
+          ...(img.attrs['minimax-per-image-fen'] != null ? { minimax: { perImageFen: num(img.attrs['minimax-per-image-fen'], 'minimax-per-image-fen') } } : {}),
+          ...(img.attrs['fal-per-image-fen'] != null ? { fal: { perImageFen: num(img.attrs['fal-per-image-fen'], 'fal-per-image-fen') } } : {}),
+        };
+        if (!Object.keys(image).length) image = undefined;
+      }
       priceBooks = {
-        ...(img ? { image: { perImageFen: num(img.attrs['per-image-fen'], 'per-image-fen') } } : {}),
+        ...(image ? { image } : {}),
         ...(tts ? { tts: { perCharFen: num(tts.attrs['per-char-fen'], 'per-char-fen') } } : {}),
         ...(bgm ? { bgm: { perRequestFen: num(bgm.attrs['per-request-fen'], 'per-request-fen') } } : {}),
       };

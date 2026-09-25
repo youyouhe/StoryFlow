@@ -126,4 +126,19 @@ describe('消费即语义 — 注释直通编译/对齐', () => {
       measurements: {}, sfxResolutions: {}, bgmUrls: { 'aud-bgm-001': 'b' }, failures: [],
     }, books).chargedCostFen).toBeGreaterThan(0);
   });
+
+  it('差异化价目 XML 携带 round-trip(分册属性,兼容兜底)', () => {
+    const ann = annotations();
+    ann.priceBooks = { image: { perImageFen: 20, fal: { perImageFen: 50 } } };
+    const xml = renderStoryFlowXML(example(), { pretty: true, annotations: ann });
+    expect(xml).toContain('per-image-fen="20"');
+    expect(xml).toContain('fal-per-image-fen="50"');
+    const doc = parseStoryFlowDocument(xml);
+    expect(doc.annotations?.priceBooks?.image).toEqual({ perImageFen: 20, fal: { perImageFen: 50 } });
+    // 仅分册无兜底
+    const ann2 = annotations();
+    ann2.priceBooks = { image: { minimax: { perImageFen: 15 } } };
+    const doc2 = parseStoryFlowDocument(renderStoryFlowXML(example(), { annotations: ann2 }));
+    expect(doc2.annotations?.priceBooks?.image).toEqual({ minimax: { perImageFen: 15 } });
+  });
 });

@@ -16,8 +16,13 @@ export const ANNOTATIONS_VERSION = '0.1.0';
 
 /** 价目表(P9 契约上浮;provider 刊例声明,分整数;缺任一价目 = 该类回退 unpriced)。 */
 export interface PriceBooks {
-  /** 生图:每张(每 image job 一张,① opts.n=1 口径)。 */
-  image?: { perImageFen: number };
+  /** 生图(P13 差异化):`perImageFen` 兜底/单一费率;`minimax/fal` 分册按
+   *  job.provider 优先解析(混合混用场景);无任何命中 = unpriced。 */
+  image?: {
+    perImageFen?: number;
+    minimax?: { perImageFen: number };
+    fal?: { perImageFen: number };
+  };
   /** TTS:每字符(实际合成文本用量,TtsJob.text 的 UTF-16 码元数)。 */
   tts?: { perCharFen: number };
   /** BGM:每次请求(每床一条)。 */
@@ -41,8 +46,13 @@ const correctionSchema = z.strictObject({
   endMs: z.number().min(0),
 }).refine(c => c.endMs > c.startMs, { message: '校时窗非法:endMs 必须大于 startMs' });
 
+const perImageSchema = z.strictObject({ perImageFen: z.number().int().min(0) });
 const priceBooksSchema = z.strictObject({
-  image: z.strictObject({ perImageFen: z.number().int().min(0) }).optional(),
+  image: z.strictObject({
+    perImageFen: z.number().int().min(0).optional(),
+    minimax: perImageSchema.optional(),
+    fal: perImageSchema.optional(),
+  }).optional(),
   tts: z.strictObject({ perCharFen: z.number().int().min(0) }).optional(),
   bgm: z.strictObject({ perRequestFen: z.number().int().min(0) }).optional(),
 });

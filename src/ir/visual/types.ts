@@ -102,6 +102,9 @@ export interface VisualJobBase {
 export interface ImageJob extends VisualJobBase {
   kind: 'image';
   prompt: ImageJobPrompt;
+  /** 生图供应商(P13,计价假设显式化):① 自 opts.imageProvider 烘焙;
+   *  运行时实际 provider 可不同(差异 = 估算假设 vs 实际,结算按计划口径)。 */
+  provider?: 'minimax' | 'fal';
 }
 
 export interface VideoJob extends VisualJobBase {

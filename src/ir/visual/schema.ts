@@ -78,6 +78,7 @@ const imageJobSchema = z.strictObject({
   ...jobBaseShape,
   kind: z.literal('image'),
   prompt: imageJobPromptSchema,
+  provider: z.enum(['minimax', 'fal']).optional(),
 });
 
 const videoJobSchema = z.strictObject({

@@ -23,6 +23,8 @@ export interface VisualCompileOptions {
   priceModel?: string;
   /** shot.generation 缺省时的后端;缺省 'minimax'。 */
   defaultBackend?: GenerationParams['backend'];
+  /** P13 生图供应商(计价假设显式化):烘到 image job.provider;缺省 'minimax'。 */
+  imageProvider?: 'minimax' | 'fal';
 }
 
 /** 连续性锁句 —— H3 方言收束句,逐字自 utils/videoSegmentSubmit.ts:40。 */
@@ -241,6 +243,7 @@ export const compileVisualPlan = (
         materials,
         seed,
         ...(vendor ? { vendor } : {}),
+        provider: opts.imageProvider ?? 'minimax',
         prompt: { text: shot.imagePrompt, imagePrompt: shot.imagePrompt },
       };
       jobs.push(imageJob);
