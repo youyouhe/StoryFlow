@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { validateStoryFlowIR } from '../src/ir/schema';
 import type { TtsClip, SfxClip } from '../src/ir/types';
 import { extractStoryFlowIR } from '../src/extract/screenplayToIR';
+import { compileCaptions } from '../src/captions/compile';
 import { splitAnchorWords } from '../src/ir/shared';
 import { PREFIX, fixture } from './fixtures/silverDawnScreenplay';
 
@@ -133,16 +134,19 @@ describe('issue #10 — 手写剧本(无时间戳)自动节拍回退', () => {
       { id: 'h2', type: 'CHARACTER', content: '陆之白' },
       { id: 'h3', type: 'DIALOGUE', content: '今天不营业。' },
       { id: 'h4', type: 'ACTION', content: '他把相纸一张张摆上晾架。' },
-      { id: 'h5', type: 'SCENE_HEADING', content: '内. 老照相馆 - 夜' },
-      { id: 'h6', type: 'ACTION', content: '红灯亮起，显影液里浮出人脸。' },
+      { id: 'h5', type: 'DIALOGUE', content: '相纸要阴干。' },
+      { id: 'h6', type: 'DIALOGUE', content: '客人来了就说歇业。' },
+      { id: 'h7', type: 'SCENE_HEADING', content: '内. 老照相馆 - 夜' },
+      { id: 'h8', type: 'ACTION', content: '红灯亮起，显影液里浮出人脸。' },
     ],
     lastModified: 0,
   }, [], { defaultMode: 'pro' });
 
   it('零时间戳不再空转:得到 estimated 节拍的完整三路计划(验收①)', () => {
     const ir = handwritten();
-    // P2 节拍语义:一拍 = 动作 opener + 其后的对白/动作延续 → 两场景两镜
-    expect(ir.shots.length).toBeGreaterThanOrEqual(2);
+    // issue #11:按块边界切拍 —— 空镜(h0) + [h1..h3] + [h4..h6] + 空镜(h7)
+    // + [h8] = 5 拍(≥3 验收)
+    expect(ir.shots.length).toBeGreaterThanOrEqual(3);
     expect(ir.audio.length).toBeGreaterThanOrEqual(1); // 对白 → TTS clip
     expect(ir.shots.every(s => s.shotDuration > 0)).toBe(true);
     expect(ir.shots.every(s => s.imagePrompt.length > 0)).toBe(true);
@@ -167,5 +171,63 @@ describe('issue #10 — 手写剧本(无时间戳)自动节拍回退', () => {
     // 「手写稿的拍时长覆盖其对白部分且为估算产物」。
     expect(dlg!.shotDuration).toBeGreaterThanOrEqual(1.3);
     expect(dlg!.estimated).toBe(true);
+  });
+});
+
+describe('issue #11 — 回退粒度细化:多拍/全对白覆盖/拍长钳制', () => {
+  const ir = (() => {
+    const blocks = [
+      { id: 'h0', type: 'SCENE_HEADING' as const, content: '内. 老照相馆 - 黄昏' },
+      { id: 'h1', type: 'ACTION' as const, content: '夕阳穿过橱窗，尘埃在光柱里浮动。' },
+      { id: 'h2', type: 'CHARACTER' as const, content: '陆之白' },
+      { id: 'h3', type: 'DIALOGUE' as const, content: '今天不营业。' },
+      { id: 'h4', type: 'ACTION' as const, content: '他把相纸一张张摆上晾架。' },
+      { id: 'h5', type: 'DIALOGUE' as const, content: '相纸要阴干。' },
+      { id: 'h6', type: 'DIALOGUE' as const, content: '客人来了就说歇业。' },
+      { id: 'h7', type: 'SCENE_HEADING' as const, content: '内. 老照相馆 - 夜' },
+      { id: 'h8', type: 'ACTION' as const, content: '红灯亮起，显影液里浮出人脸。' },
+    ];
+    return extractStoryFlowIR({
+      id: 'handwritten-11',
+      metadata: { title: '旧梦胶片', author: 'agent', draft: 'First Draft', scriptLanguage: 'zh' },
+      blocks, lastModified: 0,
+    }, [], { defaultMode: 'pro' });
+  })();
+
+  it('≥3 拍:空镜/动作/对白拍各自成镜(验收①)', () => {
+    expect(ir.shots.length).toBeGreaterThanOrEqual(3);
+    expect(ir.shots.every(s => s.estimated === true)).toBe(true);
+  });
+
+  it('全部对白进 TTS(同拍余句 = 非锚 clip,验收②前半)', () => {
+    const lines = ir.audio.filter((c): c is TtsClip => c.kind === 'tts').map(c => c.text);
+    expect(lines.some(t => t.includes('今天不营业'))).toBe(true);
+    expect(lines.some(t => t.includes('相纸要阴干'))).toBe(true);
+    expect(lines.some(t => t.includes('客人来了就说歇业'))).toBe(true);
+    // 同拍余句归属同一 shot
+    const shot3Clips = ir.audio.filter((c): c is TtsClip => c.kind === 'tts' && c.shotId === 'SHOT_003');
+    expect(shot3Clips.length).toBe(2);
+  });
+
+  it('全部对白进 SRT;单条字幕时长 ≤ 拍长,无 22s 巨条(验收②后半+③)', () => {
+    const track = compileCaptions(ir);
+    const texts = track.captions.map(c => c.text).join('\n');
+    expect(texts).toContain('今天不营业');
+    expect(texts).toContain('相纸要阴干');
+    expect(texts).toContain('客人来了就说歇业');
+    const byId = new Map(ir.shots.map(s => [s.id, s]));
+    for (const c of track.captions) {
+      const shot = byId.get(c.shotId)!;
+      // wantSeconds 的 round 舍入允许 ≤ +0.5s 既有余量;22s 巨条已灭
+      expect(c.endMs - c.startMs, `caption ${c.index} too long`).toBeLessThanOrEqual(shot.shotDuration * 1000 + 500);
+      expect(c.endMs - c.startMs).toBeLessThanOrEqual(10_001); // 钳制上限
+    }
+  });
+
+  it('拍长钳制:所有 estimated 拍 ≤ 10s、≥ 1s(验收③)', () => {
+    for (const s of ir.shots) {
+      expect(s.shotDuration).toBeLessThanOrEqual(10);
+      expect(s.shotDuration).toBeGreaterThanOrEqual(1);
+    }
   });
 });

@@ -74,3 +74,21 @@ export const estimateBlockSeconds = (tokens: ScriptToken[], type: ScriptBlock['t
   const sum = tokens.reduce((n, t) => n + estimateTokenSeconds(t), 0);
   return Math.max(MIN_BLOCK_SECONDS, sum * (BLOCK_MULTIPLIER[type] ?? 1));
 };
+
+/** Plain-text speech estimate (issue #11) — for beat synthesis where no
+ *  tokenizer output exists (raw ACTION/DIALOGUE content). Mirrors the token
+ *  path: CJK chars / latin words / punctuation pauses + block multiplier. */
+export const estimateTextSeconds = (text: string, type: ScriptBlock['type'] = 'ACTION'): number => {
+  let sum = 0;
+  const re = /([぀-ヿ㐀-䶿一-鿿豈-﫿]|[^\s぀-ヿ㐀-䶿一-鿿豈-﫿]+)/g;
+  for (const unit of text.match(re) ?? []) {
+    if (unit.length === 1 && !CJK_RE_TEST(unit)) {
+      // punctuation: pauses only
+      if (isSentenceEnd(unit)) sum += SENTENCE_PAUSE_SECONDS;
+      else if (isComma(unit)) sum += COMMA_PAUSE_SECONDS;
+      continue;
+    }
+    sum += estimateUnitSeconds(unit);
+  }
+  return Math.max(MIN_BLOCK_SECONDS, sum * (BLOCK_MULTIPLIER[type] ?? 1));
+};

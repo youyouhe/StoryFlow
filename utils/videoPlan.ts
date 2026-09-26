@@ -285,3 +285,136 @@ export const buildSegmentVideoBrief = (seg: VideoSegment): string => {
 /** True when the block opens a new timed beat (ACTION with a timestamp). */
 export const isTimedBeat = (b: ScriptBlock): boolean =>
   b.type === 'ACTION' && parseBeatTiming(b.content) !== null;
+
+// ── issue #11:手写稿回退专用节拍合成 ────────────────────────────────────────
+// #10 的回退走了 P2 groupBeats(整场吸收为一拍,只保留首句对白)。本合成器
+// 按块边界切拍:
+//   · 每个非空 SCENE_HEADING 先合成一个「空镜」拍(定场镜);
+//   · 每个 ACTION 开新拍,吸收其后的 CHARACTER/DIALOGUE/PARENTHETICAL/
+//     TRANSITION 块(对白全量进拍的 dialogues,不丢第二句);
+//   · 拍长 = graybox 运镜时长 ?? shotDuration ?? 词级朗读估时,
+//     钳制 [1, 10]s(issue 验收:单条字幕 ≤ 拍长,无 22s 条目);
+//   · 拍间不跨场景(空镜天然是场景边界),拍序累计成片内绝对时间。
+// 全部拍 source='estimated'。
+
+import { estimateTextSeconds } from './timing/estimate';
+
+const SYNTH_MIN_SECONDS = 1;
+const SYNTH_MAX_SECONDS = 10;
+
+export const synthesizeEstimatedPlan = (
+  blocks: ScriptBlock[],
+  targetSeconds: number,
+  opts: { maxBeatSeconds?: number } = {},
+): VideoPlan => {
+  const target = Math.max(1, targetSeconds);
+  const maxBeat = Math.max(target, opts.maxBeatSeconds ?? SYNTH_MAX_SECONDS);
+  const clamp = (s: number): number =>
+    Math.min(maxBeat, Math.max(SYNTH_MIN_SECONDS, Math.round(s * 10) / 10));
+
+  const beats: (PlannedBeat & { __scene?: boolean })[] = [];
+  let cursor = 0;
+  let sceneHeading = '';
+
+  const pushBeat = (opener: ScriptBlock, extra: ScriptBlock[]): void => {
+    const blockIds = [opener.id, ...extra.map(b => b.id)];
+    const dialogues = extra
+      .filter(b => b.type === 'DIALOGUE' && b.content.trim())
+      .map(b => {
+        let cue: string | undefined;
+        for (let i = blocks.indexOf(b) - 1; i >= 0; i--) {
+          if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
+          if (blocks[i].type === 'SCENE_HEADING') break;
+        }
+        return { cue, line: b.content.trim() };
+      });
+    // 拍长优先级:graybox 运镜时长 ?? shotDuration ?? 朗读估时(拍内全块)
+    const gbDur = opener.graybox?.kind === 'shot' && opener.graybox.camera?.movement?.duration
+      ? opener.graybox.camera.movement.duration
+      : undefined;
+    const speech = estimateTextSeconds(
+      [opener.content, ...extra.map(b => b.content)].join(''),
+      opener.type,
+    );
+    const dur = clamp(gbDur ?? opener.shotDuration ?? speech);
+    beats.push({
+      startBlockId: opener.id,
+      endBlockId: extra.length ? extra[extra.length - 1].id : opener.id,
+      blockIds,
+      start: cursor,
+      end: cursor + dur,
+      range: '',
+      text: opener.content.replace(/^\s*\d{1,2}:\d{2}(?:\.\d+)?\s*-\s*\d{1,2}:\d{2}(?:\.\d+)?\s*[。.，,]?\s*/, '').trim() || opener.content,
+      dialogues,
+      sceneHeading,
+      source: 'estimated',
+    });
+    cursor += dur;
+  };
+
+  for (const b of blocks) {
+    if (b.type === 'SCENE_HEADING') {
+      sceneHeading = b.content.trim();
+      // 空镜定场拍:非空场景标题都给一个(时长 = shotDuration ?? 3s)
+      if (sceneHeading) {
+        const dur = clamp(b.shotDuration ?? 3);
+        beats.push({
+          startBlockId: b.id, endBlockId: b.id, blockIds: [b.id],
+          start: cursor, end: cursor + dur, range: '', text: sceneHeading,
+          dialogues: [], sceneHeading, source: 'estimated',
+        });
+        cursor += dur;
+      }
+      continue;
+    }
+    if (b.type === 'ACTION' && b.content.trim()) {
+      pushBeat(b, []);
+      continue;
+    }
+    // 非动作块(对白/cue/括注)吸收进当前拍;场景开头尚无拍时并入空镜拍
+    const last = beats[beats.length - 1];
+    if (last) {
+      last.blockIds.push(b.id);
+      last.endBlockId = b.id;
+      if (b.type === 'DIALOGUE' && b.content.trim()) {
+        let cue: string | undefined;
+        for (let i = blocks.indexOf(b) - 1; i >= 0; i--) {
+          if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
+          if (blocks[i].type === 'SCENE_HEADING') break;
+        }
+        last.dialogues.push({ cue, line: b.content.trim() });
+      }
+    }
+  }
+
+  // 分段:≤ targetSeconds,拍不跨场景(空镜即边界),语义与 planVideoSegments 一致
+  const segments: VideoSegment[] = [];
+  let span: PlannedBeat[] = [];
+  const flush = (): void => {
+    if (!span.length) return;
+    const start = span[0].start;
+    const end = span[span.length - 1].end;
+    segments.push({
+      index: segments.length + 1,
+      startTime: start,
+      endTime: end,
+      blockIds: span.flatMap(b => b.blockIds),
+      beats: span,
+      sceneHeading: span[0].sceneHeading,
+      duration: end - start,
+      oversize: span.length === 1 && end - start > target,
+      tooShort: end - start < 4,
+    });
+    span = [];
+  };
+  let prevScene: string | null = null;
+  for (const beat of beats) {
+    if (prevScene !== null && beat.sceneHeading !== prevScene) flush();
+    prevScene = beat.sceneHeading;
+    span.push(beat);
+    if (beat.end - span[0].start > target) flush();
+  }
+  flush();
+
+  return { targetSeconds: target, segments, untimedBeats: 0, warnings: [] };
+};

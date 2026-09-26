@@ -36,7 +36,9 @@ describe('compileCaptions — 断句与时基', () => {
     });
     const track = compileCaptions(ir);
     const texts = track.captions.filter(c => c.shotId === 'SHOT_003').map(c => c.text);
-    expect(texts).toEqual(['拍一张证件照。', '再拍一张半身。']);
+    // issue #11 全对白覆盖:锚行两条 + 旧锚 clip(文本与改后对白不再相等,
+    // 作为非锚 clip 照常覆盖——TTS 也会合成它,字幕与音频一致)
+    expect(texts).toEqual(['拍一张证件照。', '再拍一张半身。', '拍一张证件照,要赶九点的火车。']);
   });
 
   it('行宽上限在 token 边界强制收口', () => {
@@ -45,9 +47,11 @@ describe('compileCaptions — 断句与时基', () => {
     });
     const track = compileCaptions(ir, { maxCharsPerCaption: 16 });
     const caps = track.captions.filter(c => c.shotId === 'SHOT_003');
+    // 锚行两条 + 非锚旧锚 clip(issue #11 全对白覆盖)
     expect(caps.map(c => c.text)).toEqual([
       '这一句特别长没有标点所以只能按行', // 16 字
       '宽强制收口处理',
+      '拍一张证件照,要赶九点的火车。',
     ]);
   });
 
@@ -118,8 +122,12 @@ describe('compileCaptions — 拼杆与说话人', () => {
     // extra 在锚之前(unshift)→ 锚的拼杆偏移 = 1.5s(拼杆序 = IR 数组序)
     const track = compileCaptions(ir, { speakerPrefix: true });
     const shot3 = track.captions.filter(c => c.shotId === 'SHOT_003');
-    // 锚行字幕(非锚行不产字幕——它们无对白窗语义,记档)
-    expect(shot3.map(c => c.text)).toEqual(['陈默：拍一张证件照,要赶九点的火车。']);
+    // issue #11 全对白覆盖:锚行 + 非锚 clip(先来一句/再拍一张)都进字幕
+    expect(shot3.map(c => c.text)).toEqual([
+      '陈默：拍一张证件照,要赶九点的火车。',
+      '先来一句。',
+      '再拍一张。',
+    ]);
     expect(shot3[0].startMs).toBe(11000 + 1500); // 拼杆偏移 1.5s(extra 在锚前)
   });
 

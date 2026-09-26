@@ -12,6 +12,7 @@
  * 显示文本 = 原文切片(标点保留)。`||` 作者断句待 Dual Text(P12 候选)。
  */
 import type { Shot, StoryFlowIR, TtsClip } from '../ir/types';
+import { estimateTextSeconds } from '../../utils/timing/estimate';
 import type { AlignmentTake, WordTimingCorrection } from '../ir/audio/types';
 import { splitAnchorWords, wordStartMs, fitShotDuration, anchorTextOf } from '../ir/shared';
 import { applyTimingCorrections } from '../ir/audio/timing';
@@ -330,6 +331,39 @@ export const compileCaptions = (
           endMs: shotOffset + c.endMs,
           ...(shot.character ? { character: shot.character } : {}),
           shotId: shot.id,
+        });
+      }
+
+      // issue #11 全对白覆盖:同拍余句(非锚 TTS clip)也进字幕轨——窗接在
+      // 锚句之后,按字数权重比例分窗(时长来自朗读估时,单条 ≤ 行窗 ≤ 拍长)。
+      const others = ir.audio.filter(
+        (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id
+          && c.text !== shot.dialogue!.text && c.text !== anchorBase.text,
+      );
+      if (others.length) {
+        const anchorEnd = shotOffset + (seg.cues.length ? Math.max(...seg.cues.map(c => c.endMs)) : 0);
+        const weights = others.map(c => [...c.text].length || 1);
+        const totalW = weights.reduce((a, b) => a + b, 0);
+        const estMs = others.reduce((n, c) => n + estimateTextSeconds(c.text, 'DIALOGUE') * 1000, 0);
+        const windowEnd = Math.max(anchorEnd + Math.round(estMs), filmOffset + shot.shotDuration * 1000, anchorEnd + 1);
+        let acc = anchorEnd;
+        others.forEach((c, oi) => {
+          const w0 = acc;
+          const w1 = anchorEnd + Math.round(
+            (weights.slice(0, oi + 1).reduce((a, b) => a + b, 0) / totalW) * (windowEnd - anchorEnd),
+          );
+          acc = Math.max(w1, w0 + 1);
+          for (const piece of splitPlain(c.text, w0, Math.max(w1, w0 + 1))) {
+            index += 1;
+            captions.push({
+              index,
+              text: opts.speakerPrefix && c.character ? `${c.character}：${piece.text}` : piece.text,
+              startMs: piece.startMs,
+              endMs: Math.max(piece.endMs, piece.startMs + 1),
+              ...(c.character ? { character: c.character } : {}),
+              shotId: shot.id,
+            });
+          }
         });
       }
     }
