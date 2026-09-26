@@ -118,6 +118,7 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number, 
   let estimatedBeats = 0;
   let current: PlannedBeat | null = null;
   let sceneHeading = '';
+  let lastCueSeen: string | undefined = undefined;
 
   for (const b of blocks) {
     if (b.type === 'SCENE_HEADING') {
@@ -172,12 +173,15 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number, 
       const attached = windows?.get(b.id);
       if (attached) current.end = Math.max(current.end, attached.end);
       if (b.type === 'DIALOGUE') {
-        // attribute the line to the nearest preceding CHARACTER cue
-        let cue: string | undefined;
+        // attribute the line to the nearest preceding CHARACTER cue; when the
+        // scene has no cue at all, fall back to the last known speaker across
+        // the scene boundary (issue #11-接管:cue-less dialogue would otherwise
+        // extract an IR that fails the dialogue⇒character refinement)
+        let cue: string | undefined = lastCueSeen;
         for (let i = blocks.indexOf(b) - 1; i >= 0; i--) {
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
-          if (blocks[i].type === 'SCENE_HEADING') break;
         }
+        lastCueSeen = cue;
         current.dialogues.push({ cue, line: b.content.trim() });
       }
     } else if (b.type === 'ACTION' && b.content.trim()) {
@@ -315,17 +319,18 @@ export const synthesizeEstimatedPlan = (
   const beats: (PlannedBeat & { __scene?: boolean })[] = [];
   let cursor = 0;
   let sceneHeading = '';
+  let lastCueSeen: string | undefined = undefined;
 
   const pushBeat = (opener: ScriptBlock, extra: ScriptBlock[]): void => {
     const blockIds = [opener.id, ...extra.map(b => b.id)];
     const dialogues = extra
       .filter(b => b.type === 'DIALOGUE' && b.content.trim())
       .map(b => {
-        let cue: string | undefined;
+        let cue: string | undefined = lastCueSeen;
         for (let i = blocks.indexOf(b) - 1; i >= 0; i--) {
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
-          if (blocks[i].type === 'SCENE_HEADING') break;
         }
+        lastCueSeen = cue;
         return { cue, line: b.content.trim() };
       });
     // 拍长优先级:graybox 运镜时长 ?? shotDuration ?? 朗读估时(拍内全块)
@@ -377,11 +382,11 @@ export const synthesizeEstimatedPlan = (
       last.blockIds.push(b.id);
       last.endBlockId = b.id;
       if (b.type === 'DIALOGUE' && b.content.trim()) {
-        let cue: string | undefined;
+        let cue: string | undefined = lastCueSeen;
         for (let i = blocks.indexOf(b) - 1; i >= 0; i--) {
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
-          if (blocks[i].type === 'SCENE_HEADING') break;
         }
+        lastCueSeen = cue;
         last.dialogues.push({ cue, line: b.content.trim() });
       }
     }

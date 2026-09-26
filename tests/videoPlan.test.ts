@@ -65,7 +65,10 @@ describe('planVideoSegments — beat collection', () => {
     expect(beat.dialogues).toEqual([{ cue: '刀客', line: '你的刀很快。' }]);
   });
 
-  it('attributes dialogue to the nearest preceding CHARACTER cue, scene-bounded', () => {
+  it('dialogue falls back to the last known speaker across the scene boundary', () => {
+    // 接管测试修订:cue 回溯不再被场景标题截断——cue-less 对白继承最近
+    // 已知说话人,否则提取 IR 会未过 dialogue⇒character refinement(docs/
+    // ir-pipeline-test-report.md §4)
     const plan = planVideoSegments([
       blk('s1', 'SCENE_HEADING', '内. 前景'),
       blk('c1', 'CHARACTER', '甲'),
@@ -73,7 +76,15 @@ describe('planVideoSegments — beat collection', () => {
       blk('a', 'ACTION', '00:00-00:05。两人对峙'),
       blk('d', 'DIALOGUE', '谁?'),
     ], 10);
-    // the scene heading between resets the cue scan: no cue found
+    expect(plan.segments[0].beats[0].dialogues).toEqual([{ cue: '甲', line: '谁?' }]);
+  });
+
+  it('dialogue with no prior cue at all keeps cue undefined (honest)', () => {
+    const plan = planVideoSegments([
+      blk('s1', 'SCENE_HEADING', '内. 前景'),
+      blk('a', 'ACTION', '00:00-00:05。两人对峙'),
+      blk('d', 'DIALOGUE', '谁?'),
+    ], 10);
     expect(plan.segments[0].beats[0].dialogues).toEqual([{ cue: undefined, line: '谁?' }]);
   });
 
