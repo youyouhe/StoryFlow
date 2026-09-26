@@ -57,11 +57,9 @@ describe('issue #14 ① — 角色括注剥离(ref 键不被污染)', () => {
     expect(ir.refs.characters[0].variant).toBeUndefined();
   });
 
-  it('括注进该镜头表演层(motionPrompt),且不随 walk-back 扩散到后续拍', () => {
-    const cueShot = ir.shots.find(s => s.refBindings.includes('char:登山者') && s.motionPrompt.includes('（喘息）'));
-    expect(cueShot).toBeTruthy();
-    // 括注只在 cue 所在拍出现一次
-    expect(ir.shots.filter(s => s.motionPrompt.includes('（喘息）'))).toHaveLength(1);
+  it('括注不进 motionPrompt(#15:与 ref 键同一清洗),后续拍零残留', () => {
+    expect(ir.shots.every(s => !s.motionPrompt.includes('（喘息'))).toBe(true);
+    expect(ir.shots.every(s => !s.motionPrompt.includes('(喘息'))).toBe(true);
   });
 
   it('同角色不同括注写法解析为同一 ref(登山者（喘息）≡登山者)', () => {
@@ -122,5 +120,48 @@ describe('issue #14 ④ — schema 与回归', () => {
     const ir = extractAd();
     const v = validateStoryFlowIR(ir);
     if (!v.ok) throw new Error(`IR 未过 schema:\n${(v as { issues: string[] }).issues.join('\n')}`);
+  });
+});
+
+describe('issue #15 — graybox authored 口径(targetSeconds 钉拍长,估算只兜底)', () => {
+  const gbBlocks = (JSON.parse(
+    readFileSync(new URL('./fixtures/commercialAdGraybox.json', import.meta.url), 'utf8'),
+  ) as { blocks: Parameters<typeof extractStoryFlowIR>[0]['blocks'] }).blocks;
+
+  const ir = extractStoryFlowIR(
+    {
+      id: 'ad-15',
+      metadata: { title: 'Untitled 商业广告', author: 'user', draft: 'First Draft', scriptLanguage: 'zh' },
+      blocks: gbBlocks,
+      schemaVersion: 3,
+      lastModified: 0,
+    },
+    [],
+    { defaultMode: 'pro' },
+  );
+
+  it('SHOT_002 拍长 = targetSeconds 4s 且 estimated=false(验收①)', () => {
+    const shot2 = ir.shots.find(s => s.id === 'SHOT_002')!;
+    expect(shot2.shotDuration).toBe(4);
+    expect(shot2.estimated).toBeUndefined();
+    // 运镜照旧直通(#12/#14 之前的行为保持)
+    expect(shot2.camera?.movement.type).toBe('dolly');
+  });
+
+  it('motionPrompt 无「（喘息」残留(验收②)', () => {
+    for (const s of ir.shots) {
+      expect(s.motionPrompt.includes('（喘息')).toBe(false);
+      expect(s.motionPrompt.includes('(喘息')).toBe(false);
+    }
+  });
+
+  it('无 graybox 的镜头仍走估算(兜底语义不变,逐拍可辨)', () => {
+    const shot3 = ir.shots.find(s => s.id === 'SHOT_003')!;
+    expect(shot3.estimated).toBe(true);
+    expect(shot3.shotDuration).toBeGreaterThanOrEqual(1);
+    expect(shot3.shotDuration).toBeLessThanOrEqual(10);
+    // 混合稿:authored 与 estimated 逐拍并存
+    expect(ir.shots.some(s => s.estimated !== true)).toBe(true);
+    expect(ir.shots.some(s => s.estimated === true)).toBe(true);
   });
 });

@@ -197,7 +197,6 @@ export const extractStoryFlowIR = (
       }
       return undefined;
     };
-    const spanIds = new Set(beat.blockIds);
     for (const name of cast) {
       const variant = resolveBeatVariant(blocks, beatBlockIdx, name) ?? dialogueCueVariant(name);
       if (variant) {
@@ -211,17 +210,9 @@ export const extractStoryFlowIR = (
         if (variantSheet) {
           const key = `${name}:${variant}`;
           if (!castPairs.has(key)) castPairs.set(key, { name, variant });
-        } else {
-          // 表演括注只归 cue 实际所在的拍(resolveBeatVariant 会向后续拍走回
-          // 扩散,不逐拍叠加);基础角色恒进注册表(登山者（喘息）≡登山者)。
-          const cueInBeat = [...spanIds].some(id => {
-            const cueBlk = blockIdx.get(id) != null ? blocks[blockIdx.get(id)!] : undefined;
-            if (cueBlk?.type !== 'CHARACTER') return false;
-            const p = parseCharacterName(cueBlk.content);
-            return p.base === name && p.variant === variant;
-          });
-          if (cueInBeat && !motion.includes(`（${variant}）`)) motion = `${motion}（${variant}）`;
         }
+        // issue #15:表演括注不进 motionPrompt——拼装时与 ref 键同规则剥离
+        // (括注语义归表演层,由 CHARACTER 原文承载,不污染镜头运动描述)。
       }
       if (!castPairs.has(name)) castPairs.set(name, { name });
     }

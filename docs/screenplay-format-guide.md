@@ -38,6 +38,18 @@
 - **正文内**的标点与引号(人物引用别人的话)原样保留。
 - 台词归拍规则:对白属于它上方的 ACTION 镜头;镜头切换(新场景标题/新 ACTION)前的对白归上一镜。
 
+## graybox = 导演级可选数据(authored 口径)
+
+ACTION/场景块可以挂 **graybox**(白模布局 + 运镜),它是导演级可选数据——给了就被如实采用,不给也不阻碍提取:
+
+- `camera.movement.targetSeconds` → **拍长直接采用**(authored,不标 estimated);其次运镜 `duration`、块 `shotDuration`,同为导演数据。
+- `camera.shotType/position/lookAt/movement` → 直通 IR `Shot.camera`(白模/预览同机位)。
+- 三者都**没有**的镜头 → 走词级朗读估算(逐拍标 `estimated`,面板会提示),时长钳制 [1,10]s。
+- 场景标题块的场景级 graybox(layout + characters)→ IR `spatial` 1:1。
+- 体检:IR pipeline 面板会显示「检测到 N 个 graybox 镜头——拍长按 authored 口径采用」;缺必填字段(shotType/position/lookAt)会单独警告。
+
+一句话:**写了对白机器会读、给了 graybox 导演会听;什么都没给,估算兜底帮你把片子拼起来。**
+
 ## 其他口径
 
 - **时间戳前缀**(`00:00-00:03。`)是 AI 生成剧本的拍点;手写剧本没有也行——提取自动按朗读估时合成节拍(逐拍标 `estimated`,面板会提示)。

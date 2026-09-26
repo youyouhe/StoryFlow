@@ -334,15 +334,20 @@ export const synthesizeEstimatedPlan = (
         lastCueSeen = cue;
         return { cue, line: stripWrapQuotes(b.content) };
       });
-    // 拍长优先级:graybox 运镜时长 ?? shotDuration ?? 朗读估时(拍内全块)
-    const gbDur = opener.graybox?.kind === 'shot' && opener.graybox.camera?.movement?.duration
-      ? opener.graybox.camera.movement.duration
-      : undefined;
+    // 拍长口径(issue #15,authored 优先):graybox camera.movement
+    // .targetSeconds(导演钉的镜头时长)?? .duration(运镜时长)?? 块
+    // shotDuration(导演字段)——三者都是导演数据,如实采用且**不标
+    // estimated**;全无时才走 #11 词级朗读估算(clamp [1,10],标 estimated)。
+    const movement = opener.graybox?.kind === 'shot' ? opener.graybox.camera?.movement : undefined;
+    const authoredSeconds = movement?.targetSeconds ?? movement?.duration ?? opener.shotDuration;
     const speech = estimateTextSeconds(
       [opener.content, ...extra.map(b => b.content)].join(''),
       opener.type,
     );
-    const dur = clamp(gbDur ?? opener.shotDuration ?? speech);
+    const dur = authoredSeconds != null
+      ? Math.max(0.5, Math.round(authoredSeconds * 10) / 10)
+      : clamp(speech);
+    const source = authoredSeconds != null ? 'authored' as const : 'estimated' as const;
     beats.push({
       startBlockId: opener.id,
       endBlockId: extra.length ? extra[extra.length - 1].id : opener.id,
@@ -353,7 +358,7 @@ export const synthesizeEstimatedPlan = (
       text: opener.content.replace(/^\s*\d{1,2}:\d{2}(?:\.\d+)?\s*-\s*\d{1,2}:\d{2}(?:\.\d+)?\s*[。.，,]?\s*/, '').trim() || opener.content,
       dialogues,
       sceneHeading,
-      source: 'estimated',
+      source,
     });
     cursor += dur;
   };
@@ -363,11 +368,14 @@ export const synthesizeEstimatedPlan = (
       sceneHeading = b.content.trim();
       // 空镜定场拍:非空场景标题都给一个(时长 = shotDuration ?? 3s)
       if (sceneHeading) {
-        const dur = clamp(b.shotDuration ?? 3);
+        const dur = b.shotDuration != null
+          ? Math.max(0.5, Math.round(b.shotDuration * 10) / 10)
+          : clamp(3);
         beats.push({
           startBlockId: b.id, endBlockId: b.id, blockIds: [b.id],
           start: cursor, end: cursor + dur, range: '', text: sceneHeading,
-          dialogues: [], sceneHeading, source: 'estimated',
+          dialogues: [], sceneHeading,
+          source: b.shotDuration != null ? 'authored' : 'estimated',
         });
         cursor += dur;
       }

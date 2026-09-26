@@ -50,14 +50,23 @@ const formatHealthChecks = (screenplay: Screenplay): string[] => {
   let parenCues = 0;
   let quotedLines = 0;
   let longScenes = 0;
+  let grayboxShots = 0;
+  let grayboxBroken = 0;
   for (const b of screenplay.blocks) {
     if (b.type === 'CHARACTER' && /[（(][^）)]{1,12}[）)]/u.test(b.content)) parenCues += 1;
     if (b.type === 'DIALOGUE' && /^[“”„«»「『"'‘’]|[“”„«»」』"'‘’]$/u.test(b.content.trim())) quotedLines += 1;
     if (b.type === 'SCENE_HEADING' && b.content.trim().replace(/[。．.!！?？\s]+$/u, '').length > 14) longScenes += 1;
+    if (b.graybox?.kind === 'shot') {
+      grayboxShots += 1;
+      const cam = b.graybox.kind === 'shot' ? b.graybox.camera : undefined;
+      if (!cam || !cam.shotType || !Array.isArray(cam.position) || !Array.isArray(cam.lookAt)) grayboxBroken += 1;
+    }
   }
   if (parenCues) notes.push(`${parenCues} 个角色名带括注——括注是表演提示，提取时会自动剥离（不影响角色识别）`);
   if (longScenes) notes.push(`${longScenes} 个场景标题偏长——提取时自动取首个地点短语作短键，完整标题保留在描述里`);
   if (quotedLines) notes.push(`${quotedLines} 句对白首尾带引号——提取时会自动剥离（避免 TTS 怪顿）`);
+  if (grayboxShots) notes.push(`检测到 ${grayboxShots} 个 graybox 镜头——拍长按 authored 口径采用（camera.movement.targetSeconds 优先，其次运镜时长），不再走估算`);
+  if (grayboxBroken) notes.push(`${grayboxBroken} 个 graybox 镜头缺必填字段（camera.shotType/position/lookAt）——补全后运镜数据才会进 IR`);
   return notes;
 };
 interface CompileReport {

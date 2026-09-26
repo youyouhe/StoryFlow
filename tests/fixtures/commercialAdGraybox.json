@@ -1,0 +1,85 @@
+{
+  "blocks": [
+    {
+      "id": "sesd8zlzq",
+      "type": "SCENE_HEADING",
+      "content": "暴雨夜，悬崖攀岩壁，闪电劈开乌云。",
+      "imagePrompt": "Subject: a sheer wet granite sea-cliff climbing wall at night, vertical route of bolted anchors, quickdraws, a taut static rope and chalk-marked holds, one tiny adult climber silhouette for scale, contemporary mountaineering kit on an enormous rock face\nEnvironment: torrential rain at night on a coastal cliff, black storm clouds split by volumetric lightning, churning sea spray far below, fresh fracture lines and loose scree on the overhanging upper rock, cold steel-blue darkness pressing in\nComposition: wide establishing frame, eye level, facing the cliff, full depth readable from foreground wet stone to storm sky above, climber a thumbnail in the lower third, the overhanging upper wall mass looming over them\nLighting: lightning backlight stabbing through driving rain, hard rim light on wet granite, cold steel-blue and slate-grey palette, deep black shadows in cracks, a single neon-red glow from a wrist device bleeding red across the stone\nMaterial: slick rain-sheeting granite, beaded rope fibers, machined steel hardware, smeared chalk paste, water pooling on ledges, rock dust and rubble trembling loose\nMood: hyperreal disaster dread, adrenaline and looming collapse, icy, breathless, catastrophic"
+    },
+    {
+      "id": "qkmmqc3qi",
+      "type": "ACTION",
+      "content": "登山者单手悬挂在岩点，腕上NOVA表盘显示心率180。",
+      "imagePrompt": "Subject: adult female climber hanging one-handed from a single granite crimp, body taut and twisting, other arm slack at her side, jaw clenched mid-gasp, adult woman in a soaked technical shell and harness\nEnvironment: sheer sea cliff face at night, torrential rain, churning black ocean far below, low clouds split by lightning above the rock\nComposition: medium close shot from below looking up past her straining forearm toward the sky, shallow depth of field, subject sharp against blurred rain and rock\nLighting: cold steel-blue and slate-grey volumetric lightning backlight rimming her silhouette, hard shadows, one small neon-red glow rising from the watch dial\nMaterial: wet skin beaded with rain, slick dark granite, soaked synthetic shell fabric, water streaking the watch glass\nMood: hyperreal disaster tension, cold steel-blue and slate-grey palette punctured by a single red accent",
+      "graybox": {
+        "kind": "shot",
+        "camera": {
+          "shotType": "extreme-close-up",
+          "position": [
+            0.15,
+            0.85,
+            0.7
+          ],
+          "lookAt": [
+            0,
+            0.9,
+            0.1
+          ],
+          "movement": {
+            "type": "dolly",
+            "duration": 3,
+            "path": [
+              [
+                0.15,
+                0.85,
+                0.7
+              ],
+              [
+                0.05,
+                0.88,
+                0.4
+              ]
+            ],
+            "lookPath": [
+              [
+                0,
+                0.9,
+                0.1
+              ],
+              [
+                0,
+                0.9,
+                0.1
+              ]
+            ],
+            "targetSeconds": 4
+          },
+          "shotDescription": "Push in tight on the NOVA watch face as the climber hangs one-handed, letting the 180 bpm readout land amid the storm.",
+          "focus": "NOVA表盘"
+        }
+      }
+    },
+    {
+      "id": "0bluo9gg1",
+      "type": "CHARACTER",
+      "content": "登山者（喘息）"
+    },
+    {
+      "id": "8zq6tktyr",
+      "type": "DIALOGUE",
+      "content": "“还有十米。”"
+    },
+    {
+      "id": "p8lxy6nq3",
+      "type": "ACTION",
+      "content": "表盘突然弹出红色预警：山体位移，滑坡倒计时00:12。",
+      "imagePrompt": "Subject: adult woman climber, chalked hands, one arm hooked on a granite crimp, drenched hair plastered to her cheek, exhausted open-mouthed gasp, eyes locked on the watch strapped to her raised wrist\nEnvironment: vertical cliff face at night in a torrential rainstorm, slick wet rock streaked with runoff, black clouds torn open by lightning above, distant churning sea far below, loose scree and fractured slabs trembling on the upper wall\nComposition: medium close-up, low angle looking up past her arm, watch face held sharp in foreground focus, climber's face soft, cliff wall and sky dissolving into rain-blurred depth\nLighting: cold steel-blue lightning backlight rimming her silhouette, hard flash freezing raindrops mid-air, slate-grey ambient gloom, one neon-red glow spilling from the watch dial onto her wet skin and knuckles\nMaterial: slick polished granite sheen, soaked technical shell fabric and harness webbing, beaded water on skin, scratched metal watch bezel, glowing glass dial with hairline cracks\nMood: hyperreal disaster dread, breath-held tension, cold desaturated palette broken by a single alarm-red pulse"
+    },
+    {
+      "id": "hajabqw13",
+      "type": "ACTION",
+      "content": "她抬头，整片岩壁正从上方崩塌。",
+      "imagePrompt": "Subject: adult woman climber, soaked and breathless, one arm hooked on a granite hold, head tilted back, eyes wide, harness and chalk bag on her hips, NOVA watch on her wrist flashing a red warning.\nEnvironment: vertical granite cliff face at night in torrential rain, storm clouds split by lightning above, a whole section of the wall shearing loose overhead, loose rock and dust hurtling down past her, black valley far below.\nComposition: low-angle medium shot from just under her, framed past her shoulder toward the collapsing wall above, shallow depth of field, her face sharp, tumbling debris falling soft behind.\nLighting: volumetric lightning backlight ripping through rain, cold steel-blue and slate-grey wash on wet stone, single neon-red glow from the watch underlighting her jaw.\nMaterial: slick wet granite streaked with runoff, soaked technical shell fabric and webbing, chalk paste on her palm, sheeting rain, airborne rock dust and spray.\nMood: hyperreal disaster dread, cold desaturated palette broken by one red pulse, raw exposure and vertigo."
+    }
+  ]
+}
