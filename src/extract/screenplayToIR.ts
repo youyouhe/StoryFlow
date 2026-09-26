@@ -46,7 +46,7 @@ const sanitizeName = (s: string): string => s.replace(/:/g, '_');
 /** INT. 国营照相馆 - 清晨 → 国营照相馆(剥内外景前缀与时段后缀)。 */
 const sceneNameOf = (heading: string): string => {
   const stripped = heading
-    .replace(/^\s*(INT\.?|EXT\.?|INT\/EXT\.?|内景|外景|内|外)[\s.:]*/u, '')
+    .replace(/^\s*(INT\.?|EXT\.?|INT\/EXT\.?|内景|外景|内|外)[\s.,，、:：]*/u, '')
     .split(/\s+-\s+/)[0]
     .trim();
   return sanitizeName(stripped || heading.trim());
