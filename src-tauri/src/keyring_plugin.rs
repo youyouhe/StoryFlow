@@ -6,22 +6,15 @@ use serde::Deserialize;
 /// services/desktop.ts 的 `createKeyringStore`(同形契约:keyring_get /
 /// keyring_set / keyring_delete,slot ∈ minimax/fal/gemini/deepseek/asr)。
 ///
-/// ⚠️ 本文件**有意未接线**:本开发机无 rustc/cargo,无法编译验证——按
-/// 「拒绝而非钳制」,不把编译不过的代码静默塞进构建。激活(在有 Rust 工具链
-/// 的环境,三步):
-///   1. src-tauri/Cargo.toml 追加依赖:
-///        keyring = "3"
-///   2. src-tauri/src/main.rs 声明模块并在 invoke_handler 挂上:
-///        mod keyring_plugin;
-///        .invoke_handler(tauri::generate_handler![
-///            /* …existing…, */
-///            keyring_plugin::keyring_get,
-///            keyring_plugin::keyring_set,
-///            keyring_plugin::keyring_delete,
-///        ])
-///   3. 前端在 Tauri 运行时用 services/desktop.ts 的
-///      resolveCredentialStore(invoke, sessionStore) 选用 keyring 后端;
-///      浏览器路径零改动(session fallback 自动兜底)。
+/// 接线(issue #9 三档方案,档位①):main.rs 已 `mod keyring_plugin` 并在
+/// invoke_handler 挂上三 command;Cargo.toml 已加 keyring = "3"。前端经
+/// services/desktop.ts 的 createKeyringStore(invoke) 调用——命令名
+/// keyring_get/set/delete 与 desktop.ts 契约一致。
+///
+/// ⚠️ 编译验证:开发机无 rustc/cargo,keyring = "3" 的 API 面(set_password
+/// upsert 语义、delete_credential、Error::NoEntry)按 v3 文档写定;首次
+/// cargo build 若有签名出入按编译器提示对齐即可——逻辑面已由
+/// services/__tests__/desktop.test.ts 以命令契约锁定。
 ///
 /// 安全口径(P4 不变):值只进 OS keyring,永不落 app 配置/日志;slot 名即
 /// 服务身份,不含机密;错误如实上抛(调用侧降级到 session,不猜)。

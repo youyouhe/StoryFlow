@@ -452,6 +452,11 @@ export interface AppSettings {
   /** FAL text-to-image BYOK (queue API). Empty until the user fills it; only
    *  used when imageProvider === 'fal'. Get a key at fal.ai (billing required). */
   falKey: string;
+  /** 凭证存储档位(issue #9,三档并存用户自选):
+   *  'session'(默认,最高安全)= 密钥仅本会话,刷新即失;
+   *  'remember' = 本机记住——设备口令派生 AES-GCM 加密落 localStorage(非明文);
+   *  'keyring' = 桌面端 OS keyring(Tauri,TauriKeyring 三 command;浏览器不可用)。 */
+  credentialTier?: 'session' | 'remember' | 'keyring';
   /** FAL application model path; defaults to openai/gpt-image-2.5/flare. */
   falModel: string;
   /** FAL image quality tier — the COST lever ('low' economy ≈$0.004/img,

@@ -53,7 +53,9 @@ export function useStoryFlowApp(ui: {
   const lib = useScriptLibrary();
 
   // ---- App settings domain (persisted settings + migrations + save) --------
-  const settings = useAppSettings({ setScreenplay: lib.setScreenplay });
+  // issue #9: credential toasts (migration/tier restore) surface via the
+  // privacy toast channel; t feeds the localized toast strings.
+  const settings = useAppSettings({ setScreenplay: lib.setScreenplay, onToast, t });
   const { appSettings } = settings;
 
   // ---- Gallery sync domain (4A SSO session, badges, cloud visibility) ------

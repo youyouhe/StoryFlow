@@ -8,3 +8,5 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# issue #9: OS keyring backing for the credential store (keyring_plugin.rs)
+keyring = "3"
