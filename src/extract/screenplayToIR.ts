@@ -103,9 +103,11 @@ const statusFromExpress = (s: Screenplay, blockId: string): ShotStatus => {
 
 export const extractStoryFlowIR = (
   screenplay: Screenplay,
-  refImages: RefImage[],
+  refImages?: RefImage[] | null,
   opts: ExtractOptions = {},
 ): StoryFlowIR => {
+  const refImagesList = refImages ?? (screenplay as { refImages?: RefImage[] }).refImages ?? [];
+  void refImages;
   const blocks = screenplay.blocks;
   const blockById = new Map(blocks.map(b => [b.id, b]));
   const blockIdx = new Map(blocks.map((b, i) => [b.id, i]));
@@ -217,7 +219,7 @@ export const extractStoryFlowIR = (
         || s.beats.some(b => computeBeatCast(blocks, blockIdx.get(b.startBlockId) ?? 0, universe).includes(name)),
     )?.sceneHeading;
     const sheet = resolveCharacterSheet(
-      name, screenplay.referenceBindings, refImages, sceneHeading, undefined, variant,
+      name, screenplay.referenceBindings, refImagesList, sceneHeading, undefined, variant,
     );
     characters.push({
       id: variant ? `char:${sanitizeName(name)}:${sanitizeName(variant)}` : `char:${sanitizeName(name)}`,
@@ -242,7 +244,7 @@ export const extractStoryFlowIR = (
     const name = sceneNameOf(heading);
     if (sceneEntries.has(name)) continue;
     const env = resolveRefBindings(screenplay.referenceBindings, heading).environment;
-    const envImg = env ? refImages.find(r => r.id === env) : undefined;
+    const envImg = env ? refImagesList.find(r => r.id === env) : undefined;
     sceneEntries.set(name, {
       id: `scene:${name}`,
       name,
@@ -257,7 +259,7 @@ export const extractStoryFlowIR = (
     img.scriptIds == null || img.scriptIds.length === 0 || img.scriptIds.includes(screenplay.id);
   const props: PropRef[] = [];
   const actions: ActionRef[] = [];
-  for (const img of refImages) {
+  for (const img of refImagesList) {
     if (!pinned(img)) continue;
     if (img.kind === 'prop') {
       const name = sanitizeName(
