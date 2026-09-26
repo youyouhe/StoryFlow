@@ -1,4 +1,5 @@
 import { ScriptBlock } from '../types';
+import { stripWrapQuotes } from '../src/ir/shared';
 
 /**
  * Video-generation segmentation planner.
@@ -182,7 +183,7 @@ export const planVideoSegments = (blocks: ScriptBlock[], targetSeconds: number, 
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
         }
         lastCueSeen = cue;
-        current.dialogues.push({ cue, line: b.content.trim() });
+        current.dialogues.push({ cue, line: stripWrapQuotes(b.content) });
       }
     } else if (b.type === 'ACTION' && b.content.trim()) {
       untimedActions++;
@@ -331,7 +332,7 @@ export const synthesizeEstimatedPlan = (
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
         }
         lastCueSeen = cue;
-        return { cue, line: b.content.trim() };
+        return { cue, line: stripWrapQuotes(b.content) };
       });
     // 拍长优先级:graybox 运镜时长 ?? shotDuration ?? 朗读估时(拍内全块)
     const gbDur = opener.graybox?.kind === 'shot' && opener.graybox.camera?.movement?.duration
@@ -387,7 +388,7 @@ export const synthesizeEstimatedPlan = (
           if (blocks[i].type === 'CHARACTER') { cue = blocks[i].content.trim(); break; }
         }
         lastCueSeen = cue;
-        last.dialogues.push({ cue, line: b.content.trim() });
+        last.dialogues.push({ cue, line: stripWrapQuotes(b.content) });
       }
     }
   }

@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { X, FileJson, Captions, Film, Music, Download, AlertTriangle } from 'lucide-react';
 import type { Screenplay } from '../types';
 import { extractStoryFlowIR } from '../src/extract/screenplayToIR';
+import { parseCharacterName } from '../utils/beatCast';
 import { compileVisualPlan } from '../src/ir/visual/compile';
 import { compileAudioPlan } from '../src/ir/audio/compile';
 import { compileCaptions } from '../src/captions/compile';
@@ -43,6 +44,22 @@ const download = (text: string, mime: string, filename: string): void => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+/** issue #14 格式体检(警告级,不阻断):括注/长场景名/对白引号的自动清洗提示。 */
+const formatHealthChecks = (screenplay: Screenplay): string[] => {
+  const notes: string[] = [];
+  let parenCues = 0;
+  let quotedLines = 0;
+  let longScenes = 0;
+  for (const b of screenplay.blocks) {
+    if (b.type === 'CHARACTER' && /[（(][^）)]{1,12}[）)]/u.test(b.content)) parenCues += 1;
+    if (b.type === 'DIALOGUE' && /^[“”„«»「『"'‘’]|[“”„«»」』"'‘’]$/u.test(b.content.trim())) quotedLines += 1;
+    if (b.type === 'SCENE_HEADING' && b.content.trim().replace(/[。．.!！?？\s]+$/u, '').length > 14) longScenes += 1;
+  }
+  if (parenCues) notes.push(`${parenCues} 个角色名带括注——括注是表演提示，提取时会自动剥离（不影响角色识别）`);
+  if (longScenes) notes.push(`${longScenes} 个场景标题偏长——提取时自动取首个地点短语作短键，完整标题保留在描述里`);
+  if (quotedLines) notes.push(`${quotedLines} 句对白首尾带引号——提取时会自动剥离（避免 TTS 怪顿）`);
+  return notes;
+};
 interface CompileReport {
   ir: StoryFlowIR;
   visual: ReturnType<typeof compileVisualPlan>;
@@ -104,6 +121,7 @@ export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose,
 
   if (!open) return null;
 
+  const healthNotes = formatHealthChecks(screenplay);
   const irJson = report ? JSON.stringify(report.ir, null, 2) : '';
 
   return (
@@ -124,6 +142,12 @@ export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose,
             {L(t, 'irPipelineIntro',
               '从当前剧本提取 StoryFlowIR(镜头/三轨音频/转场,块 id 作锚),编译视觉/音频/字幕三路计划并导出 SRT/VTT。本面板只编译与序列化,零生成花费;费用为发起即计口径(图片按输入价目,视频无刊例如实标 unpriced)。')}
           </p>
+
+          {healthNotes.length > 0 && (
+            <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2 space-y-1">
+              {healthNotes.map((n, i) => <div key={i}>⚠ {n}</div>)}
+            </div>
+          )}
 
           <button
             onClick={run}

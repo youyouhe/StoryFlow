@@ -19,6 +19,7 @@ import type {
   TtsClip, BgmClip, SfxClip, Transition, ShotStatus,
 } from '../ir/types';
 import { IR_VERSION } from '../ir/types';
+import { stripWrapQuotes } from '../ir/shared';
 import {
   planVideoSegments, parseBeatTiming, type PlannedBeat, type VideoSegment,
 } from '../../utils/videoPlan';
@@ -43,13 +44,22 @@ export interface ExtractOptions {
 const pad3 = (n: number): string => String(n).padStart(3, '0');
 const sanitizeName = (s: string): string => s.replace(/:/g, '_');
 
-/** INT. 国营照相馆 - 清晨 → 国营照相馆(剥内外景前缀与时段后缀)。 */
+/** 场景短键(issue #14):剥内外景前缀与尾标点,按「，,、-—;；」切段后取
+ *  首个**地点**短语(时间/天气段剔除:≤4 字且含时刻/气象字),整句保留在
+ *  SceneRef.description。例:「暴雨夜，悬崖攀岩壁，闪电劈开乌云。」→
+ *  悬崖攀岩壁;「INT. 国营照相馆 - 清晨」→ 国营照相馆。 */
+const TIME_WEATHER_LEAD = /^(?:暴雨|大雨|雷雨|雷暴|风雪|雨|雪|深夜|清晨|黄昏|傍晚|黎明|凌晨|午后|午夜|白天|夜|晚|晨|昏|暮)/;
+const TIME_WEATHER_TAIL = /[夜晚晨昏暮雨雪日]$/;
 const sceneNameOf = (heading: string): string => {
   const stripped = heading
-    .replace(/^\s*(INT\.?|EXT\.?|INT\/EXT\.?|内景|外景|内|外)[\s.,，、:：]*/u, '')
-    .split(/\s+-\s+/)[0]
-    .trim();
-  return sanitizeName(stripped || heading.trim());
+    .replace(/[。．.!！?？~～\s]+$/u, '')
+    .replace(/^\s*(INT\.?|EXT\.?|INT\/EXT\.?|内景|外景|内|外)[\s.,，、:：]*/u, '');
+  const segments = stripped.split(/[\s]*[-—–,，、;；]\s*/u).filter(Boolean);
+  // 时间/天气段:≤4 字且首或尾带时刻/气象字(锚定首尾,防误伤「夜市」类地名)
+  const isTimeSeg = (seg: string): boolean =>
+    seg.length <= 4 && (TIME_WEATHER_LEAD.test(seg) || TIME_WEATHER_TAIL.test(seg));
+  const place = segments.find(seg => !isTimeSeg(seg)) ?? segments[0] ?? '';
+  return sanitizeName(place.trim() || stripped || heading.trim());
 };
 
 const FALLBACK_STYLE = {
@@ -150,7 +160,7 @@ export const extractStoryFlowIR = (
       .map(id => blockById.get(id))
       .filter((b): b is ScriptBlock => !!b && b.type === 'ACTION' && !parseBeatTiming(b.content))
       .map(b => b.content.trim());
-    const motion = [beat.text, ...motionParts.filter(t => t && t !== beat.text)].join('\n');
+    let motion = [beat.text, ...motionParts.filter(t => t && t !== beat.text)].join('\n');
     const spanBlocks = beat.blockIds.map(id => blockById.get(id)).filter((b): b is ScriptBlock => !!b);
 
     // imagePrompt:拍内首块 imagePrompt ?? 前缀+motion;缺前缀治愈
@@ -187,10 +197,33 @@ export const extractStoryFlowIR = (
       }
       return undefined;
     };
+    const spanIds = new Set(beat.blockIds);
     for (const name of cast) {
       const variant = resolveBeatVariant(blocks, beatBlockIdx, name) ?? dialogueCueVariant(name);
-      const key = variant ? `${name}:${variant}` : name;
-      if (!castPairs.has(key)) castPairs.set(key, { name, variant });
+      if (variant) {
+        // issue #14:cue 括注只在资产库有**对应变体设定图**时才是换装变体
+        // (strictVariant:绝不回退基础 sheet);否则是表演括注(喘息/微笑…)
+        // ——剥离出角色注册表,归入该镜头表演提示。登山者（喘息）→ char:登山者。
+        const variantSheet = resolveCharacterSheet(
+          name, screenplay.referenceBindings, refImagesList, beat.sceneHeading, undefined, variant,
+          { strictVariant: true },
+        );
+        if (variantSheet) {
+          const key = `${name}:${variant}`;
+          if (!castPairs.has(key)) castPairs.set(key, { name, variant });
+        } else {
+          // 表演括注只归 cue 实际所在的拍(resolveBeatVariant 会向后续拍走回
+          // 扩散,不逐拍叠加);基础角色恒进注册表(登山者（喘息）≡登山者)。
+          const cueInBeat = [...spanIds].some(id => {
+            const cueBlk = blockIdx.get(id) != null ? blocks[blockIdx.get(id)!] : undefined;
+            if (cueBlk?.type !== 'CHARACTER') return false;
+            const p = parseCharacterName(cueBlk.content);
+            return p.base === name && p.variant === variant;
+          });
+          if (cueInBeat && !motion.includes(`（${variant}）`)) motion = `${motion}（${variant}）`;
+        }
+      }
+      if (!castPairs.has(name)) castPairs.set(name, { name });
     }
 
     const shot: Shot = {
@@ -211,7 +244,7 @@ export const extractStoryFlowIR = (
           // P0 示例 3.4→4 / 2.6→3;无探活记录 → 0(未测)
           ttsFloor: (() => {
             const seg = segKey ? screenplay.proAudio?.[segKey] : undefined;
-            const rec = seg?.tts?.find(t => t.line === d0.line);
+            const rec = seg?.tts?.find(t => t.line === d0.line || stripWrapQuotes(t.line) === d0.line);
             return rec ? Math.ceil(rec.seconds + 0.3) : 0;
           })(),
         },
@@ -295,9 +328,9 @@ export const extractStoryFlowIR = (
       const variant = resolveBeatVariant(blocks, beatBlockIdx, name) ?? beat.dialogues
         .filter(d => d.cue && parseCharacterName(d.cue).base === name)
         .map(d => parseCharacterName(d.cue!).variant)[0];
-      refs.add(variant
-        ? `char:${sanitizeName(name)}:${sanitizeName(variant)}`
-        : `char:${sanitizeName(name)}`);
+      const variantId = variant ? `char:${sanitizeName(name)}:${sanitizeName(variant)}` : null;
+      // 只引用注册表真实存在的 id——表演括注(#14)不再造变体 ref,落回基础 ref
+      refs.add(variantId && castPairs.has(`${name}:${variant}`) ? variantId : `char:${sanitizeName(name)}`);
     }
     for (const p of props) if (shot.motionPrompt.includes(p.name)) refs.add(p.id);
     for (const a of actions) if (shot.motionPrompt.includes(a.name)) refs.add(a.id);
@@ -357,7 +390,7 @@ export const extractStoryFlowIR = (
         kind: 'tts',
         shotId: shot.id,
         ...(t.charName ? { character: parseCharacterName(t.charName).base } : {}),
-        text: t.line,
+        text: stripWrapQuotes(t.line),
         voice: t.voice,
         measuredSeconds: t.seconds,
       });

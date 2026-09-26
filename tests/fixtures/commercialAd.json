@@ -1,0 +1,34 @@
+{
+  "blocks": [
+    {
+      "id": "sesd8zlzq",
+      "type": "SCENE_HEADING",
+      "content": "暴雨夜，悬崖攀岩壁，闪电劈开乌云。"
+    },
+    {
+      "id": "qkmmqc3qi",
+      "type": "ACTION",
+      "content": "登山者单手悬挂在岩点，腕上NOVA表盘显示心率180。"
+    },
+    {
+      "id": "0bluo9gg1",
+      "type": "CHARACTER",
+      "content": "登山者（喘息）"
+    },
+    {
+      "id": "8zq6tktyr",
+      "type": "DIALOGUE",
+      "content": "“还有十米。”"
+    },
+    {
+      "id": "p8lxy6nq3",
+      "type": "ACTION",
+      "content": "表盘突然弹出红色预警：山体位移，滑坡倒计时00:12。"
+    },
+    {
+      "id": "hajabqw13",
+      "type": "ACTION",
+      "content": "她抬头，整片岩壁正从上方崩塌。"
+    }
+  ]
+}

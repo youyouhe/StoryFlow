@@ -158,3 +158,9 @@ export const wordIndexAtMs = (tokens: string[], atMs: number, basisMs: number): 
   }
   return tokens.length - 1;
 };
+
+
+/** 剥离首尾包裹引号(“”/""/「」/『』/''/‘’)— issue #14:TTS 文本不带引号,
+ *  正文标点保留。完全包裹的引号对才剥离,句中引号不动。 */
+export const stripWrapQuotes = (s: string): string =>
+  s.replace(/^\s*[“”„«»「『『"'‘’]\s*/, '').replace(/[\s]*[“”„«»」』』"'‘’]\s*$/u, '').trim();
