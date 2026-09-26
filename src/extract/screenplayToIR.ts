@@ -22,6 +22,7 @@ import { IR_VERSION } from '../ir/types';
 import {
   planVideoSegments, parseBeatTiming, type PlannedBeat, type VideoSegment,
 } from '../../utils/videoPlan';
+import { videoPlanWindowsFromScreenplay } from '../../utils/timing/reflow';
 import {
   collectCharacterNames, computeBeatCast, resolveBeatVariant, parseCharacterName,
 } from '../../utils/beatCast';
@@ -117,7 +118,15 @@ export const extractStoryFlowIR = (
     modeVal === 'simple' || modeVal === 'express' ? 'express' : 'pro';
   const describe = opts.descriptionOf ?? descriptionOfDefault;
 
-  const plan = planVideoSegments(blocks, opts.targetSeconds ?? 10);
+  // issue #10: 手写/导入剧本没有时间戳前缀 → planVideoSegments 零节拍 →
+  // 镜头/音频/字幕全 0。回退到 P2 词级估算(buildTimeline,确定性:对白
+  // 朗读估时/灰盒时长,source='estimated'),让手写稿得到完整三路计划。
+  // 有节拍(哪怕部分)时不回退——authored 前缀仍是权威。
+  let plan = planVideoSegments(blocks, opts.targetSeconds ?? 10);
+  const hasTimedBeat = plan.segments.some(s => s.beats.some(b => (b as { __scene?: boolean }).__scene !== true));
+  if (!hasTimedBeat) {
+    plan = planVideoSegments(blocks, opts.targetSeconds ?? 10, videoPlanWindowsFromScreenplay(screenplay));
+  }
   // 段键 = 段首块 id(live proAudio/segmentGrayboxes 口径)
   const segOf = new Map<string, VideoSegment>();
   for (const seg of plan.segments) {
@@ -189,6 +198,7 @@ export const extractStoryFlowIR = (
       imagePrompt,
       motionPrompt: motion,
       shotDuration: Math.round((beat.end - beat.start) * 1000) / 1000,
+      ...(beat.source === 'estimated' ? { estimated: true } : {}),
       firstFrame,
       refBindings: [], // 下方统一装配(registry id 需先定名)
       ...(camera ? { camera: cameraFromGraybox(camera) } : {}),
@@ -404,6 +414,32 @@ export const extractStoryFlowIR = (
         ...(f.missing != null ? { missing: f.missing } : {}),
       });
     }
+  }
+
+  // issue #10:手写稿无 proAudio 合成记录 → 音频轨全空。对白是作者的明确
+  // 合成意图(Pro 流水线对白默认全合成)——从 shot.dialogue 派生**意图
+  // clip**(无 measuredSeconds = 未合成态,编译层不进 timeline、不产生
+  // 已花费判断),让音频路得到完整计划而非静默空轨。
+  {
+    const existing = new Set(audio.filter((c): c is TtsClip => c.kind === 'tts').map(c => `${c.shotId}\u0000${c.text}`));
+    let autoN = 0;
+    for (const shot of shots) {
+      if (!shot.dialogue) continue;
+      const key = `${shot.id}\u0000${shot.dialogue.text}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      autoN += 1;
+      ttsN += 1;
+      audio.push({
+        id: `aud-tts-${pad3(ttsN)}`,
+        kind: 'tts',
+        shotId: shot.id,
+        ...(shot.character ? { character: shot.character } : {}),
+        text: shot.dialogue.text,
+        voice: (screenplay.voiceCast?.[shot.character ?? ''] ?? 'tongtong'),
+      });
+    }
+    void autoN;
   }
 
   let bgmN = 0;

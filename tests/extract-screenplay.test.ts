@@ -118,3 +118,54 @@ describe('extractStoryFlowIR — 生产侧闭合(银盐晨光 Screenplay 形态)
     expect(JSON.stringify(extract(), null, 2)).toBe(golden);
   });
 });
+
+describe('issue #10 — 手写剧本(无时间戳)自动节拍回退', () => {
+  /** 《旧梦胶片》形态:手写块,零时间戳前缀,零 proAudio —— 合并前的提取
+   *  对这种稿全面空转(0/0/0)。 */
+  const handwritten = () => extractStoryFlowIR({
+    id: 'handwritten-1',
+    metadata: {
+      title: '旧梦胶片', author: 'agent', draft: 'First Draft', scriptLanguage: 'zh',
+    },
+    blocks: [
+      { id: 'h0', type: 'SCENE_HEADING', content: '内. 老照相馆 - 黄昏' },
+      { id: 'h1', type: 'ACTION', content: '夕阳穿过橱窗，尘埃在光柱里浮动。' },
+      { id: 'h2', type: 'CHARACTER', content: '陆之白' },
+      { id: 'h3', type: 'DIALOGUE', content: '今天不营业。' },
+      { id: 'h4', type: 'ACTION', content: '他把相纸一张张摆上晾架。' },
+      { id: 'h5', type: 'SCENE_HEADING', content: '内. 老照相馆 - 夜' },
+      { id: 'h6', type: 'ACTION', content: '红灯亮起，显影液里浮出人脸。' },
+    ],
+    lastModified: 0,
+  }, [], { defaultMode: 'pro' });
+
+  it('零时间戳不再空转:得到 estimated 节拍的完整三路计划(验收①)', () => {
+    const ir = handwritten();
+    // P2 节拍语义:一拍 = 动作 opener + 其后的对白/动作延续 → 两场景两镜
+    expect(ir.shots.length).toBeGreaterThanOrEqual(2);
+    expect(ir.audio.length).toBeGreaterThanOrEqual(1); // 对白 → TTS clip
+    expect(ir.shots.every(s => s.shotDuration > 0)).toBe(true);
+    expect(ir.shots.every(s => s.imagePrompt.length > 0)).toBe(true);
+    const v = validateStoryFlowIR(ir);
+    if (!v.ok) throw new Error(`estimated IR must validate:\n${(v as { issues: string[] }).issues.join('\n')}`);
+  });
+
+  it('产物标注 estimated:true;有 authored 前缀的稿不受影响(不误标)', () => {
+    const est = handwritten();
+    expect(est.shots.every(s => s.estimated === true)).toBe(true);
+    // 对照:银盐晨光稿全部 authored → 无 estimated 标记
+    const authored = extract();
+    expect(authored.shots.some(s => s.estimated)).toBe(false);
+  });
+
+  it('估算时长 = P2 词级朗读估时(拍 = 动作 opener + 对白/动作延续,确定性)', () => {
+    const ir = handwritten();
+    const dlg = ir.shots.find(s => s.dialogue?.text === '今天不营业。');
+    expect(dlg).toBeTruthy();
+    // 该拍 = h1(3.7s 动作) + h2(cue 0.6s) + h3(对白 1.3s) + h4(2.9s 动作)
+    // —— 对白朗读估时由 utils/timing/estimate.ts 的 P2 测试锁定,这里锁定
+    // 「手写稿的拍时长覆盖其对白部分且为估算产物」。
+    expect(dlg!.shotDuration).toBeGreaterThanOrEqual(1.3);
+    expect(dlg!.estimated).toBe(true);
+  });
+});

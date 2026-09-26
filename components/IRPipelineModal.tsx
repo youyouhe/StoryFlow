@@ -48,6 +48,10 @@ interface CompileReport {
   visual: ReturnType<typeof compileVisualPlan>;
   audio: ReturnType<typeof compileAudioPlan>;
   captions: ReturnType<typeof compileCaptions>;
+  /** issue #10 面板可解释性:节拍来源计数 + 空结果原因。 */
+  estimatedShots: number;
+  authoredShots: number;
+  emptyReason: string | null;
 }
 
 export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose, screenplay, t }) => {
@@ -65,14 +69,30 @@ export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose,
       const visual = compileVisualPlan(ir);
       const audio = compileAudioPlan(ir);
       const captions = compileCaptions(ir);
-      setReport({ ir, visual, audio, captions });
+      // 面板可解释性(issue #10):0/0/0 给原因与行动指引,而非静默空结果
+      const contentBlocks = screenplay.blocks.filter(b =>
+        b.type === 'ACTION' || b.type === 'DIALOGUE' || b.type === 'CHARACTER');
+      const emptyReason = ir.shots.length === 0
+        ? (screenplay.blocks.length === 0
+          ? L(t, 'irEmptyNoBlocks', '剧本为空——请先写内容,或用 AI 生成后再试。')
+          : contentBlocks.length === 0
+            ? L(t, 'irEmptyNoContent', '剧本只有场景标题,没有可成镜的动作或对白——添加 ACTION/对白块后重试。')
+            : L(t, 'irEmptyUnknown', '提取结果为空——请复制调试信息反馈。'))
+        : null;
+      const estimatedShots = ir.shots.filter(sh => sh.estimated).length;
+      setReport({
+        ir, visual, audio, captions,
+        estimatedShots,
+        authoredShots: ir.shots.length - estimatedShots,
+        emptyReason,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setReport(null);
     } finally {
       setBusy(false);
     }
-  }, [screenplay]);
+  }, [screenplay, t]);
 
   const cost = useMemo(() => {
     if (!report) return null;
@@ -121,6 +141,18 @@ export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose,
 
           {report && (
             <div className="space-y-3">
+              {/* issue #10 可解释性:估算节拍提示 / 空结果原因 */}
+              {report.emptyReason ? (
+                <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
+                  ⚠ {report.emptyReason}
+                </div>
+              ) : report.estimatedShots > 0 ? (
+                <div className="text-xs text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/20 rounded-lg px-3 py-2">
+                  ⓘ {L(t, 'irEstimatedNotice',
+                    `剧本未标注时间轴，已按词级估算节拍合成 ${report.estimatedShots} 镜（时长=对白朗读估时/灰盒时长），可在 TimingStrip 校准后重新生成 IR。`)}
+                </div>
+              ) : null}
+
               {/* 提取摘要 */}
               <section className="rounded-xl border border-gray-200 dark:border-zinc-700 p-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
@@ -129,6 +161,9 @@ export const IRPipelineModal: React.FC<IRPipelineModalProps> = ({ open, onClose,
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   {[
                     [L(t, 'irShots', '镜头'), report.ir.shots.length],
+                    ...(report.estimatedShots > 0
+                      ? [[L(t, 'irShotsEstimated', '其中估算节拍'), `${report.estimatedShots}/${report.ir.shots.length}`]]
+                      : []),
                     [L(t, 'irAudioClips', '音频 clip'), report.ir.audio.length],
                     [L(t, 'irTransitions', '转场'), report.ir.transitions.length],
                     [L(t, 'irMode', '模式'), report.ir.mode],

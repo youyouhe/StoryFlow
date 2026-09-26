@@ -154,6 +154,7 @@ export const shotSchema = z.strictObject({
   imagePrompt: z.string().min(1),
   motionPrompt: z.string().min(1),
   shotDuration: z.number().positive(),
+  estimated: z.boolean().optional(),
   firstFrame: frameDescSchema,
   lastFrame: frameDescSchema.optional(),
   camera: cameraMoveSchema.optional(),

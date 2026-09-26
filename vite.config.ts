@@ -23,7 +23,12 @@ const minimaxProxy = {
 const debugLogPlugin = () => ({
   name: 'debug-log',
   configureServer(server: import('vite').ViteDevServer) {
-    const logDir = '/tmp/storyflow-dev';
+    // issue #10: 硬编码 /tmp/storyflow-dev 属主是 bird——git 用户的实例
+    // (5173/5174) appendFileSync 静默失败,debug 日志全部丢失。优先取
+    // STORYFLOW_RUN_DIR;缺省按 dev 端口分目录(/tmp 对多用户总是可写)。
+    // 需要 固定路径 的实例显式设置 STORYFLOW_RUN_DIR 即可。
+    const logDir = process.env.STORYFLOW_RUN_DIR
+      || `/tmp/storyflow-run-${server.config.server.port ?? 5173}`;
     try { mkdirSync(logDir, { recursive: true }); } catch {}
     server.middlewares.use('/api/debug-log', (req, res) => {
       if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }

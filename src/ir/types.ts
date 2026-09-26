@@ -262,6 +262,10 @@ export interface Shot {
    *  output window (4–15s, utils/videoSegmentSubmit.ts) is the compiler's
    *  job and does NOT rewrite this field. */
   shotDuration: number;
+  /** True when the shot's timing came from the P2 word-level ESTIMATE, not an
+   *  authored timestamp prefix (issue #10: handwritten scripts get estimated
+   *  beats instead of an empty extraction). */
+  estimated?: boolean;
   firstFrame: FrameDesc;
   /** 尾帧描述 — optional; used for endpoint-conditioned generation. */
   lastFrame?: FrameDesc;

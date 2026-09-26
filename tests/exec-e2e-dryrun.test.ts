@@ -176,7 +176,9 @@ describe('全链 dry-run(extract→compile→bridge→exec→align→export,全 
     });
     const { takes, failures } = await alignAudioClips(run.clipBlobs, plan, deps(mockPorts({ alignTake: badTake })));
     expect(Object.keys(takes)).toHaveLength(0);
-    expect(failures).toHaveLength(1);
-    expect(failures[0].error).toContain('token 数不符');
+    // issue #10 后:未声明 proAudio 的对白由提取派生意图 clip——坏 take 对
+    // 每个 clip 如实各报一次失败(拒绝而非钳制)
+    expect(failures.length).toBeGreaterThanOrEqual(1);
+    expect(failures.every(f => f.error.includes('token 数不符'))).toBe(true);
   });
 });
