@@ -185,19 +185,79 @@ const segmentShot = (
   return { cues: out, warnings };
 };
 
+// ── 词级摆位原语(P14 抽取:字幕/karaoke 共用单一出处) ─────────────────────
+
+/** 逐对白镜头的词窗与三级时基(对齐 > 校正后 > 字素回退;`opts.timing` 先套)。 */
+export interface ShotPlacement {
+  shot: Shot;
+  /** 朗读文本(词锚基文本,P0 规则二)。 */
+  text: string;
+  tokens: string[];
+  /** 镜头相对词窗(毫秒)。 */
+  spans: { text: string; startMs: number; endMs: number }[];
+  /** 镜头相对朗读总窗 [first.start, last.end]。 */
+  totalStartMs: number;
+  totalEndMs: number;
+  /** 三级时基:片偏移(前序镜头时长)+ 拼杆偏移(锚前 tts 探活累计)。 */
+  filmOffsetMs: number;
+  stemOffsetMs: number;
+}
+
+/** 逐对白镜头摆位(字幕与 karaoke 的共用摆位出处;同②口径)。 */
+export const resolveShotPlacements = (
+  ir: StoryFlowIR,
+  opts: {
+    alignments?: Record<string, AlignmentTake>;
+    timing?: Record<string, WordTimingCorrection[]>;
+    measured?: Record<string, number>;
+  } = {},
+): ShotPlacement[] => {
+  const { alignments } = applyTimingCorrections(opts.alignments, opts.timing);
+  const orderedShots = [...ir.shots].sort((a, b) => a.sequence - b.sequence);
+  const out: ShotPlacement[] = [];
+  let filmOffsetMs = 0;
+  for (const shot of orderedShots) {
+    if (shot.dialogue) {
+      const tokens = splitAnchorWords(shot.dialogue.text);
+      const anchorBase = anchorTextOf(shot);
+      const anchorClip = ir.audio.find(
+        (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id && c.text === anchorBase.text,
+      );
+      const basisSec = (anchorClip && opts.measured?.[anchorClip.id])
+        ?? fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds;
+      const take = anchorClip ? alignments[anchorClip.id] : undefined;
+      const spans = take ? alignedSpans(take, tokens) : proportionalSpans(tokens, basisSec * 1000);
+      let stemOffsetMs = 0;
+      for (const c of ir.audio) {
+        if (c.kind !== 'tts' || c.shotId !== shot.id) continue;
+        if (c.id === anchorClip?.id) break;
+        stemOffsetMs += (opts.measured?.[c.id] ?? c.measuredSeconds ?? 0) * 1000;
+      }
+      out.push({
+        shot,
+        text: shot.dialogue.text,
+        tokens,
+        spans,
+        totalStartMs: spans[0]?.startMs ?? 0,
+        totalEndMs: spans[spans.length - 1]?.endMs ?? basisSec * 1000,
+        filmOffsetMs,
+        stemOffsetMs,
+      });
+    }
+    filmOffsetMs += shot.shotDuration * 1000;
+  }
+  return out;
+};
+
 /** 字幕轨编译:IR + 对齐件/校正 → 片内绝对字幕条。 */
 export const compileCaptions = (
   ir: StoryFlowIR,
   opts: CaptionCompileOptions = {},
 ): CaptionTrack => {
   const maxChars = opts.maxCharsPerCaption ?? DEFAULT_MAX_CHARS;
-  const minCaptionMs = opts.minCaptionMs ?? DEFAULT_MIN_CAPTION_MS;
   const warnings: CaptionWarning[] = [];
-  const { alignments } = applyTimingCorrections(opts.alignments, opts.timing);
-
-  const orderedShots = [...ir.shots].sort((a, b) => a.sequence - b.sequence);
+  const placements = resolveShotPlacements(ir, opts);
   const captions: CaptionCue[] = [];
-  let filmOffset = 0;
   let index = 0;
 
   // P12 显读分离片段切分:作者 `||` 断句 > 句末标点 > 行宽;窗 = 朗读总窗
@@ -208,20 +268,16 @@ export const compileCaptions = (
     endMs: number,
   ): { text: string; startMs: number; endMs: number }[] => {
     const span = endMs - startMs;
-    // 句末标点切片(标点随前句)
     const sentences: string[] = [];
     let buf = '';
     for (const ch of frag) {
       buf += ch;
       if (TERMINAL.has(ch)) {
-        let j = frag.indexOf(ch) + 1;
-        void j;
         sentences.push(buf);
         buf = '';
       }
     }
     if (buf) sentences.push(buf);
-    // 句片窗口(字素权重)+ 超行宽再按字宽切
     const weights = sentences.map(x => [...x].length);
     const total = weights.reduce((a, b) => a + b, 0) || 1;
     let acc = 0;
@@ -245,95 +301,55 @@ export const compileCaptions = (
     return pieces;
   };
 
-  const filmOffsetOf = (shot: Shot): number => {
-    let off = 0;
-    for (const s of orderedShots) {
-      if (s.sequence >= shot.sequence) break;
-      off += s.shotDuration * 1000;
-    }
-    return off;
-  };
+  for (const p of placements) {
+    const shot = p.shot;
+    const shotOffset = p.filmOffsetMs + p.stemOffsetMs;
+    const display = shot.dialogue!.display;
 
-  for (const shot of orderedShots) {
-    if (shot.dialogue) {
-      // ── P12 显读分离路径(display ≠ spoken):||-first 片段 + 比例窗 ──
-      const display = shot.dialogue.display;
-      if (display != null && display !== shot.dialogue.text) {
-        const spoken = shot.dialogue.text;
-        const tokens = splitAnchorWords(spoken);
-        const anchorBase = anchorTextOf(shot);
-        const anchorClip = ir.audio.find(
-          (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id && c.text === anchorBase.text,
-        );
-        const basisSec = (anchorClip && opts.measured?.[anchorClip.id]) ?? fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds;
-        const take = anchorClip ? alignments[anchorClip.id] : undefined;
-        const spans = take ? alignedSpans(take, tokens) : proportionalSpans(tokens, basisSec * 1000);
-        const totalStart = spans[0]?.startMs ?? 0;
-        const totalEnd = spans[spans.length - 1]?.endMs ?? basisSec * 1000;
-        const filmBase = filmOffsetOf(shot) + totalStart;
-        const fragments = display.split('||').map(f => f.trim()).filter(Boolean);
-        const weights = fragments.map(f => [...f].length);
-        const totalW = weights.reduce((a, b) => a + b, 0) || 1;
-        let accW = 0;
-        fragments.forEach((frag, fi) => {
-          const fStart = filmBase + Math.round((accW / totalW) * (totalEnd - totalStart));
-          accW += weights[fi];
-          const fEnd = filmBase + Math.round((accW / totalW) * (totalEnd - totalStart));
-          for (const piece of splitPlain(frag, fStart, fEnd)) {
-            index += 1;
-            captions.push({
-              index,
-              text: opts.speakerPrefix && shot.character ? `${shot.character}：${piece.text}` : piece.text,
-              startMs: piece.startMs,
-              endMs: piece.endMs,
-              ...(shot.character ? { character: shot.character } : {}),
-              shotId: shot.id,
-            });
-          }
-        });
-        filmOffset += shot.shotDuration * 1000;
-        continue;
-      }
-      const text = shot.dialogue.text;
-      const tokens = splitAnchorWords(text);
-      const anchorBase = anchorTextOf(shot);
-      const anchorClip = ir.audio.find(
-        (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id && c.text === anchorBase.text,
-      );
-      const basisSec = (anchorClip && opts.measured?.[anchorClip.id]) ?? fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds;
-      const take = anchorClip ? alignments[anchorClip.id] : undefined;
-      const spans = take
-        ? alignedSpans(take, tokens)
-        : proportionalSpans(tokens, basisSec * 1000);
-
-      // 拼杆偏移:同镜头锚 clip 之前 tts 的探活累计(② 同口径)
-      let stemOffset = 0;
-      for (const c of ir.audio) {
-        if (c.kind !== 'tts' || c.shotId !== shot.id) continue;
-        if (c.id === anchorClip?.id) break;
-        stemOffset += (opts.measured?.[c.id] ?? c.measuredSeconds ?? 0) * 1000;
-      }
-
-      const shotOffset = filmOffset + stemOffset;
-      const seg = segmentShot(text, spans, {
-        maxChars,
-        shotId: shot.id,
-        ...(shot.character ? { character: shot.character } : {}),
+    // ── P12 显读分离路径(display ≠ spoken):||-first 片段 + 比例窗 ──
+    if (display != null && display !== p.text) {
+      const filmBase = shotOffset + p.totalStartMs;
+      const fragments = display.split('||').map(f => f.trim()).filter(Boolean);
+      const weights = fragments.map(f => [...f].length);
+      const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+      let accW = 0;
+      fragments.forEach((frag, fi) => {
+        const fStart = filmBase + Math.round((accW / totalW) * (p.totalEndMs - p.totalStartMs));
+        accW += weights[fi];
+        const fEnd = filmBase + Math.round((accW / totalW) * (p.totalEndMs - p.totalStartMs));
+        for (const piece of splitPlain(frag, fStart, fEnd)) {
+          index += 1;
+          captions.push({
+            index,
+            text: opts.speakerPrefix && shot.character ? `${shot.character}：${piece.text}` : piece.text,
+            startMs: piece.startMs,
+            endMs: piece.endMs,
+            ...(shot.character ? { character: shot.character } : {}),
+            shotId: shot.id,
+          });
+        }
       });
-      warnings.push(...seg.warnings);
-      for (const c of seg.cues) {
-        index += 1;
-        captions.push({
-          index,
-          text: opts.speakerPrefix && shot.character ? `${shot.character}：${c.text}` : c.text,
-          startMs: shotOffset + c.startMs,
-          endMs: shotOffset + c.endMs,
-          ...(shot.character ? { character: shot.character } : {}),
-          shotId: shot.id,
-        });
-      }
+      continue;
     }
-    filmOffset += shot.shotDuration * 1000;
+
+    // ── P11 原路:词窗 + segmentShot ──
+    const seg = segmentShot(p.text, p.spans, {
+      maxChars,
+      shotId: shot.id,
+      ...(shot.character ? { character: shot.character } : {}),
+    });
+    warnings.push(...seg.warnings);
+    for (const c of seg.cues) {
+      index += 1;
+      captions.push({
+        index,
+        text: opts.speakerPrefix && shot.character ? `${shot.character}：${c.text}` : c.text,
+        startMs: shotOffset + c.startMs,
+        endMs: shotOffset + c.endMs,
+        ...(shot.character ? { character: shot.character } : {}),
+        shotId: shot.id,
+      });
+    }
   }
 
   return { captions, warnings };
