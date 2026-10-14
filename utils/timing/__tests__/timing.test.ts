@@ -74,10 +74,12 @@ describe('estimate', () => {
     expect(b).toBeGreaterThan(a);
   });
 
-  it('measures CJK per character (~0.2s each) and Dual Text by its spoken side', () => {
+  it('measures CJK per character (1/基准语速 s each) and Dual Text by its spoken side', () => {
+    // issue #13:基准语速 5字/秒(0.2s/字)→ 4.5字/秒(1/4.5 s/字)——数值随
+    // 全局基准移动,口径不变(每 CJK 字 = 1/DEFAULT_SPEECH_RATE 秒)。
     const zh = tokenizeBlock(block('b1', 'DIALOGUE', '是的'));
-    expect(estimateTokenSeconds(zh[0])).toBeCloseTo(0.2, 5);
-    expect(estimateTokenSeconds(zh[1])).toBeCloseTo(0.2, 5);
+    expect(estimateTokenSeconds(zh[0])).toBeCloseTo(1 / 4.5, 5);
+    expect(estimateTokenSeconds(zh[1])).toBeCloseTo(1 / 4.5, 5);
     const dual = tokenizeBlock(block('b1', 'DIALOGUE', '<BCC | B C C>'));
     expect(estimateTokenSeconds(dual[0])).toBeGreaterThan(estimateTokenSeconds(zh[0]));
   });
