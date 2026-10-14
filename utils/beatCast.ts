@@ -56,11 +56,21 @@ export const parseCharacterMarker = (raw: string): 'vo' | 'os' | undefined => {
   return undefined;
 };
 
+/** Block-level off-screen test (issue #8④, IR extraction消费): the structured
+ *  `characterMarker` field counts by itself — generation (scriptParse) and
+ *  migration both write it, and the whole point of the field is to survive a
+ *  later cue-text cleanup. Text heuristic stays as the fallback for unmarked /
+ *  handwritten cues. Conservative direction: a marked cue can only be
+ *  EXCLUDED from the frame (no sheet required, no reference submitted), never
+ *  the reverse — under-casting a former V.O. is safer than framing a voice. */
+export const isOffScreenBlock = (b: Pick<ScriptBlock, 'content' | 'characterMarker'>): boolean =>
+  b.characterMarker !== undefined || isOffScreen(b.content);
+
 export const collectCharacterNames = (blocks: ScriptBlock[]): string[] => {
   const names: string[] = [];
   for (const b of blocks) {
     if (b.type !== 'CHARACTER') continue;
-    if (isOffScreen(b.content)) continue; // voice-only: never frame cast
+    if (isOffScreenBlock(b)) continue; // voice-only: never frame cast (field OR text, #8④)
     const n = baseCharName(b.content);
     if (n && !names.includes(n)) names.push(n);
   }
@@ -83,8 +93,8 @@ export const computeBeatCast = (
   allCharNames: string[],
 ): string[] => {
   const names: string[] = [];
-  const add = (raw: string) => {
-    if (isOffScreen(raw)) return; // V.O./O.S. cue: speaks, never in frame
+  const add = (raw: string, marker?: ScriptBlock['characterMarker']) => {
+    if (marker !== undefined || isOffScreen(raw)) return; // V.O./O.S. cue: speaks, never in frame (field OR text, #8④)
     const n = baseCharName(raw);
     if (n && allCharNames.includes(n) && !names.includes(n)) names.push(n);
   };
@@ -102,7 +112,7 @@ export const computeBeatCast = (
     if (blocks[i].type === 'SCENE_HEADING' && i !== beatIndex) break;
     if (blocks[i].type === 'CHARACTER') {
       const before = names.length;
-      add(blocks[i].content);
+      add(blocks[i].content, blocks[i].characterMarker);
       if (names.length > before) {
         newFound++;
         if (newFound >= 2) break;

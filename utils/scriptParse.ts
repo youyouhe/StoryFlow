@@ -1,4 +1,5 @@
 import { ScriptBlock } from '../types';
+import { parseCharacterMarker } from './beatCast';
 
 /**
  * Deterministic post-parse repair for LLM-produced labeled blocks.
@@ -16,6 +17,13 @@ import { ScriptBlock } from '../types';
  *  3. guarantee a leading SCENE_HEADING — the env-reference / graybox / beat-cast
  *     resolvers all walk "backwards to the nearest SCENE_HEADING"; without one
  *     they silently no-op. If the model emitted none, prepend a generic one.
+ *  4. write the structured `characterMarker` on off-screen CHARACTER cues
+ *     (issue #8④, schemaVersion 3) — every AI-generated block funnels through
+ *     this repair (CONTINUE append + FROM_PROMPT new-script both call it in
+ *     hooks/useAIExecutor), so v3 cues get the machine-readable field at the
+ *     single choke point; migration (utils/screenplayMigrate.ts) covers only
+ *     EXISTING docs. Cue text is untouched (editor display + name matching
+ *     read it). Pure + idempotent.
  */
 export const sanitizeParsedBlocks = (blocks: ScriptBlock[]): ScriptBlock[] => {
   // 1. trim + drop empties
@@ -36,5 +44,12 @@ export const sanitizeParsedBlocks = (blocks: ScriptBlock[]): ScriptBlock[] => {
   if (!deduped.some(b => b.type === 'SCENE_HEADING')) {
     deduped.unshift({ id: `auto-scene-${Math.random().toString(36).substring(2, 9)}`, type: 'SCENE_HEADING', content: 'INT. 未指明场景 - 日' });
   }
-  return deduped;
+
+  // 4. off-screen CHARACTER cues gain the structured marker (issue #8④);
+  //    already-marked cues pass through untouched (idempotent)
+  return deduped.map(b => {
+    if (b.type !== 'CHARACTER' || b.characterMarker) return b;
+    const marker = parseCharacterMarker(b.content);
+    return marker ? { ...b, characterMarker: marker } : b;
+  });
 };
