@@ -310,12 +310,15 @@ const SYNTH_MAX_SECONDS = 10;
 export const synthesizeEstimatedPlan = (
   blocks: ScriptBlock[],
   targetSeconds: number,
-  opts: { maxBeatSeconds?: number } = {},
+  opts: { maxBeatSeconds?: number; /** 有效语速(字/秒,issue #13;缺省全局基准)。 */ charsPerSecond?: number } = {},
 ): VideoPlan => {
   const target = Math.max(1, targetSeconds);
   const maxBeat = Math.max(target, opts.maxBeatSeconds ?? SYNTH_MAX_SECONDS);
   const clamp = (s: number): number =>
     Math.min(maxBeat, Math.max(SYNTH_MIN_SECONDS, Math.round(s * 10) / 10));
+  // issue #13:拍长合成读取"每句的有效语速"(缺省 = 全局基准 4.5)——
+  // charsPerSecond 逐拍透传给朗读估算,不在本文件散落语速数值。
+  const rateOpts = opts.charsPerSecond != null ? { charsPerSecond: opts.charsPerSecond } : {};
 
   const beats: (PlannedBeat & { __scene?: boolean })[] = [];
   let cursor = 0;
@@ -342,7 +345,7 @@ export const synthesizeEstimatedPlan = (
     const authoredSeconds = movement?.targetSeconds ?? movement?.duration ?? opener.shotDuration;
     const speech = estimateTextSeconds(
       [opener.content, ...extra.map(b => b.content)].join(''),
-      opener.type,
+      { type: opener.type, ...rateOpts },
     );
     const dur = authoredSeconds != null
       ? Math.max(0.5, Math.round(authoredSeconds * 10) / 10)

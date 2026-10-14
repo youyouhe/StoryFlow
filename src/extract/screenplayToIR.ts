@@ -39,6 +39,9 @@ export interface ExtractOptions {
   defaultMode?: 'express' | 'pro';
   /** 形象设定文案钩子(缺省回退 sourcePrompt → subject → name)。 */
   descriptionOf?: (img: RefImage) => string;
+  /** 有效语速(字/秒,issue #13):透传给手写稿的拍长合成(缺省全局基准
+   *  4.5)——按稿/按拍注入语速的入口,后续情绪驱动语速在此接线。 */
+  charsPerSecond?: number;
 }
 
 const pad3 = (n: number): string => String(n).padStart(3, '0');
@@ -128,6 +131,15 @@ export const extractStoryFlowIR = (
     modeVal === 'simple' || modeVal === 'express' ? 'express' : 'pro';
   const describe = opts.descriptionOf ?? descriptionOfDefault;
 
+  // issue #8③:读 schemaVersion 分流 —— v3(schemaVersion ≥ 3)契约:块只存
+  // 增量、CHARACTER sheet 全剧一份存 `characterSheets` registry(键 = cue
+  // 原文)。拍内缺 inline imagePrompt 时按版本取:v3 查 registry;v1/v2 无
+  // registry 契约,块内联副本仍是权威(registry 不参与,旧稿行为不变)。
+  const schemaVersion = screenplay.schemaVersion ?? 1;
+  const registrySheetOf = schemaVersion >= 3
+    ? (cue: string): string | undefined => screenplay.characterSheets?.[cue]
+    : (): undefined => undefined;
+
   // issue #10/#11: 手写/导入剧本没有时间戳前缀 → planVideoSegments 零节拍 →
   // 镜头/音频/字幕全 0。回退到按块边界合成器(#11 细化:空镜拍 + ACTION 开拍
   // 吸收其后对白,拍长 graybox/shotDuration/朗读估时,钳制 [1,10]s,拍间不
@@ -136,7 +148,9 @@ export const extractStoryFlowIR = (
   let plan = planVideoSegments(blocks, opts.targetSeconds ?? 10);
   const hasTimedBeat = plan.segments.some(s => s.beats.some(b => (b as { __scene?: boolean }).__scene !== true));
   if (!hasTimedBeat) {
-    plan = synthesizeEstimatedPlan(blocks, opts.targetSeconds ?? 10);
+    plan = synthesizeEstimatedPlan(blocks, opts.targetSeconds ?? 10, opts.charsPerSecond != null
+      ? { charsPerSecond: opts.charsPerSecond }
+      : {});
   }
   // 段键 = 段首块 id(live proAudio/segmentGrayboxes 口径)
   const segOf = new Map<string, VideoSegment>();
@@ -163,9 +177,14 @@ export const extractStoryFlowIR = (
     let motion = [beat.text, ...motionParts.filter(t => t && t !== beat.text)].join('\n');
     const spanBlocks = beat.blockIds.map(id => blockById.get(id)).filter((b): b is ScriptBlock => !!b);
 
-    // imagePrompt:拍内首块 imagePrompt ?? 前缀+motion;缺前缀治愈
+    // imagePrompt:拍内首块 imagePrompt ?? characterSheets registry(#8③,
+    // v3 设定图) ?? 前缀+motion;缺前缀治愈(v3 增量 / v1/v2 内联两种形状)。
+    // registry 键 = cue 原文(「张三（浴袍）」是独立槽位,不回退基础名——
+    // 同 #14 strictVariant 口径)。
     const imgBlock = spanBlocks.find(b => b.imagePrompt);
-    let imagePrompt = imgBlock?.imagePrompt ?? `${style.promptPrefix}${beat.text}`;
+    const cueBlock = imgBlock ? undefined : spanBlocks.find(b => b.type === 'CHARACTER');
+    const sheet = cueBlock ? registrySheetOf(cueBlock.content.trim()) : undefined;
+    let imagePrompt = imgBlock?.imagePrompt ?? sheet ?? `${style.promptPrefix}${beat.text}`;
     if (style.promptPrefix && !imagePrompt.startsWith(style.promptPrefix)) {
       imagePrompt = style.promptPrefix + imagePrompt;
     }
