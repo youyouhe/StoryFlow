@@ -4,15 +4,19 @@
  *
  * 词窗来源(逐镜头,确定性):
  *   对齐件(新鲜,P5 哲学)> 字素比例回退(splitAnchorWords + wordStartMs,
- *   basis = 探活秒 ?? fit.wantSeconds);`opts.timing` 校正先套(P10 闭环);
- *   拼杆偏移(② 同口径)→ 镜头偏移 → 片内绝对毫秒。
+ *   basis = 探活秒 ?? max(fit.wantSeconds, TTS 朗读估算));`opts.timing`
+ *   校正先套(P10 闭环);拼杆偏移(② 同口径)→ 镜头偏移 → 片内绝对毫秒。
+ *   issue #13:TTS 估算 = 语速模型(基准 4.5 字/秒可配置 + 0.4s 余量 + 括注
+ *   0.7 折算,utils/timing/estimate.ts 唯一出处)——字幕窗 = max(拍窗, TTS
+ *   估算),宁可越出拍尾也不可读不完;拍长不足产出 SHOT_TOO_SHORT_FOR_TTS
+ *   警告(经 IRPipelineModal 现有警告区透传)。
  *
  * 断句(v1,确定性):句末标点(+随行闭引号)收口 > 行宽上限 token 边界
  * 强制收口;标点/空白随**前**词窗(分词不含标点,只影响窗口归属);
  * 显示文本 = 原文切片(标点保留)。`||` 作者断句待 Dual Text(P12 候选)。
  */
 import type { Shot, StoryFlowIR, TtsClip } from '../ir/types';
-import { estimateTextSeconds } from '../../utils/timing/estimate';
+import { estimateTextSeconds, estimateSpeechSeconds } from '../../utils/timing/estimate';
 import type { AlignmentTake, WordTimingCorrection } from '../ir/audio/types';
 import { splitAnchorWords, wordStartMs, fitShotDuration, anchorTextOf } from '../ir/shared';
 import { applyTimingCorrections } from '../ir/audio/timing';
@@ -42,7 +46,7 @@ export interface CaptionTrack {
 }
 
 export interface CaptionWarning {
-  code: 'CAPTION_TOO_SHORT' | 'CAPTION_UNSEGMENTABLE';
+  code: 'CAPTION_TOO_SHORT' | 'CAPTION_UNSEGMENTABLE' | 'SHOT_TOO_SHORT_FOR_TTS';
   shotId?: string;
   message: string;
 }
@@ -60,6 +64,9 @@ export interface CaptionCompileOptions {
   minCaptionMs?: number;
   /** 字幕文本加说话人前缀(缺省 false = 纯文本)。 */
   speakerPrefix?: boolean;
+  /** 有效语速(字/秒,issue #13):按稿/按批注入(情绪驱动语速的注入点);
+   *  缺省 = 全局基准 DEFAULT_SPEECH_RATE,逐句透传给朗读估算。 */
+  charsPerSecond?: number;
 }
 
 interface WordSpan {
@@ -202,6 +209,9 @@ export interface ShotPlacement {
   /** 三级时基:片偏移(前序镜头时长)+ 拼杆偏移(锚前 tts 探活累计)。 */
   filmOffsetMs: number;
   stemOffsetMs: number;
+  /** issue #13:TTS 朗读估算秒(语速模型,含 0.4s 余量/括注 0.7 折算)——
+   *  字幕窗下限与拍长不足警告的共用出处。 */
+  speechEstimateSec: number;
 }
 
 /** 逐对白镜头摆位(字幕与 karaoke 的共用摆位出处;同②口径)。 */
@@ -211,6 +221,8 @@ export const resolveShotPlacements = (
     alignments?: Record<string, AlignmentTake>;
     timing?: Record<string, WordTimingCorrection[]>;
     measured?: Record<string, number>;
+    /** 有效语速(字/秒,issue #13;缺省 = 全局基准)。 */
+    charsPerSecond?: number;
   } = {},
 ): ShotPlacement[] => {
   const { alignments } = applyTimingCorrections(opts.alignments, opts.timing);
@@ -224,8 +236,19 @@ export const resolveShotPlacements = (
       const anchorClip = ir.audio.find(
         (c): c is TtsClip => c.kind === 'tts' && c.shotId === shot.id && c.text === anchorBase.text,
       );
-      const basisSec = (anchorClip && opts.measured?.[anchorClip.id])
-        ?? fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds;
+      // issue #13 修复方向 2:字幕窗 = max(拍长窗, TTS 估算)——宁可越出拍尾
+      // 也不可读不完。TTS 估算下限只作用于**估算路径**:有探活(measured)时
+      // 真实音频是权威(basis = 探活秒,字幕窗不得越过可听语音);
+      // fit.wantSeconds = max(round(shotDuration), ttsFloor) 缝合既有口径。
+      const speechEstimateSec = estimateSpeechSeconds(
+        shot.dialogue.text,
+        opts.charsPerSecond != null ? { charsPerSecond: opts.charsPerSecond } : {},
+      );
+      const measuredSec = anchorClip ? opts.measured?.[anchorClip.id] : undefined;
+      const basisSec = measuredSec ?? Math.max(
+        fitShotDuration(shot.shotDuration, shot.dialogue.ttsFloor).wantSeconds,
+        speechEstimateSec,
+      );
       const take = anchorClip ? alignments[anchorClip.id] : undefined;
       const spans = take ? alignedSpans(take, tokens) : proportionalSpans(tokens, basisSec * 1000);
       let stemOffsetMs = 0;
@@ -243,6 +266,7 @@ export const resolveShotPlacements = (
         totalEndMs: spans[spans.length - 1]?.endMs ?? basisSec * 1000,
         filmOffsetMs,
         stemOffsetMs,
+        speechEstimateSec,
       });
     }
     filmOffsetMs += shot.shotDuration * 1000;
@@ -307,6 +331,17 @@ export const compileCaptions = (
     const shotOffset = p.filmOffsetMs + p.stemOffsetMs;
     const display = shot.dialogue!.display;
 
+    // issue #13 修复方向 3:拍长不足警告(真实制作缺陷信号,影响视频生成
+    // segment 拼接)——TTS 朗读估算超出拍长时产出,经现有警告机制透传
+    // (IRPipelineModal 的编译三路警告区可见)。
+    if (p.speechEstimateSec > shot.shotDuration + 1e-9) {
+      warnings.push({
+        code: 'SHOT_TOO_SHORT_FOR_TTS',
+        shotId: shot.id,
+        message: `拍 ${shot.id} 需 ${p.speechEstimateSec.toFixed(1)}s 朗读,拍仅 ${shot.shotDuration}s——视频会中途切词`,
+      });
+    }
+
     // ── P12 显读分离路径(display ≠ spoken):||-first 片段 + 比例窗 ──
     if (display != null && display !== p.text) {
       const filmBase = shotOffset + p.totalStartMs;
@@ -363,7 +398,13 @@ export const compileCaptions = (
       const anchorEnd = shotOffset + (seg.cues.length ? Math.max(...seg.cues.map(c => c.endMs)) : 0);
       const weights = others.map(c => [...c.text].length || 1);
       const totalW = weights.reduce((a, b) => a + b, 0);
-      const estMs = others.reduce((n, c) => n + estimateTextSeconds(c.text, 'DIALOGUE') * 1000, 0);
+      // issue #13:与锚句字幕窗共用同一语速估算函数(可注入语速 + 括注折算)。
+      const estMs = others.reduce((n, c) => n + estimateTextSeconds(
+        c.text,
+        opts.charsPerSecond != null
+          ? { type: 'DIALOGUE', charsPerSecond: opts.charsPerSecond }
+          : 'DIALOGUE',
+      ) * 1000, 0);
       const windowEnd = Math.max(anchorEnd + Math.round(estMs), p.filmOffsetMs + shot.shotDuration * 1000, anchorEnd + 1);
       let acc = anchorEnd;
       others.forEach((c, oi) => {

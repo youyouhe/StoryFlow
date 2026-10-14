@@ -108,7 +108,7 @@ const placeTokens = (
   const overlay = block.timing;
   if (!overlay || !overlay.tokens.length || !(overlay.durationSec > 0)) {
     // estimate weights (P2a behavior)
-    const weights = tokens.map(estimateTokenSeconds);
+    const weights = tokens.map(t => estimateTokenSeconds(t));
     const sum = weights.reduce((a, b) => a + b, 0);
     const out: { start: number; end: number }[] = [];
     let cursor = w0;
@@ -139,7 +139,7 @@ const placeTokens = (
     const gapStart = runStart > 0 ? locals[runStart - 1].end : 0;
     const gapEnd = runEnd < tokens.length ? locals[runEnd].start : duration;
     const free = Math.max(0, gapEnd - gapStart);
-    const weights = tokens.slice(runStart, runEnd).map(estimateTokenSeconds);
+    const weights = tokens.slice(runStart, runEnd).map(t => estimateTokenSeconds(t));
     const sum = weights.reduce((a, b) => a + b, 0) || 1;
     let cursor = gapStart;
     for (let k = runStart; k < runEnd; k++) {

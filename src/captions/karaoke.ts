@@ -32,6 +32,8 @@ export interface KaraokeCompileOptions {
   measured?: Record<string, number>;
   /** 行宽预算(词形字符;缺省 16,同 P11)。 */
   maxCharsPerLine?: number;
+  /** 有效语速(字/秒,issue #13):逐句透传给朗读估算(缺省全局基准)。 */
+  charsPerSecond?: number;
 }
 
 /** 词间连接:两侧均 ASCII 字母数字时补空格(拉丁词可读性)。 */
