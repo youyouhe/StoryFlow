@@ -58,6 +58,15 @@ export interface AudioExecPorts {
 export interface ExportExecPorts {
   exportProCut: ExportProCutFn;
   concatClipsToMp4: ConcatClipsFn;
+  /** P14 字幕烧录(libass;可选绑定)——默认 ffmpeg.wasm core 无 libass,
+   *  桌面全量 ffmpeg/自管 worker 核心可切时才可用(docs/storyflow-ir-p14.md §1)。
+   *  未绑定 = 不可烧录,执行步显式抛错(拒绝而非钳制)。 */
+  burnSubtitles?: (input: {
+    video: Blob;
+    /** SRT/ASS 文本(由 captions 序列化器产出)。 */
+    subtitles: string;
+    format: 'srt' | 'ass';
+  }) => Promise<Blob>;
 }
 
 // ── 执行选项/事件 ──────────────────────────────────────────────────────────
