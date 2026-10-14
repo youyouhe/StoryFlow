@@ -6,9 +6,9 @@
  * from every persisted surface (localStorage saves, project exports, logs).
  * Moving them across sessions is an explicit act — export an AES-GCM
  * credential file behind a passphrase, import it next time. Tauri's OS
- * keychain is the planned second store (tauri-plugin-keyring; noted, not
- * wired). No secret ever enters a Runtime Profile: profiles reference named
- * slots, never values.
+ * keychain is the desktop tier (src-tauri/src/keyring_plugin.rs, wired via
+ * services/desktop.ts). No secret ever enters a Runtime Profile: profiles
+ * reference named slots, never values.
  */
 
 export type CredentialSlot = 'minimax' | 'fal' | 'gemini' | 'deepseek' | 'asr';
@@ -37,14 +37,53 @@ export const stripSecrets = <T extends object>(settings: T): T => {
 
 const session = new Map<string, string>();
 
+// ---------------------------------------------------------------------------
+// 会话档计数标记 — issue #9 缺口收口:纯会话档刷新后 key 随内存消失,刷新后
+// 无法"检测丢失"。这里持久化一个**非敏感**计数(只存本会话非空槽位个数,
+// 不含任何密钥材料),下次 boot 据此主动提示「密钥已随刷新清除」。
+// ---------------------------------------------------------------------------
+
+const COUNT_STORE = 'storyflow_cred_count';
+
+const syncCredentialCount = (): void => {
+  try {
+    localStorage.setItem(COUNT_STORE, String(session.size));
+  } catch { /* storage 不可用时标记尽力而为——不影响凭证本身 */ }
+};
+
+/** Marker left by the PREVIOUS session: how many session slots were non-empty
+ *  when it last touched the store (0 = no marker / storage unavailable). */
+export const lastSessionCredentialCount = (): number => {
+  try {
+    const n = Number(localStorage.getItem(COUNT_STORE));
+    return Number.isInteger(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+};
+
+/** Boot 判定(纯会话档):上会话有过密钥(标记 >0)而本会话 store 为空
+ *  (刷新清空)→ 返回丢失个数(hook 据此 toast);否则 0 = 静默。
+ *  remember/keyring 档的恢复会把 store 重新填上,本判定自然为 0——
+ *  那两条路径有自己的提示文案,不在这里重复提示。 */
+export const sessionKeysLostAfterRefresh = (): number => {
+  const prev = lastSessionCredentialCount();
+  if (prev <= 0) return 0;
+  return session.size ? 0 : prev;
+};
+
 export const setSessionCredential = (slot: string, value: string): void => {
   if (value) session.set(slot, value);
   else session.delete(slot);
+  syncCredentialCount();
 };
 
 export const getSessionCredential = (slot: string): string | undefined => session.get(slot);
 
-export const clearSessionCredentials = (): void => session.clear();
+export const clearSessionCredentials = (): void => {
+  session.clear();
+  syncCredentialCount(); // 显式清空 = 用户主动为之,标记归零(下次刷新不误报)
+};
 
 export const sessionCredentialSnapshot = (): Record<string, string> =>
   Object.fromEntries(session.entries());

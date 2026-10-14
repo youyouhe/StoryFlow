@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 
 import {
   setSessionCredential, getSessionCredential, clearSessionCredentials,
@@ -6,6 +6,7 @@ import {
   rememberCredentials, restoreRememberedCredentials,
   forgetRememberedCredentials, hasRememberedCredentials,
   migrateAndHydrate,
+  lastSessionCredentialCount, sessionKeysLostAfterRefresh,
 } from '../services/credentials';
 
 /**
@@ -99,5 +100,38 @@ describe('本机记住档(加密,非明文) — roundtrip', () => {
     setSessionCredential('deepseek', 'sk');
     setSessionCredential('deepseek', ''); // Settings 清空 key 栏 = 删槽
     expect(getSessionCredential('deepseek')).toBeUndefined();
+  });
+});
+
+describe('会话档刷新提示 — 非敏感计数标记(issue #9 缺口收口)', () => {
+  it('有标记 + 空库 → boot 判定返回个数(hook 据此提示);标记只存数量不含密钥', async () => {
+    // 上会话:写穿两个 key,标记同步为非敏感计数
+    setSessionCredential('deepseek', 'sk-lost-on-refresh');
+    setSessionCredential('minimax', 'ey-lost-too');
+    expect(store.get('storyflow_cred_count')).toBe('2');
+    expect(store.get('storyflow_cred_count')).not.toContain('sk-lost');
+    expect(store.get('storyflow_cred_count')).not.toContain('ey-lost');
+    // 模拟刷新:模块注册表重置 = 内存 session Map 即失,localStorage 保留
+    vi.resetModules();
+    const fresh = await import('../services/credentials');
+    expect(fresh.sessionCredentialSnapshot()).toEqual({});
+    expect(fresh.lastSessionCredentialCount()).toBe(2);
+    expect(fresh.sessionKeysLostAfterRefresh()).toBe(2); // > 0 → boot toast
+  });
+
+  it('无标记 → 静默;store 非空(remember/keyring 恢复成功)→ 不重复提示;显式清空 → 标记归零', async () => {
+    expect(lastSessionCredentialCount()).toBe(0);
+    expect(sessionKeysLostAfterRefresh()).toBe(0); // 无标记:首次使用 → 不提示
+    // remember/keyring 档恢复把 store 重新填上 → 判定为 0(那两条路径
+    // 有自己的提示文案,不在这里重复提示)
+    store.set('storyflow_cred_count', '3'); // 上会话遗留标记
+    setSessionCredential('gemini', 'g-restored');
+    expect(sessionCredentialSnapshot()).not.toEqual({});
+    expect(sessionKeysLostAfterRefresh()).toBe(0);
+    // 显式「清空会话密钥」= 用户主动为之 → 标记归零,下次刷新不误报
+    setSessionCredential('deepseek', 'sk-x');
+    clearSessionCredentials();
+    expect(store.get('storyflow_cred_count')).toBe('0');
+    expect(sessionKeysLostAfterRefresh()).toBe(0);
   });
 });

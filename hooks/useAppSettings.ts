@@ -6,6 +6,7 @@ import {
   stripSecrets, setSessionCredential, getSessionCredential, SLOT_FOR_FIELD,
   SECRET_SETTINGS_FIELDS, migrateAndHydrate, rememberCredentials,
   restoreRememberedCredentials, hasRememberedCredentials,
+  sessionKeysLostAfterRefresh,
 } from '../services/credentials';
 import { isTauriRuntime, createKeyringStore, type DesktopCredentialStore, type CredentialSlotName } from '../services/desktop';
 import { invoke } from '@tauri-apps/api/core';
@@ -152,9 +153,18 @@ export function useAppSettings({ setScreenplay, onToast, t }: {
       return;
     }
 
-    // tier 'session' — nothing persisted; legacy migration toast only
+    // tier 'session' — nothing persisted; legacy migration toast, plus the
+    // #9 缺口收口:纯会话档刷新后 key 静默消失——上会话留下的非敏感计数标记
+    // (只存个数,不含任何密钥材料)说明「曾有 N 个」而 store 现在为空,
+    // 主动提示而不是无声。remember/keyring 档在上面分支已各自提示
+    // (恢复成功/失败文案),不进这里,不重复提示。
     if (migrateN) {
       onToast?.(tt('credMigratedSession', `已迁移 ${migrateN} 个密钥到会话凭证库——刷新后会丢失，可在设置选择「本机记住」或桌面端 keyring 档`));
+    } else {
+      const lost = sessionKeysLostAfterRefresh();
+      if (lost > 0) {
+        onToast?.(tt('credSessionLost', `上次会话的 ${lost} 个密钥已随刷新清除——可在设置重新输入、导入凭证文件，或开启「本机记住」`).replace('{n}', String(lost)));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
