@@ -1,4 +1,5 @@
 import { BlockType, GrayboxData } from '../types';
+import type { SkillSummary } from '../skills/registry';
 
 /**
  * WebMCP (Web Model Context Protocol) support — expose StoryFlow's
@@ -119,6 +120,9 @@ export interface StoryflowWebMcpAccessor {
   generateImage(ref: { blockIndex?: number; blockId?: string }): Promise<{ ok: boolean; subject?: string; characterLock?: string; error?: string }>;
   /** AI call performance/diagnostic log (ring buffer, localStorage). */
   getAiLog(opts: { last?: number; op?: string; failuresOnly?: boolean }): Array<Record<string, unknown>>;
+  /** The capability roster (skills/registry.ts), projected for agents —
+   *  what StoryFlow can do, per-skill tools, and where each is documented. */
+  listSkills(): SkillSummary[];
 }
 
 // ---- helpers ----------------------------------------------------------------
@@ -478,6 +482,13 @@ export const registerStoryflowWebMcpTools = (
         const r = await A().generateGraybox({ blockIndex: asInt(args.blockIndex), blockId: asString(args.blockId) });
         return ok(r);
       },
+    },
+    {
+      name: 'storyflow_list_skills',
+      description: 'List StoryFlow\'s capability registry (the skill roster): per skill — id, title (en/zh), maturity (可用=usable / 半成品=partial / 实验=planned-only), dependency ids, the storyflow_* tools it claims, and its agent reference doc under skills/storyflow/. Read-only map of what the app can do and where each capability is documented.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: RO,
+      execute: async () => ok({ skills: A().listSkills() }),
     },
   ];
 

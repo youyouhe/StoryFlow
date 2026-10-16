@@ -11,6 +11,7 @@ import type {
 import { composeBlockImagePrompt, characterSheetOf } from '../utils/promptStyle';
 import { TEMPLATES } from '../constants';
 import type { StoryflowWebMcpAccessor } from './webmcp';
+import { SKILLS, toSkillSummary } from '../skills/registry';
 import { generateContinuation, generateImagePrompt, generateGraybox } from './geminiService';
 import { generateImages } from './minimaxService';
 import { getAiLog } from './aiLog';
@@ -519,5 +520,7 @@ export const createWebMcpAccessor = (deps: WebMcpDeps): StoryflowWebMcpAccessor 
       }
     },
     getAiLog: (opts) => getAiLog(opts) as unknown as Array<Record<string, unknown>>,
+    // 名册是纯数据(skills/registry.ts),读时投影即可,无需经过 App 状态。
+    listSkills: () => SKILLS.map(toSkillSummary),
   };
 };
